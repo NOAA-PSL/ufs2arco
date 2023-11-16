@@ -1,3 +1,4 @@
+from typing import Dict, List, Callable
 from datetime import datetime
 import numpy as np
 import xarray as xr
@@ -5,8 +6,9 @@ import xarray as xr
 from .ufsdataset import UFSDataset
 
 class MOM6Dataset(UFSDataset):
-    def __init__(self, *args, **kwargs):
-        super(MOM6Dataset, self).__init__(*args, **kwargs)
+    __doc__ = UFSDataset.__doc__
+    def __init__(self, path_in: Callable, config_filename: str, is_nested: bool = False) -> None:
+        super(MOM6Dataset, self).__init__(path_in, config_filename, is_nested)
         self.zarr_name = "mom6.zarr"
         self.chunks_in = self.chunks_in if len(self.chunks_in) != 0 else {
             "z_l": 1,

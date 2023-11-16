@@ -14,8 +14,7 @@ from cftime import DatetimeJulian
 
 
 class UFSDataset:
-    """Open and store a UFS generated NetCDF dataset to zarr from a single model component (FV3, MOM6, CICE6)
-    and a single DA window. The two main methods that are useful are :meth:`open_dataset` and :meth:`store_dataset`.
+    """Open and store a UFS generated NetCDF dataset to zarr from a single model component (FV3, MOM6, CICE6). The two main methods that are useful are :meth:`open_dataset` and :meth:`store_dataset`.
 
     Note:
         This class does nothing on its own, only the children (for now just :class:`FV3Dataset`) will work.
@@ -121,11 +120,11 @@ class UFSDataset:
         # check that file_prefixes is a list
         self.file_prefixes = [self.file_prefixes] if isinstance(self.file_prefixes, str) else self.file_prefixes
 
-    def open_dataset(self, cycle: datetime, fsspec_kwargs=None, **kwargs):
-        """Read data from a single DA cycle
+    def open_dataset(self, cycles: datetime, fsspec_kwargs=None, **kwargs):
+        """Read data from DA cycles indicated by cycle
 
         Args:
-            cycle (datetime.datetime): datetime object giving initial time for this DA cycle
+            cycles (datetime.datetime or List[datetime.datetime]): datetime object(s) giving initial time for each DA cycles
             fsspec_kwargs (dict, optional): optional arguments passed to :func:`fsspec.open_files`
             **kwargs (dict, optional): optional arguments passed to :func:`xarray.open_mfdataset`, in addition to
                 the ones provided by :attr:`default_open_dataset_kwargs`
@@ -139,7 +138,7 @@ class UFSDataset:
         kw = self.default_open_dataset_kwargs.copy()
         kw.update(kwargs)
 
-        fnames = self.path_in(cycle, self.forecast_hours, self.file_prefixes)
+        fnames = self.path_in(cycles, self.forecast_hours, self.file_prefixes)
 
         # Maybe there's a more elegant way to handle this, but with local files, fsspec closes them
         # before dask reads them...
