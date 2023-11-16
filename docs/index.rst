@@ -12,6 +12,6 @@ Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Clo
    :maxdepth: 1
    :caption: Contents:
 
-   read_and_store_replay
-   read_and_store_ocean
+   example_replay_fv3
+   example_replay_mom6
    api

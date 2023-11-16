@@ -5,7 +5,6 @@ import numpy as np
 import xarray as xr
 
 from .ufsdataset import UFSDataset
-from .utils import batched
 
 class FV3Dataset(UFSDataset):
     __doc__ = UFSDataset.__doc__
@@ -25,8 +24,8 @@ class FV3Dataset(UFSDataset):
             "grid_xt": -1,
         }
 
-    def open_dataset(self, cycle: datetime, fsspec_kwargs=None, **kwargs):
-        xds = super().open_dataset(cycle, fsspec_kwargs, **kwargs)
+    def open_dataset(self, cycles: datetime, fsspec_kwargs=None, **kwargs):
+        xds = super().open_dataset(cycles, fsspec_kwargs, **kwargs)
 
         # Deal with time
         xds = xds.rename({"time": "cftime"})
@@ -41,21 +40,7 @@ class FV3Dataset(UFSDataset):
             },
         )
 
-        n_output_per_cycle = len(time) // len(cycle)
-        time_batches = list(batched(time, n_output_per_cycle))
-        ftime = np.array([
-            these_times - np.datetime64(this_cycle) for these_times, this_cycle in zip(time_batches, cycle)
-        ]).flatten()
-        xds["ftime"] = xr.DataArray(
-            ftime,
-            coords=xds["cftime"].coords,
-            dims=xds["cftime"].dims,
-            attrs={
-                "long_name": "forecast_time",
-                "description": f"time passed since {str(cycle)}",
-                "axis": "T",
-            },
-        )
+        xds["ftime"] = self._time2ftime(xds["time"], cycles)
         xds = xds.swap_dims({"cftime": "time"})
         xds = xds.set_coords(["time", "cftime", "ftime"])
 

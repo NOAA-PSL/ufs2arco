@@ -1,5 +1,6 @@
 from pathlib import Path
 from os import path
+from collections.abc import Iterable
 from typing import Dict, List, Callable
 import fsspec
 import yaml
@@ -12,12 +13,10 @@ from zarr import NestedDirectoryStore
 from datetime import datetime, timedelta
 from cftime import DatetimeJulian
 
+from .utils import batched
 
 class UFSDataset:
     """Open and store a UFS generated NetCDF dataset to zarr from a single model component (FV3, MOM6, CICE6). The two main methods that are useful are :meth:`open_dataset` and :meth:`store_dataset`.
-
-    Note:
-        This class does nothing on its own, only the children (for now just :class:`FV3Dataset`) will work.
 
     Note:
         The ``path_in`` argument on __init__ probably needs some attention, especially in relation to the ``file_prefixes`` option. This should be addressed once we start thinking about datasets other than replay.
@@ -87,6 +86,7 @@ class UFSDataset:
         self.coords: List[str] = []
         self.data_vars: List[str] = []
         self.zarr_name: str = ""
+        self.coords_path_out = None
 
         with open(config_filename, "r") as f:
             contents = yaml.safe_load(f)
@@ -121,7 +121,7 @@ class UFSDataset:
         self.file_prefixes = [self.file_prefixes] if isinstance(self.file_prefixes, str) else self.file_prefixes
 
     def open_dataset(self, cycles: datetime, fsspec_kwargs=None, **kwargs):
-        """Read data from DA cycles indicated by cycle
+        """Read data from specified DA cycles
 
         Args:
             cycles (datetime.datetime or List[datetime.datetime]): datetime object(s) giving initial time for each DA cycles
@@ -311,3 +311,33 @@ class UFSDataset:
             ]
         )
         return cftime
+
+    @staticmethod
+    def _time2ftime(time, cycles):
+        """Compute the ftime (forecast_time) array, indicating the hours since
+        initialization for each timestamp
+
+        Args:
+            time (xr.DataArray): with numpy.datetime64 objects
+            cycles (datetime or List[datetime]): with the DA cycle(s) to grab
+
+        Returns:
+            ftime (xr.DataArray): forecast_time
+        """
+        cycles = [cycles] if not isinstance(cycles, Iterable) else cycles
+        n_output_per_cycle = len(time) // len(cycles)
+        time_batches = list(batched(time.values, n_output_per_cycle))
+        ftime = np.array([
+            these_times - np.datetime64(this_cycle) for these_times, this_cycle in zip(time_batches, cycles)
+        ]).flatten()
+        xftime = xr.DataArray(
+            ftime,
+            coords=time.coords,
+            dims=time.dims,
+            attrs={
+                "long_name": "forecast_time",
+                "description": f"time passed since forecast initialization",
+                "axis": "T",
+            },
+        )
+        return xftime

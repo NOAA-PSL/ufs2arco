@@ -29,8 +29,8 @@ class MOM6Dataset(UFSDataset):
             "xq": -1,
         }
 
-    def open_dataset(self, cycle: datetime, fsspec_kwargs=None, **kwargs):
-        xds = super().open_dataset(cycle, fsspec_kwargs, **kwargs)
+    def open_dataset(self, cycles: datetime, fsspec_kwargs=None, **kwargs):
+        xds = super().open_dataset(cycles, fsspec_kwargs, **kwargs)
 
         # Deal with time
         xds = xds.rename({"time": "cftime"})
@@ -44,16 +44,7 @@ class MOM6Dataset(UFSDataset):
                     "axis": "T",
                 },
         )
-        xds["ftime"] = xr.DataArray(
-                time-np.datetime64(cycle),
-                coords=xds["cftime"].coords,
-                dims=xds["cftime"].dims,
-                attrs={
-                    "long_name": "forecast_time",
-                    "description": f"time passed since {str(cycle)}",
-                    "axis": "T",
-                },
-        )
+        xds["ftime"] = self._time2ftime(xds["time"], cycles)
         xds = xds.swap_dims({"cftime": "time"})
         xds = xds.set_coords(["time", "cftime", "ftime"])
         return xds
