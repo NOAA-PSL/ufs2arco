@@ -1,0 +1,104 @@
+FV3Dataset:
+    file_prefixes:
+        - bfg_
+        - sfg_
+
+    path_out        : "example-replay-1deg"
+    forecast_hours  : [0, 6]
+
+    chunks_in:
+        time        : 1
+        pfull       : 1
+        grid_yt     : -1
+        grid_xt     : -1
+
+    chunks_out:
+        time        : 1
+        pfull       : 127
+        grid_yt     : 60
+        grid_xt     : 60
+
+    coords:
+        - phalf
+        - pfull
+        - grid_xt
+        - grid_yt
+        - ak
+        - bk
+
+    data_vars:
+        - tmp
+        - ugrd
+        - vgrd
+        - dpres
+        - delz
+        - spfh
+        - o3mr
+        - soilt1
+        - soilt2
+        - soilt3
+        - soilt4
+        - soill1
+        - soill2
+        - soill3
+        - soill4
+        - soilw1
+        - soilw2
+        - soilw3
+        - soilw4
+        - snod
+        - prateb_ave
+        - pressfc
+        - weasd
+        - f10m
+        - sfcr
+        - land
+
+MOM6Dataset:
+    file_prefixes:
+        - ocn_
+    path_out        : "example-replay-1deg"
+    forecast_hours  : [0]
+    chunks_in:
+        time        : 1
+        z_l         : 1
+        z_i         : 1
+        yh          : -1
+        xh          : -1
+        yq          : -1
+        xq          : -1
+
+    chunks_out:
+        time        : 1
+        z_l         : -1
+        z_i         : -1
+        yh          : 60
+        xh          : 60
+        yq          : 60
+        xq          : 60
+
+    coords:
+        - xh
+        - xq
+        - yh
+        - yq
+        - z_l
+        - geolon_c
+        - geolat_c
+        - geolon_u
+        - geolat_u
+        - geolon_v
+        - geolat_v
+        - wet_c
+        - wet_u
+        - wet_v
+        - sin_rot
+        - cos_rot
+
+    data_vars:
+        - uo
+        - vo
+        - temp
+        - so
+        - SSH
+        - MLD_0125
