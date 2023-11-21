@@ -102,3 +102,48 @@ MOM6Dataset:
         - so
         - SSH
         - MLD_0125
+
+CICE6Dataset:
+    file_prefixes:
+        - "iceh_ic."
+    path_out        : "example-replay-1deg"
+    forecast_hours  : [0]
+    chunks_in:
+        nc          : 1
+        nkice       : 1
+        nkaer       : 1
+        nksnow      : 1
+        nj          : -1
+        ni          : -1
+
+    chunks_out:
+        time        : 1
+        NCAT        : 5
+        VGRDi       : 7
+        VGRDa       : 5
+        VGRDs       : 5
+        nj          : 30
+        ni          : 30
+
+    coords:
+        - TLON
+        - TLAT
+        - ULON
+        - ULAT
+        - NCAT
+        - tmask
+        - blkmask
+        - tarea
+        - uarea
+        - ANGLE
+        - ANGLET
+        - VGRDa
+        - VGRDi
+        - VGRDs
+
+    data_vars:
+        - Tinz
+        - aicen
+        - vicen
+        - uvel
+        - vvel
