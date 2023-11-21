@@ -147,3 +147,6 @@ CICE6Dataset:
         - vicen
         - uvel
         - vvel
+        - hi
+        - Tsfc
+        - aice
