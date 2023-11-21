@@ -29,17 +29,7 @@ class FV3Dataset(UFSDataset):
 
         # Deal with time
         xds = xds.rename({"time": "cftime"})
-        time = self._cftime2time(xds["cftime"])
-        xds["time"] = xr.DataArray(
-            time,
-            coords=xds["cftime"].coords,
-            dims=xds["cftime"].dims,
-            attrs={
-                "long_name": "time",
-                "axis": "T",
-            },
-        )
-
+        xds["time"] = self._cftime2time(xds["cftime"])
         xds["ftime"] = self._time2ftime(xds["time"], cycles)
         xds = xds.swap_dims({"cftime": "time"})
         xds = xds.set_coords(["time", "cftime", "ftime"])

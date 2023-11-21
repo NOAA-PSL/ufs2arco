@@ -145,8 +145,13 @@ class UFSDataset:
         if fsspec_kwargs is None:
             xds = xr.open_mfdataset(fnames, **kw)
         else:
-            with fsspec.open_files(fnames, **fsspec_kwargs) as f:
-                xds = xr.open_mfdataset(f, **kw)
+            with fsspec.open_files(fnames, **fsspec_kwargs) as files:
+                # This assumes netcdf4, which I think is a safe fallback for UFS data
+                engine = kw.pop("engine", "netcdf4")
+                if engine == "netcdf4":
+                    xds = xr.open_mfdataset([this_file.name for this_file in files], **kw)
+                else:
+                    xds = xr.open_mfdataset(files, **kw)
         return xds
 
     def chunk(self, xds):
@@ -156,7 +161,7 @@ class UFSDataset:
             This should probably be replaced with rechunker https://rechunker.readthedocs.io/en/latest/
 
         Args:
-            xds (xarray.Dataset): as provided by meth:`open_dataset`
+            xds (xarray.Dataset): as provided by :meth:`open_dataset`
 
         Returns:
             xds (xarray.Dataset): rechunked as specified
@@ -264,10 +269,10 @@ class UFSDataset:
         """Convert cftime array to numpy.datetime64
 
         Args:
-            cftime (array_like): with DatetimeJulian objects
+            cftime (xarray.DataArray): with DatetimeJulian objects
 
         Returns:
-            time (array_like): with numpy.datetime64 objects
+            xtime (xarray.DataArray): with numpy.datetime64 objects
         """
         time = np.array(
             [
@@ -284,17 +289,26 @@ class UFSDataset:
                 for t in cftime
             ]
         )
-        return time
+        xtime = xr.DataArray(
+            time,
+            coords=cftime.coords,
+            dims=cftime.dims,
+            attrs={
+                "long_name": "time",
+                "axis": "T",
+            },
+        )
+        return xtime
 
     @staticmethod
     def _time2cftime(time):
         """Convert numpy.datetime64 array to cftime
 
         Args:
-            time (array_like): with numpy.datetime64 objects
+            time (xarray.DataArray): with numpy.datetime64 objects
 
         Returns:
-            cftime (array_like): with DatetimeJulian objects
+            xcftime (xarray.DataArray): with DatetimeJulian objects
         """
         cftime = np.array(
             [
@@ -310,7 +324,17 @@ class UFSDataset:
                 for t in time
             ]
         )
-        return cftime
+        xcftime = xr.DataArray(
+            cftime,
+            coords=time.coords,
+            dims=time.dims,
+            attrs={
+                "long_name": "time",
+                "axis": "T",
+                "calendar_type": "JULIAN",
+            },
+        )
+        return xcftime
 
     @staticmethod
     def _time2ftime(time, cycles):
@@ -322,7 +346,7 @@ class UFSDataset:
             cycles (datetime or List[datetime]): with the DA cycle(s) to grab
 
         Returns:
-            ftime (xr.DataArray): forecast_time
+            xftime (xr.DataArray): forecast_time
         """
         cycles = [cycles] if not isinstance(cycles, Iterable) else cycles
         n_output_per_cycle = len(time) // len(cycles)
