@@ -14,4 +14,5 @@ Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Clo
 
    example_replay_fv3
    example_replay_mom6
+   example_replay_cice6
    api
