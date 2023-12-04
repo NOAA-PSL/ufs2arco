@@ -1,5 +1,4 @@
-from pathlib import Path
-from os import path
+from os.path import join
 from collections.abc import Iterable
 from typing import Dict, List, Callable
 import fsspec
@@ -50,15 +49,15 @@ class UFSDataset:
     @property
     def data_path(self):
         """Where to write forecast data variables to"""
-        return str(Path(self.path_out) / self.zarr_name)
+        return self._join(self.path_out, self.zarr_name)
 
     @property
     def coords_path(self) -> str:
         """Where to write static coordinates to"""
         if self.coords_path_out is None:
-            return str(Path(self.path_out) / "coordinates" / self.zarr_name)
+            return self._join(self.path_out, "coordinates", self.zarr_name)
         else:
-            return str(Path(self.coords_path_out) / self.zarr_name)
+            return self._join(self.coords_path_out, self.zarr_name)
 
     @property
     def default_open_dataset_kwargs(self) -> Dict:
@@ -365,3 +364,19 @@ class UFSDataset:
             },
         )
         return xftime
+
+    @staticmethod
+    def _join(a, b):
+        """System independent join operation"""
+        clouds = ("gcs://", "s3://", "https://")
+        if any(x in a for x in clouds) or any(x in b for x in clouds):
+            try:
+                assert isinstance(a, str) and isinstance(b, str)
+            except:
+                raise TypeError(f"For cloud storage, paths need to be strings. Tried to join {type(a)} and {type(b)}")
+
+            join_char = "/" if a[-1] != "/" and b[0] != "/" else ""
+            return f"{a}{join_char}{b}"
+
+        else:
+            return join(a, b)
