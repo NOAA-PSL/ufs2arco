@@ -366,17 +366,23 @@ class UFSDataset:
         return xftime
 
     @staticmethod
-    def _join(a, b):
+    def _join(a, *p):
         """System independent join operation"""
         clouds = ("gcs://", "s3://", "https://")
-        if any(x in a for x in clouds) or any(x in b for x in clouds):
+        if any(x in a for x in clouds) or any(any(x in this_path for x in clouds) for this_path in p):
             try:
-                assert isinstance(a, str) and isinstance(b, str)
+                assert isinstance(a, str) and all(isinstance(this_path, str) for this_path in p)
             except:
-                raise TypeError(f"For cloud storage, paths need to be strings. Tried to join {type(a)} and {type(b)}")
+                raise TypeError(f"For cloud storage, paths need to be strings.")
 
-            join_char = "/" if a[-1] != "/" and b[0] != "/" else ""
-            return f"{a}{join_char}{b}"
+            path = a
+            join_char = "/" if a[-1] != "/" else ""
+            for this_path in p:
+                path += join_char
+                path += this_path
+                join_char = "/" if this_path[-1] != "/" else ""
+
+            return path
 
         else:
-            return join(a, b)
+            return join(a, *p)
