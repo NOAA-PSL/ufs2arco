@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-          os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         python-version: ["3.11"]
     steps:
       - uses: actions/checkout@v3
@@ -33,7 +33,7 @@ jobs:
           cache-downloads: true
           cache-environment: true
           micromamba-version: "latest"
-          environment-file: ci/environment.yaml
+          environment-file: environment.yaml
           create-args: python=${{ matrix.python-version }}
       - name: Install ufs2arco
         shell: micromamba-shell {0}
