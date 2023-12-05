@@ -11,6 +11,13 @@ on:
   pull_request:
     branches:
       - "*"
+  workflow_dispatch:
+    logLevel:
+      options:
+        - info
+        - warning
+        - debug
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        os: ["ubuntu-latest", "macos-latest"]
         python-version: ["3.11"]
     steps:
       - uses: actions/checkout@v3
@@ -35,8 +42,9 @@ jobs:
           micromamba-version: "latest"
           environment-file: environment.yaml
           create-args: python=${{ matrix.python-version }}
+          init-shell: bash
       - name: Install ufs2arco
-        shell: micromamba-shell {0}
+        shell: bash -l {0}
         run: |
           python -V
           python -c "import setuptools; print(setuptools.__version__)"
@@ -48,5 +56,40 @@ jobs:
           coverage run --rcfile=coverage.toml -m pytest --verbose
       - name: Get coverage report
         shell: bash -l {0}
+        run: |
+          coverage report -m ; coverage xml
+
+  windows-build:
+    name: Build (${{ matrix.python-version }} | ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["windows-latest"]
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Create conda environment
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          cache-downloads: true
+          cache-environment: true
+          micromamba-version: "latest"
+          environment-file: environment.yaml
+          create-args: python=${{ matrix.python-version }}
+          init-shell: powershell
+      - name: Install ufs2arco
+        shell: pwsh
+        run: |
+          python -V
+          python -c "import setuptools; print(setuptools.__version__)"
+          python -m pip install -e . --no-deps
+      - name: Run Unit Tests
+        shell: pwsh
+        run: |
+          python -V
+          coverage run --rcfile=coverage.toml -m pytest --verbose
+      - name: Get coverage report
+        shell: pwsh
         run: |
           coverage report -m ; coverage xml
