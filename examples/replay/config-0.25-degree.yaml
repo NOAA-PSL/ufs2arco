@@ -1,0 +1,84 @@
+FV3Dataset:
+    file_prefixes:
+        - bfg_
+        - sfg_
+
+    path_out       : "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/03h-freq/zarr/"
+    coords_path_out: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/coordinates/zarr/"
+    forecast_hours  : [0, 3]
+
+    chunks_in:
+        # estimated 37MB per chunk (the full 3D field)
+        time        : 1
+        pfull       : 127
+        grid_yt     : 768
+        grid_xt     : 1536
+
+    chunks_out:
+        time        : 1
+        pfull       : 127
+        grid_yt     : 768
+        grid_xt     : 1536
+
+    coords:
+        - phalf
+        - pfull
+        - grid_xt
+        - grid_yt
+        - ak
+        - bk
+
+    data_vars:
+        # 3D atmospheric vars
+        - tmp
+        - ugrd
+        - vgrd
+        - delz
+        - dzdt
+        - dpres
+        - spfh
+        - o3mr
+        # 3D land vars
+        - soilt1
+        - soilt2
+        - soilt3
+        - soilt4
+        - soill1
+        - soill2
+        - soill3
+        - soill4
+        - soilw1
+        - soilw2
+        - soilw3
+        - soilw4
+        # 2D vars
+        - snod
+        - prateb_ave
+        - pressfc
+        - weasd
+        - f10m
+        - sfcr
+        # Surface forcing vars
+        - land
+        - vtype
+        - sotyp
+        - veg
+        - icec
+        - tmpsfc
+        # For TOA solar radiation
+        - dswrf_avetoa
+        - ulwrf_avetoa
+        - uswrf_avetoa
+        # Ease comparison
+        - tmp2m
+        - ugrd10m
+        - vgrd10m
+        # For cloudy assimilation
+        - clwmr
+        - grle
+        - icmr
+        - rwmr
+        - snmr
+        # For future operational implementation
+        - ntrnc
+        - nicp
