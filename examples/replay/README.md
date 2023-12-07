@@ -19,7 +19,7 @@ Currently only the FV3 data is being moved, and it can be found
 ## 1/4 Degree Data
 
 [move_quarter_degree.py](move_quarter_degree.py)
-moves the UFS output from the Replay runs at 1 degree from
+moves the UFS output from the Replay runs at 1/4 degree from
 [here](https://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/index.html)
 to zarr on
 [this GCS bucket](https://console.cloud.google.com/storage/browser/noaa-ufs-gefsv13replay).
