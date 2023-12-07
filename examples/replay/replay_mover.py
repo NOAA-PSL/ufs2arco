@@ -26,19 +26,21 @@ class ReplayMover1Degree():
 
 
     n_jobs = None
-    n_cycles = None
+    n_cycles = None # number of cycles kept in memory, and stored in cache
 
     forecast_hours = None
     file_prefixes = None
 
     @property
     def xcycles(self):
+        """These are the DA cycle timestamps, which are every 6 hours. There is one s3 directory per cycle for replay."""
         cycles = pd.date_range(start="1994-01-01", end="1999-06-13T06:00:00", freq="6h")
         return xr.DataArray(cycles, coords={"cycles": cycles}, dims="cycles")
 
 
     @property
     def xtime(self):
+        """These are the time stamps of the resulting dataset, assuming we are grabbing fhr00 and fhr03"""
         time = pd.date_range(start="1994-01-01", end="1999-06-13T09:00:00", freq="3h")
         iau_time = time - timedelta(hours=6)
         return xr.DataArray(iau_time, coords={"time": iau_time}, dims="time", attrs={"long_name": "time", "axis": "T"})
@@ -50,9 +52,25 @@ class ReplayMover1Degree():
         return [int(x) for x in np.linspace(0, len(self.xcycles), self.n_jobs+1)]
 
     def cache_storage(self, job_id):
-        return f"{self.main_cache_path}/{job_id}"
+        """Location to store the s3 data, before subsetting, rechunking, and pushing to GCS
+
+        Args:
+            job_id (int): the slurm job id, determines cache storage location
+
+        Returns:
+            cache_storage (str): location to store s3 netcdf files
+        """
+        return join(self.main_cache_path, str(job_id))
 
     def ods_kwargs(self, job_id):
+        """These are passed to xarray.open_dataset to read from s3 and store the file in cache
+
+        Args:
+            job_id (int): the slurm job id, determines cache storage location
+
+        Returns:
+            xarray_open_dataset_kwargs (dict): job_id determines cache_storage location
+        """
         okw = {
             "fsspec_kwargs": {
                 "s3": {"anon": True},
@@ -64,6 +82,14 @@ class ReplayMover1Degree():
 
 
     def my_cycles(self, job_id):
+        """The cycle timestamps for this job
+
+        Args:
+            job_id (int): the slurm job id, determines cache storage location
+
+        Returns:
+            cycles_datetime (List[datetime]): with the cycle numbers to be processed by this slurm job
+        """
         slices = [slice(st, ed) for st, ed in zip(self.splits[:-1], self.splits[1:])]
         xda = self.xcycles.isel(cycles=slices[job_id])
         cycles_datetime = self.npdate2datetime(xda)
@@ -96,18 +122,20 @@ class ReplayMover1Degree():
 
 
     def run(self, job_id):
-        """Make this essentially a function that can run completely independently of other objects
+        """This pulls data and stores it to the desired storage location.
+        This is essentially a function that can run completely independently of other objects
 
         Note:
-            This could probably be more efficient by creating a list of cycles and passing that to open_dataset,
-            rather than going one cycle at a time. However, since we are pulling datasets to local cache and
-            I'll be running many jobs concurrently, it could be best to just do it this way.
+            This expects :meth:`.store_container` to have been run first
+
+        Args:
+            job_id (int): the slurm job id, determines cache storage location
         """
 
         localtime = Timer()
         replay = FV3Dataset(path_in=self.cached_path, config_filename=self.config_filename)
 
-        store_coords = False
+        store_coords = False # we don't need a separate coords dataset for FV3
         for cycles in list(batched(self.my_cycles(job_id), self.n_cycles)):
 
             localtime.start(f"Reading {str(cycles[0])} - {str(cycles[-1])}")
@@ -138,7 +166,8 @@ class ReplayMover1Degree():
 
 
     def store_container(self):
-        """Create an empty container that has the write shape, chunks, and dtype for each variable"""
+        """Create an empty container that has the write shape, chunks, and dtype for each variable
+        """
 
         localtime = Timer()
 
@@ -170,15 +199,15 @@ class ReplayMover1Degree():
             shape = (len(dds["time"]),) + single[key].shape
 
             dds[key] = xr.DataArray(
-                    data=darray.zeros(
-                        shape=shape,
-                        chunks=chunks,
-                        dtype=single[key].dtype,
-                        ),
-                    coords={"time": dds["time"], **{d: single[d] for d in single[key].dims}},
-                    dims=dims,
-                    attrs=single[key].attrs.copy(),
-                )
+                data=darray.zeros(
+                    shape=shape,
+                    chunks=chunks,
+                    dtype=single[key].dtype,
+                ),
+                coords={"time": dds["time"], **{d: single[d] for d in single[key].dims}},
+                dims=dims,
+                attrs=single[key].attrs.copy(),
+            )
             print(f"\t ... done with {key}")
 
         localtime.stop()
@@ -197,8 +226,36 @@ class ReplayMover1Degree():
 
     @staticmethod
     def cached_path(dates, forecast_hours, file_prefixes):
-        """Note, with simplecache it's not clear where the cached files go, and they
-        do not clear until the process is done running (maybe?) which can file up a filesystem easily.
+        """This is passed to :class:`FV3Dataset`, and it generates the paths to read from for the given inputs
+
+        Note:
+            With simplecache it's not clear where the cached files go, and they
+            do not clear until the process is done running (maybe?) which can file up a filesystem easily.
+            So we use filecache instead.
+
+        Args:
+            dates (Iterable[datetime]): with the DA cycles to read from
+            forecast_hours (List[int]): with the forecast hours to grab ... note here we assume [0, 3] ... but don't enforce it here
+            file_prefixes (List[str]): e.g. ["sfg_", "bfg_"]
+
+        Returns:
+            list_of_paths (List[str]): see example
+
+        Example:
+            >>> mover = ReplayMover( ... )
+            >>> mover.cached_path(
+                    dates=[datetime(1994,1,1,0), datetime(1994,1,1,6)],
+                    forecast_hours=[0, 3],
+                    file_prefixes=["sfg_", "bfg_"],
+                )
+                ["filecache::s3://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/1deg/1994/01/1994010100/sfg_1994010100_fhr00_control,
+                "filecache::s3://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/1deg/1994/01/1994010100/sfg_1994010100_fhr03_control
+                "filecache::s3://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/1deg/1994/01/1994010100/bfg_1994010100_fhr00_control,
+                "filecache::s3://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/1deg/1994/01/1994010100/bfg_1994010100_fhr03_control
+                "filecache::s3://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/1deg/1994/01/1994010106/sfg_1994010106_fhr00_control,
+                "filecache::s3://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/1deg/1994/01/1994010106/sfg_1994010106_fhr03_control
+                "filecache::s3://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/1deg/1994/01/1994010106/bfg_1994010106_fhr00_control,
+                "filecache::s3://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/1deg/1994/01/1994010106/bfg_1994010106_fhr03_control]
         """
 
         upper = "filecache::s3://noaa-ufs-gefsv13replay-pds/1deg"
@@ -216,6 +273,7 @@ class ReplayMover1Degree():
 
     @staticmethod
     def npdate2datetime(npdate):
+        """Convert numpy.datetime64 to datetime.datetime"""
         if not isinstance(npdate, Iterable):
             return datetime(
                     year=int(npdate.dt.year),
@@ -235,6 +293,7 @@ class ReplayMover1Degree():
 
     @staticmethod
     def remove_time(xds):
+        """Remove time from dataset"""
         single = xds.isel(time=0)
         for key in xds.data_vars:
             if "time" in key:
@@ -286,12 +345,14 @@ class ReplayMoverQuarterDegree(ReplayMover1Degree):
 
     @property
     def xcycles(self):
+        """These are the DA cycle timestamps, which are every 6 hours. There is one s3 directory per cycle for replay."""
         cycles = pd.date_range(start="1994-01-01", end="2023-10-13T06:00:00", freq="6h")
         return xr.DataArray(cycles, coords={"cycles": cycles}, dims="cycles")
 
 
     @property
     def xtime(self):
+        """These are the time stamps of the resulting dataset, assuming we are grabbing fhr00 and fhr03"""
         time = pd.date_range(start="1994-01-01", end="2023-10-13T09:00:00", freq="3h")
         iau_time = time - timedelta(hours=6)
         return xr.DataArray(iau_time, coords={"time": iau_time}, dims="time", attrs={"long_name": "time", "axis": "T"})
@@ -316,10 +377,6 @@ class ReplayMoverQuarterDegree(ReplayMover1Degree):
 
     @staticmethod
     def cached_path(dates, forecast_hours, file_prefixes):
-        """Note, with simplecache it's not clear where the cached files go, and they
-        do not clear until the process is done running (maybe?) which can file up a filesystem easily.
-        """
-
         upper = "filecache::s3://noaa-ufs-gefsv13replay-pds"
         dates = [dates] if not isinstance(dates, Iterable) else dates
 
@@ -334,6 +391,7 @@ class ReplayMoverQuarterDegree(ReplayMover1Degree):
 
 
 def batched(iterable, n):
+    """reimplementation of itertools.batched for earlier versions that don't have this handy function"""
     # batched('ABCDEFG', 3) --> ABC DEF G
     if n < 1:
         raise ValueError('n must be at least one')
