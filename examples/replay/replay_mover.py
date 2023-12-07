@@ -11,9 +11,7 @@ import xarray as xr
 import dask.array as darray
 from zarr import NestedDirectoryStore
 
-from ufs2arco import FV3Dataset
-
-from timer import Timer
+from ufs2arco import FV3Dataset, Timer
 
 class ReplayMover1Degree():
     """

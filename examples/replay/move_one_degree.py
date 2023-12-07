@@ -4,11 +4,11 @@ datasets with an io buffered reader object, orsomething.
 So, this is easy enough to just submit separate slurm jobs that work on their own job ID.
 """
 
+import os
 import subprocess
 
-from ufs2arco import FV3Dataset
+from ufs2arco import FV3Dataset, Timer
 from replay_mover import ReplayMover1Degree
-from timer import Timer
 
 
 def submit_slurm_mover(job_id, mover):
@@ -80,4 +80,4 @@ if __name__ == "__main__":
         submit_slurm_mover(job_id, mover)
     localtime.stop()
 
-    walltime.stop()
+    walltime.stop("Walltime Time")

@@ -33,6 +33,8 @@ FV3Dataset:
         - tmp
         - ugrd
         - vgrd
+        - delz
+        - dzdt
         - dpres
         - spfh
         - o3mr
@@ -63,6 +65,10 @@ FV3Dataset:
         - veg
         - icec
         - tmpsfc
+        # For TOA solar radiation
+        - dswrf_avetoa
+        - ulwrf_avetoa
+        - uswrf_avetoa
         # Ease comparison
         - tmp2m
         - ugrd10m

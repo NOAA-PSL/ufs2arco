@@ -7,9 +7,8 @@ So, this is easy enough to just submit separate slurm jobs that work on their ow
 import os
 import subprocess
 
-from ufs2arco import FV3Dataset
+from ufs2arco import FV3Dataset, Timer
 from replay_mover import ReplayMoverQuarterDegree
-from timer import Timer
 
 
 def submit_slurm_mover(job_id, mover):
@@ -65,9 +64,12 @@ if __name__ == "__main__":
     # (4 * 2 GB / cycle) * (4 cycles / job) * (60 jobs) = 1440 GB
     # (4 * 2 GB / cycle) * (60 cycles / job) * (60 jobs) = 29 Tb
     # (4 * 2 GB / cycle) * (8 cycles / job) * (360 jobs) = 24 Tb
+    # ^^ way too many jobs, throttled s3
+    # (4 * 2 GB / cycle) * (28 cycles / job) * (120 jobs) = 27 Tb
+    # ^^ Still way too much... reverting back to the original setup
     mover = ReplayMoverQuarterDegree(
-        n_jobs=360,
-        n_cycles=8,
+        n_jobs=15,
+        n_cycles=4,
         config_filename="config-0.25-degree.yaml",
         storage_options={"token": "/contrib/Tim.Smith/.gcs/replay-service-account.json"},
         main_cache_path="/lustre/Tim.Smith/tmp-replay/0.25-degree",
@@ -82,4 +84,4 @@ if __name__ == "__main__":
         submit_slurm_mover(job_id, mover)
     localtime.stop()
 
-    walltime.stop()
+    walltime.stop("Walltime Time")
