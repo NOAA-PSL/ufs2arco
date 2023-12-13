@@ -145,17 +145,17 @@ class ReplayMover1Degree():
             tslice = slice(indices.min(), indices.max()+1)
 
             replay.store_dataset(
-                    xds,
-                    store_coords=store_coords,
-                    coords_kwargs={"storage_options": self.storage_options},
-                    region={
-                        "time": tslice,
-                        "pfull": slice(None, None),
-                        "grid_yt": slice(None, None),
-                        "grid_xt": slice(None, None),
-                        },
-                    storage_options=self.storage_options,
-                    )
+                xds,
+                store_coords=store_coords,
+                coords_kwargs={"storage_options": self.storage_options},
+                region={
+                    "time": tslice,
+                    "pfull": slice(None, None),
+                    "grid_yt": slice(None, None),
+                    "grid_xt": slice(None, None),
+                    },
+                storage_options=self.storage_options,
+            )
             store_coords = False
 
             # This is a hacky way to clear the cache, since we don't create a filesystem object

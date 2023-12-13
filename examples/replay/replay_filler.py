@@ -7,6 +7,9 @@
 
 """
 
+from os.path import isdir
+from shutil import rmtree
+import logging
 import numpy as np
 import xarray as xr
 import pandas as pd
@@ -83,26 +86,33 @@ class ReplayFiller:
         for cycle in self.my_cycles_to_fill(job_id):
 
             localtime.start(f"Reading {str(cycle)}")
-            xds = replay.open_dataset(cycle, **self.mover.ods_kwargs(job_id))
+            try:
+                xds = replay.open_dataset(cycle, **self.mover.ods_kwargs(job_id))
 
-            index = list(self.mover.xtime.values).index(xds.time.values[0])
-            tslice = slice(index, index+1)
+                index = list(self.mover.xtime.values).index(xds.time.values[0])
+                tslice = slice(index, index+2)
+                print("index = ", index)
 
-            replay.store_dataset(
-                xds,
-                coords_kwargs={"storage_options": self.mover.storage_options},
-                region={
-                    "time": tslice,
-                    "pfull": slice(None, None),
-                    "grid_yt": slice(None, None),
-                    "grid_xt": slice(None, None),
-                },
-            )
+                replay.store_dataset(
+                    xds,
+                    region={
+                        "time": tslice,
+                        "pfull": slice(None, None),
+                        "grid_yt": slice(None, None),
+                        "grid_xt": slice(None, None),
+                    },
+                    storage_options=self.mover.storage_options,
+                )
 
-            # This is a hacky way to clear the cache, since we don't create a filesystem object
-            del xds
-            if isdir(self.mover.cache_storage(job_id)):
-                rmtree(self.mover.cache_storage(job_id), ignore_errors=True)
+                # This is a hacky way to clear the cache, since we don't create a filesystem object
+                del xds
+                if isdir(self.mover.cache_storage(job_id)):
+                    rmtree(self.mover.cache_storage(job_id), ignore_errors=True)
+
+            except Exception as e:
+                logging.exception(e)
+                print(f"ReplayFiller.run({job_id}): Failed to store {str(cycle)}")
+                pass
             localtime.stop()
 
         walltime.stop("Total Walltime")
