@@ -26,7 +26,6 @@ class ReplayMover1Degree():
 
 
     n_jobs = None
-    n_cycles = None # number of cycles kept in memory, and stored in cache
 
     forecast_hours = None
     file_prefixes = None
@@ -100,13 +99,11 @@ class ReplayMover1Degree():
         self,
         n_jobs,
         config_filename,
-        n_cycles=60, # with two fhr files, about 18 x2 GB cache storage / job
         component="fv3",
         storage_options=None,
         main_cache_path=f"/contrib/Tim.Smith/tmp-replay/1.00-degree",
     ):
         self.n_jobs = n_jobs
-        self.n_cycles = n_cycles
         self.config_filename = config_filename
         self.storage_options = storage_options if storage_options is not None else dict()
         self.main_cache_path = main_cache_path
@@ -132,37 +129,47 @@ class ReplayMover1Degree():
             job_id (int): the slurm job id, determines cache storage location
         """
 
+        walltime = Timer()
         localtime = Timer()
         replay = FV3Dataset(path_in=self.cached_path, config_filename=self.config_filename)
 
         store_coords = False # we don't need a separate coords dataset for FV3
-        for cycles in list(batched(self.my_cycles(job_id), self.n_cycles)):
+        for cycle in self.my_cycles(job_id):
 
-            localtime.start(f"Reading {str(cycles[0])} - {str(cycles[-1])}")
-            xds = replay.open_dataset(list(cycles), **self.ods_kwargs(job_id))
+            localtime.start(f"Reading {str(cycle)}")
 
-            indices = np.array([list(self.xtime.values).index(t) for t in xds.time.values])
-            tslice = slice(indices.min(), indices.max()+1)
-
-            replay.store_dataset(
-                xds,
-                store_coords=store_coords,
-                coords_kwargs={"storage_options": self.storage_options},
-                region={
-                    "time": tslice,
-                    "pfull": slice(None, None),
-                    "grid_yt": slice(None, None),
-                    "grid_xt": slice(None, None),
-                    },
-                storage_options=self.storage_options,
-            )
-            store_coords = False
-
-            # This is a hacky way to clear the cache, since we don't create a filesystem object
-            del xds
-            if isdir(self.cache_storage(job_id)):
-                rmtree(self.cache_storage(job_id), ignore_errors=True)
+            try:
+                self.move_single_dataset(cycle)
+            except Exception as e:
+                logging.exception(e)
+                print(f"ReplayMover.run({job_id}): Failed to store {str(cycle)}")
+                pass
             localtime.stop()
+
+        walltime.stop("Total Walltime")
+
+    def move_single_dataset(self, cycle):
+        """Store a single cycle to zarr"""
+
+        xds = replay.open_dataset(cycle, **self.ods_kwargs(job_id))
+
+        index = list(self.xtime.values).index(xds.time.values[0])
+        tslice = slice(index, index+2)
+
+        replay.store_dataset(
+            xds,
+            region={
+                "time": tslice,
+                "pfull": slice(None, None),
+                "grid_yt": slice(None, None),
+                "grid_xt": slice(None, None),
+                },
+            storage_options=self.storage_options,
+        )
+        # This is a hacky way to clear the cache, since we don't create a filesystem object
+        del xds
+        if isdir(self.cache_storage(job_id)):
+            rmtree(self.cache_storage(job_id), ignore_errors=True)
 
 
     def store_container(self):
@@ -361,14 +368,12 @@ class ReplayMoverQuarterDegree(ReplayMover1Degree):
         self,
         n_jobs,
         config_filename,
-        n_cycles=4, # with two fhr files, about 16 x2 GB cache storage / job
         component="fv3",
         storage_options=None,
         main_cache_path=f"/contrib/Tim.Smith/tmp-replay/0.25-degree",
     ):
         super().__init__(
             n_jobs=n_jobs,
-            n_cycles=n_cycles,
             config_filename=config_filename,
             component=component,
             storage_options=storage_options,

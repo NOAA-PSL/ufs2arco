@@ -23,12 +23,36 @@ moves the UFS output from the Replay runs at 1/4 degree from
 [here](https://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/index.html)
 to zarr on
 [this GCS bucket](https://console.cloud.google.com/storage/browser/noaa-ufs-gefsv13replay).
+Note that this did not work in one shot, and I used
+[fill_quarter_degree.py](fill_quarter_degree.py) to fill in missing data due to
+connection errors, and just a couple of files that were originally missing on
+s3.
 
 Currently only the FV3 data is being moved, and it can be found
 [in this zarr store](https://console.cloud.google.com/storage/browser/noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/03h-freq/zarr/fv3.zarr).
 
 
-## Notes on Performance
+## Notes on Performance, Trials, and Errors
+
+Below are notes on how the 1 degree and 1/4 degree data transfers went.
+However, after all of the trial and error with the 1/4 degree transfer, I
+finally found a better way to do this.
+Originally, each slurm job was transfering many cycles at once
+(60 cycles for 1 degree and a number of different attempts listed below for
+quarter degree).
+However, I found that this was unnecessarily complicated, and did not speed
+anything up.
+In fact if anything it was potentially part of the reason that I saw such poor
+performance for the quarter degree data.
+So, the latest version of the code just transfers one cycle at a time.
+With this version, more jobs could probably be used, for example
+probably 2-4 times as many jobs, but I would proceed with caution.
+
+Additionally, the most recent `replay_mover.py` uses a try/except handling to
+skip any problematic transfers.
+This means the job can just keep running, and `replay_filler.py` can be used to
+fill in any problems due to missing files or random connection errors.
+The listed missing dates are just listed at the top of that python module.
 
 
 ### 1 Degree, 5.5 years

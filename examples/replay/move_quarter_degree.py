@@ -17,7 +17,6 @@ def submit_slurm_mover(job_id, mover):
         f"from replay_mover import ReplayMoverQuarterDegree\n"+\
         f"mover = ReplayMoverQuarterDegree(\n"+\
         f"    n_jobs={mover.n_jobs},\n"+\
-        f"    n_cycles={mover.n_cycles},\n"+\
         f"    config_filename='{mover.config_filename}',\n"+\
         f"    storage_options={mover.storage_options},\n"+\
         f"    main_cache_path='{mover.main_cache_path}',\n"+\
@@ -58,18 +57,8 @@ if __name__ == "__main__":
 
     walltime.start("Initializing job")
 
-    # start with many jobs to just write a single slice of time steps for verification
-    # estimating ~4 GB per cycle, need 2x per job
-    # (4 * 2 GB / cycle) * (4 cycles / job) * (15 jobs) = 480 GB
-    # (4 * 2 GB / cycle) * (4 cycles / job) * (60 jobs) = 1440 GB
-    # (4 * 2 GB / cycle) * (60 cycles / job) * (60 jobs) = 29 Tb
-    # (4 * 2 GB / cycle) * (8 cycles / job) * (360 jobs) = 24 Tb
-    # ^^ way too many jobs, throttled s3
-    # (4 * 2 GB / cycle) * (28 cycles / job) * (120 jobs) = 27 Tb
-    # ^^ Still way too much... reverting back to the original setup
     mover = ReplayMoverQuarterDegree(
         n_jobs=15,
-        n_cycles=4,
         config_filename="config-0.25-degree.yaml",
         storage_options={"token": "/contrib/Tim.Smith/.gcs/replay-service-account.json"},
         main_cache_path="/lustre/Tim.Smith/tmp-replay/0.25-degree",

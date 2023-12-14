@@ -17,7 +17,6 @@ def submit_slurm_mover(job_id, mover):
         f"from replay_mover import ReplayMover1Degree\n"+\
         f"mover = ReplayMover1Degree(\n"+\
         f"    n_jobs={mover.n_jobs},\n"+\
-        f"    n_cycles={mover.n_cycles},\n"+\
         f"    config_filename='{mover.config_filename}',\n"+\
         f"    storage_options={mover.storage_options},\n"+\
         f"    main_cache_path='{mover.main_cache_path}',\n"+\
@@ -58,14 +57,8 @@ if __name__ == "__main__":
 
     walltime.start("Initializing job")
 
-    # start with many jobs to just write a single slice of time steps for verification
-    # with each dataset batch at 12 cycles, size ~16GB
-    # note that cache clearing happens during overwrite, so 2x that size is on the filesystem at a time
-    # so... with 707GB free, we have a good buffer with:
-    # (36 GB / job) * (15 jobs) = 540 GB
     mover = ReplayMover1Degree(
         n_jobs=15,
-        n_cycles=60,
         config_filename="config-1.00-degree.yaml",
         storage_options={"token": "/contrib/Tim.Smith/.gcs/replay-service-account.json"},
         main_cache_path="/lustre/Tim.Smith/tmp-replay/1.00-degree",
