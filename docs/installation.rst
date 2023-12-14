@@ -4,7 +4,7 @@ Installation
 Installation from pip
 =====================
 
-Alternatively, ufs2arco can be installed using pip::
+ufs2arco can be installed using pip::
 
     pip install ufs2arco
 
