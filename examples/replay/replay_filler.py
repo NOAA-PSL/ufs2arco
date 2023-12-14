@@ -41,6 +41,14 @@ class ReplayFiller:
         pd.date_range("2022-10-12T06", "2023-10-13T06", freq="6h"),
     ])
 
+    # this was a necessary quick 2nd fill
+    #cycles_to_fill = np.array([
+    #    np.datetime64("1997-11-23T00"),
+    #    np.datetime64("2015-03-15T06"),
+    #    np.datetime64("2015-04-01T06"),
+    #])
+
+
     @property
     def xcycles_to_fill(self):
         """cycles_to_fill in xarray.DataArray form for time accessors"""
