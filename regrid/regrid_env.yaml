@@ -1,0 +1,27 @@
+name: regrid
+channels:
+    - conda-forge
+dependencies:
+    - python=3.11
+# Basics
+    - numpy
+    - scipy
+    - matplotlib
+# xarray et al
+    - xarray
+    - netCDF4
+    - h5netcdf
+    - bottleneck
+    - dask[complete]
+    - zarr
+    - cftime
+# regrid
+    - xesmf
+# other plotting and interaction
+    - jupyterlab
+    - cartopy
+    - shapely
+# filesystem
+    - fsspec
+    - s3fs
+    - gcsfs
