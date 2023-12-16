@@ -192,27 +192,8 @@ class Regrid:
                     interp_v = self.rg_ut(ds_in[var2].values)
 
                     # rotate to earth-relative
-                    if is_3d:
-                        urot = np.zeros(np.shape(interp_u)[1:])
-                        vrot = np.zeros(np.shape(interp_u)[1:])
-                        for k in range(np.shape(interp_u)[1]):
-                            urot[k] = (
-                                interp_u[0, k, :, :] * self.ds_rot.cos_rot
-                                + interp_v[0, k, :, :] * self.ds_rot.sin_rot
-                            )
-                            vrot[k] = (
-                                interp_v[0, k, :, :] * self.ds_rot.cos_rot
-                                - interp_u[0, k, :, :] * self.ds_rot.sin_rot
-                            )
-                    else:
-                        urot = (
-                            interp_u[0, :, :] * self.ds_rot.cos_rot
-                            + interp_v[0, :, :] * self.ds_rot.sin_rot
-                        )
-                        vrot = (
-                            interp_v[0, :, :] * self.ds_rot.cos_rot
-                            - interp_u[0, :, :] * self.ds_rot.sin_rot
-                        )
+                    urot = interp_u.isel(time=0) * self.ds_rot.cos_rot + interp_v.isel(time=0) * self.ds_rot.sin_rot
+                    vrot = interp_v.isel(time=0) * self.ds_rot.cos_rot - interp_u.isel(time=0) * self.ds_rot.sin_rot
 
                     # interoplate
                     uinterp_out = self.rg_tt(urot)
