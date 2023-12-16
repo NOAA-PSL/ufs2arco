@@ -92,11 +92,9 @@ class Regrid:
         # create output dataset
         self.lat1d, self.lon1d = compute_grid(self.nlat_o, self.nlon_o)
         lons, lats = np.meshgrid(self.lon1d, self.lat1d)
-        da_out_lons = xr.DataArray(lons, dims=["nx", "ny"])
-        da_out_lats = xr.DataArray(lats, dims=["nx", "ny"])
-        ds_out_lons = da_out_lons.to_dataset(name="lon")
-        ds_out_lats = da_out_lats.to_dataset(name="lat")
-        grid_out = xr.merge([ds_out_lons, ds_out_lats])
+        grid_out = xr.Dataset()
+        grid_out["lon"] = xr.DataArray(lons, dims=["nx", "ny"])
+        grid_out["lat"] = xr.DataArray(lats, dims=["nx", "ny"])
 
         # interpolation weights files
         wgtsfile_t_to_t = (
@@ -176,9 +174,13 @@ class Regrid:
 
                 if pos == "T":
                     interp_out = self.rg_tt(ds_in[var].values)
-                    da_out = xr.DataArray(interp_out, dims=dims)
-                    da_out.attrs["long_name"] = ds_in[var].long_name
-                    da_out.attrs["units"] = ds_in[var].units
+                    da_out = xr.DataArray(
+                        interp_out,
+                        dims=dims,
+                        attrs={
+                            "long_name": ds_in[var].long_name,
+                            "units": ds_in[var].units,
+                    )
                     ds_out.append(da_out.to_dataset(name=var))
 
                 if pos == "U":
@@ -218,9 +220,11 @@ class Regrid:
                     da_out = xr.DataArray(
                         np.expand_dims(uinterp_out, 0),
                         dims=dims,
+                        attrs={
+                            "long_name": ds_in[var].long_name,
+                            "units": ds_in[var].units,
+                        }
                     )
-                    da_out.attrs["long_name"] = ds_in[var].long_name
-                    da_out.attrs["units"] = ds_in[var].units
                     ds_out.append(da_out.to_dataset(name=var))
                     da_out = xr.DataArray(
                         np.expand_dims(vinterp_out, 0),
@@ -235,15 +239,22 @@ class Regrid:
         ds_out = ds_out.assign_coords(lat=("lat", self.lat1d))
         ds_out = ds_out.assign_coords(lev=("lev", ds_in.z_l.values))
         ds_out = ds_out.assign_coords(time=("time", ds_in.time.values))
-        ds_out["lon"].attrs["units"] = "degrees_east"
-        ds_out["lon"].attrs["axis"] = "X"
-        ds_out["lon"].attrs["standard_name"] = "longitude"
-        ds_out["lat"].attrs["units"] = "degrees_north"
-        ds_out["lat"].attrs["axis"] = "Y"
-        ds_out["lat"].attrs["standard_name"] = "latitude"
-        ds_out["lev"].attrs["units"] = "meters"
-        ds_out["lev"].attrs["positive"] = "down"
-        ds_out["lev"].attrs["axis"] = "Z"
+        ds_out["lon"].attrs.update({
+            "units": "degrees_east",
+            "axis": "X",
+            "standard_name": "longitude",
+        })
+        ds_out["lat"].attrs.update({
+            "units": "degrees_north",
+            "axis": "Y",
+            "standard_name": "latiitude",
+        })
+        ds_out["lat"].attrs.update({
+            "units": "meters",
+            "axis": "Z",
+            "standard_name": "down",
+        })
+
         ds_out.to_netcdf(f"{self.output_path}/ocn_{dtg}_{self.ores}.nc")
         ds_out.close()
         ds_in.close()
