@@ -1,4 +1,4 @@
-Regrid:
+RegridOcean:
     input_path: .
     output_path: .
     rotation_file: ./ocn_rotation_mx025.nc
