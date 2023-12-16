@@ -1,29 +1,10 @@
 """Tools for working with Gaussian grids."""
 from __future__ import absolute_import, division, print_function
 
-import functools
-
 import numpy as np
 import numpy.linalg as la
 from numpy.polynomial.legendre import legcompanion, legder, legval
 
-
-def __single_arg_fast_cache(func):
-    """Caching decorator for functions of one argument."""
-
-    class CachingDict(dict):
-        def __missing__(self, key):
-            result = self[key] = func(key)
-            return result
-
-        @functools.wraps(func)
-        def __getitem__(self, *args, **kwargs):
-            return super(CachingDict, self).__getitem__(*args, **kwargs)
-
-    return CachingDict().__getitem__
-
-
-@__single_arg_fast_cache
 def gaussian_latitudes(n):
     """Construct latitudes and latitude bounds for a Gaussian grid.
 

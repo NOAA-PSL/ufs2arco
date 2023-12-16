@@ -15,13 +15,12 @@ class RegridOcean:
         output_path (str): path where regridded data and interpolation weights are stored
         rotation_file (str): path to file containing rotation fields "sin_rot" and "cos_rot"
 
-    Args
-        lats1d_out (np.array): one dimensional array containing latitudes of the output grid
-        lons1d_out (np.array): one dimensional array containing longitudes of the output grid
-        interp_method (str): type of interpolation, default="bilinear". Other options as in xesmf.Regridder
-        config_filename (str): yaml config file specifying options for regridding
+    Optional fields in config:
+        weights_file_t2t (str): path to t2t interpolation weights file
+        weights_file_u2t (str): path to u2t interpolation weights file
+        weights_file_v2t (str): path to v2t interpolation weights file
 
-    Usage examples
+    Example:
 
         Construct the output grid. The following static methods are provided in this class
             - compute_gaussian_grid
@@ -30,7 +29,7 @@ class RegridOcean:
 
         >>> lats, lons = RegridOcean.compute_gaussian_grid(180, 360)
 
-        Construct RegridOcean object, specifying output grid lats & lons and optionally a config file
+        Construct RegridOcean object, specifying output grid lats & lons and a config file
 
         >>> rg = RegridOcean(lats, lons, config_filename = "config-regrid-ocean.yaml")
 
@@ -50,16 +49,23 @@ class RegridOcean:
         self,
         lats1d_out: np.array,
         lons1d_out: np.array,
+        config_filename: str,
         interp_method: str = "bilinear",
-        config_filename: str = "config-regrid.yaml",
     ) -> None:
+        """
+        Initialize the RegridOcean object.
+        :param lats1d_out: One-dimensional array containing latitudes of the output grid.
+        :param lons1d_out: One-dimensional array containing longitudes of the output grid.
+        :param config_filename: YAML config file specifying options for regridding.
+        :param interp_method: Type of interpolation, default="bilinear".
+        """
+
         super(RegridOcean, self).__init__()
         name = self.__class__.__name__
 
-        # read configuration from yaml file
+        # Load configuration from YAML file
         with open(config_filename, "r") as f:
-            contents = yaml.safe_load(f)
-            self.config = contents[name]
+            self.config = yaml.safe_load(f).get(name, {})
 
         # specify an output resolution
         self.lats1d_out = lats1d_out
@@ -90,7 +96,10 @@ class RegridOcean:
         return latitudes, longitudes
 
     def create_regridder(self, file):
-        """Create regridder: computes weights and creates three xesmf.Regridder instances"""
+        """
+        Create regridder: computes weights and creates three xesmf.Regridder instances.
+        :param file: Ocean input file for creating the regridder.
+        """
         self.input_path = self.config["input_path"]
         self.rotation_file = self.config["rotation_file"]
         self.output_path = self.config["output_path"]
@@ -121,44 +130,50 @@ class RegridOcean:
         self.ires = f"{nlon_i}x{nlat_i}"
         self.ores = f"{nlon_o}x{nlat_o}"
 
-        # interpolation weights files
-        wgtsfile_t_to_t = f"{self.output_path}/weights-{self.ires}.Ct.{self.ores}.Ct.{self.interp_method}.nc"
-        wgtsfile_u_to_t = f"{self.output_path}/weights-{self.ires}.Cu.{self.ires}.Ct.{self.interp_method}.nc"
-        wgtsfile_v_to_t = f"{self.output_path}/weights-{self.ires}.Cv.{self.ires}.Ct.{self.interp_method}.nc"
+        # paths to interpolation weights files
+        if "weights_file_t2t" in self.config.keys():
+            weights_file_t2t = self.config["weights_file_t2t"]
+            weights_file_u2t = self.config["weights_file_u2t"]
+            weights_file_v2t = self.config["weights_file_v2t"]
+        else:
+            weights_file_t2t = f"{self.output_path}/weights-{self.ires}.Ct.{self.ores}.Ct.{self.interp_method}.nc"
+            weights_file_u2t = f"{self.output_path}/weights-{self.ires}.Cu.{self.ires}.Ct.{self.interp_method}.nc"
+            weights_file_v2t = f"{self.output_path}/weights-{self.ires}.Cv.{self.ires}.Ct.{self.interp_method}.nc"
 
         # create regridding instances
-        reuse = os.path.exists(wgtsfile_t_to_t)
+        reuse = os.path.exists(weights_file_t2t)
         self.rg_tt = xe.Regridder(
             ds_in_t,
             grid_out,
             self.interp_method,
             periodic=True,
             reuse_weights=reuse,
-            filename=wgtsfile_t_to_t,
+            filename=weights_file_t2t,
         )
-        reuse = os.path.exists(wgtsfile_u_to_t)
+        reuse = os.path.exists(weights_file_u2t)
         self.rg_ut = xe.Regridder(
             ds_in_u,
             ds_in_t,
             self.interp_method,
             periodic=True,
             reuse_weights=reuse,
-            filename=wgtsfile_u_to_t,
+            filename=weights_file_u2t,
         )
-        reuse = os.path.exists(wgtsfile_v_to_t)
+        reuse = os.path.exists(weights_file_v2t)
         self.rg_vt = xe.Regridder(
             ds_in_v,
             ds_in_t,
             self.interp_method,
             periodic=True,
             reuse_weights=reuse,
-            filename=wgtsfile_v_to_t,
+            filename=weights_file_v2t,
         )
 
     def regrid(self, file):
-        """Regrid a single ocean file"""
-        print(f"Regridding file: {file}")
-        dtg = file[-16:-3]
+        """
+        Regrid a single ocean file.
+        :param file: Path to input file to regrid.
+        """
         ds_in = xr.open_dataset(file)
         ds_out = []
 
@@ -183,78 +198,112 @@ class RegridOcean:
                     else:
                         var2, pos = (None, "T")
 
-                # 3-dimensional data
-                is_3d = False
-                if coords.names[1] == "z_l" or coords.names[1] == "zl":
+                # 3-dimensional data?
+                if coords.names[1] == "z_l":
                     dims = ["time", "lev", "lat", "lon"]
-                    is_3d = True
+                elif coords.names[1] == "zl":
+                    # Should this be interpolated to "z_l" instead
+                    dims = ["time", "lev1", "lat", "lon"]
                 else:
                     dims = ["time", "lat", "lon"]
 
+                # scalar fields
                 if pos == "T":
-                    interp_out = self.rg_tt(ds_in[var].values)
-                    da_out = xr.DataArray(
-                        interp_out,
-                        dims=dims,
-                        attrs={
-                            "long_name": ds_in[var].long_name,
-                            "units": ds_in[var].units,
-                    )
-                    ds_out.append(da_out.to_dataset(name=var))
-
-                if pos == "U":
-                    # interplate u and v to t-point, then rotate currents/winds to
-                    # earth relative before interpolation
-
-                    # interpolate to t-points
-                    interp_u = self.rg_ut(ds_in[var].values)
-                    interp_v = self.rg_ut(ds_in[var2].values)
-
-                    # rotate to earth-relative
-                    urot = interp_u.isel(time=0) * self.ds_rot.cos_rot + interp_v.isel(time=0) * self.ds_rot.sin_rot
-                    vrot = interp_v.isel(time=0) * self.ds_rot.cos_rot - interp_u.isel(time=0) * self.ds_rot.sin_rot
-
-                    # interoplate
-                    uinterp_out = self.rg_tt(urot)
-                    vinterp_out = self.rg_tt(vrot)
-                    da_out = xr.DataArray(
-                        np.expand_dims(uinterp_out, 0),
-                        dims=dims,
-                        attrs={
+                    da_out = self.rg_tt(ds_in[var])
+                    da_out = da_out.rename(dict(zip(da_out.dims, dims)))
+                    da_out.attrs.update(
+                        {
                             "long_name": ds_in[var].long_name,
                             "units": ds_in[var].units,
                         }
                     )
                     ds_out.append(da_out.to_dataset(name=var))
-                    da_out = xr.DataArray(
-                        np.expand_dims(vinterp_out, 0),
-                        dims=dims,
+
+                # vector fields
+                if pos == "U":
+                    # interplate u and v to t-point, then rotate currents/winds to
+                    # earth relative before interpolation
+
+                    # interpolate to t-points
+                    interp_u = self.rg_ut(ds_in[var])
+                    interp_v = self.rg_ut(ds_in[var2])
+
+                    # rotate to earth-relative
+                    urot = (
+                        interp_u * self.ds_rot.cos_rot + interp_v * self.ds_rot.sin_rot
                     )
-                    da_out.attrs["long_name"] = ds_in[var2].long_name
-                    da_out.attrs["units"] = ds_in[var2].units
+                    vrot = (
+                        interp_v * self.ds_rot.cos_rot - interp_u * self.ds_rot.sin_rot
+                    )
+
+                    # interoplate
+                    uinterp_out = self.rg_tt(urot)
+                    vinterp_out = self.rg_tt(vrot)
+
+                    # construct u datarray
+                    da_out = uinterp_out
+                    da_out = da_out.rename(dict(zip(da_out.dims, dims)))
+                    da_out.attrs.update(
+                        {
+                            "long_name": ds_in[var].long_name,
+                            "units": ds_in[var].units,
+                        }
+                    )
+                    ds_out.append(da_out.to_dataset(name=var))
+
+                    # construct v datarray
+                    da_out = vinterp_out
+                    da_out = da_out.rename(dict(zip(da_out.dims, dims)))
+                    da_out.attrs.update(
+                        {
+                            "long_name": ds_in[var2].long_name,
+                            "units": ds_in[var2].units,
+                        }
+                    )
                     ds_out.append(da_out.to_dataset(name=var2))
 
+        # merge dataarrays into a dataset and set attributes
         ds_out = xr.merge(ds_out)
+        ds_out.attrs = ds_in.attrs
         ds_out = ds_out.assign_coords(lon=("lon", self.lons1d_out))
         ds_out = ds_out.assign_coords(lat=("lat", self.lats1d_out))
         ds_out = ds_out.assign_coords(lev=("lev", ds_in.z_l.values))
+        ds_out = ds_out.assign_coords(lev1=("lev1", ds_in.zl.values))
         ds_out = ds_out.assign_coords(time=("time", ds_in.time.values))
-        ds_out["lon"].attrs.update({
-            "units": "degrees_east",
-            "axis": "X",
-            "standard_name": "longitude",
-        })
-        ds_out["lat"].attrs.update({
-            "units": "degrees_north",
-            "axis": "Y",
-            "standard_name": "latiitude",
-        })
-        ds_out["lat"].attrs.update({
-            "units": "meters",
-            "axis": "Z",
-            "standard_name": "down",
-        })
+        ds_out["lon"].attrs.update(
+            {
+                "units": "degrees_east",
+                "axis": "X",
+                "standard_name": "longitude",
+            }
+        )
+        ds_out["lat"].attrs.update(
+            {
+                "units": "degrees_north",
+                "axis": "Y",
+                "standard_name": "latiitude",
+            }
+        )
+        ds_out["lev"].attrs.update(
+            {
+                "units": "meters",
+                "axis": "Z",
+                "positive": "down",
+            }
+        )
+        ds_out["lev1"].attrs.update(
+            {
+                "units": "meters",
+                "axis": "Z",
+                "positive": "down",
+            }
+        )
 
-        ds_out.to_netcdf(f"{self.output_path}/ocn_{dtg}_{self.ores}.nc")
+        # insert resolution ot output file name
+        basename = os.path.basename(file)
+        output_file = f"{self.output_path}/{basename[:-3]}_{self.ores}{basename[-3:]}"
+        ds_out.to_netcdf(output_file)
+
+        # close datasets
         ds_out.close()
         ds_in.close()
