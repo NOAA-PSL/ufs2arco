@@ -226,7 +226,7 @@ class RegridOcean:
 
                     # interpolate to t-points
                     interp_u = self.rg_ut(ds_in[var])
-                    interp_v = self.rg_ut(ds_in[var2])
+                    interp_v = self.rg_vt(ds_in[var2])
 
                     # rotate to earth-relative
                     urot = (
@@ -299,7 +299,7 @@ class RegridOcean:
             }
         )
 
-        # insert resolution ot output file name
+        # insert resolution to output file name
         basename = os.path.basename(file)
         output_file = f"{self.output_path}/{basename[:-3]}_{self.ores}{basename[-3:]}"
         ds_out.to_netcdf(output_file)

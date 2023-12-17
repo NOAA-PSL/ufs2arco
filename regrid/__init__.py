@@ -1,1 +1,1 @@
-from .regrid import Regrid
+from .regrid_ocean import RegridOcean
