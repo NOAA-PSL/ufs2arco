@@ -4,6 +4,7 @@ channels:
 dependencies:
     - python=3.11
 # Basics
+    - scipy
     - numpy
     - matplotlib
 # xarray et al
@@ -18,6 +19,11 @@ dependencies:
     - jupyter
     - ipython
     - ipykernel
+# plotting
+    - cartopy
+    - shapely
+# regrid
+    - xesmf
 # Testing
     - pytest
     - coverage

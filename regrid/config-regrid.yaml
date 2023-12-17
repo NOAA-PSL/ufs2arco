@@ -1,8 +1,0 @@
-RegridOcean:
-    input_path: .
-    output_path: .
-    rotation_file: ./ocn_rotation_mx025.nc
-    weights_file_t2t:
-    weights_file_u2t:
-    weights_file_v2t:
-        
