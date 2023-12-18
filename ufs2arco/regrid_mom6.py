@@ -24,6 +24,7 @@ class RegridMOM6:
         weights_file_t2t (str): path to t2t interpolation weights file
         weights_file_u2t (str): path to u2t interpolation weights file
         weights_file_v2t (str): path to v2t interpolation weights file
+        periodic (bool): Is the grid periodic in longitude?
 
     Example:
 
@@ -167,12 +168,13 @@ class RegridMOM6:
             )
 
         # create regridding instances
+        periodic = self.config["periodic"]
         reuse = os.path.exists(weights_file_t2t)
         self.rg_tt = xe.Regridder(
             ds_in_t,
             grid_out,
             self.interp_method,
-            periodic=True,
+            periodic=periodic,
             reuse_weights=reuse,
             filename=weights_file_t2t,
         )
@@ -182,7 +184,7 @@ class RegridMOM6:
                 ds_in_u,
                 ds_in_t,
                 self.interp_method,
-                periodic=True,
+                periodic=periodic,
                 reuse_weights=reuse,
                 filename=weights_file_u2t,
             )
@@ -191,7 +193,7 @@ class RegridMOM6:
                 ds_in_v,
                 ds_in_t,
                 self.interp_method,
-                periodic=True,
+                periodic=periodic,
                 reuse_weights=reuse,
                 filename=weights_file_v2t,
             )

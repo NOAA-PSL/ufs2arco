@@ -156,4 +156,5 @@ RegridMOM6:
     weights_file_t2t:
     weights_file_u2t:
     weights_file_v2t:
+    periodic: True
         
