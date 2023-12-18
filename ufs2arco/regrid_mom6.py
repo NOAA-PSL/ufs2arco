@@ -127,9 +127,9 @@ class RegridMOM6:
             )
 
         # create renamed datasets
-        ds_in_t = ds_in.rename({"xh": "lon", "yh": "lat"})
-        ds_in_u = ds_in.rename({"xq": "lon", "yh": "lat"})
-        ds_in_v = ds_in.rename({"xh": "lon", "yq": "lat"})
+        ds_in_t = ds_in.rename({"xh": "lon", "yh": "lat", "z_l": "lev", "zl": "lev1"})
+        ds_in_u = ds_in.rename({"xq": "lon", "yh": "lat", "z_l": "lev", "zl": "lev1"})
+        ds_in_v = ds_in.rename({"xh": "lon", "yq": "lat", "z_l": "lev", "zl": "lev1"})
 
         # open rotation dataset
         if self.rotation_file is not None:
@@ -140,8 +140,8 @@ class RegridMOM6:
         # create output dataset
         lons, lats = np.meshgrid(self.lons1d_out, self.lats1d_out)
         grid_out = xr.Dataset()
-        grid_out["lon"] = xr.DataArray(lons, dims=["nx", "ny"])
-        grid_out["lat"] = xr.DataArray(lats, dims=["nx", "ny"])
+        grid_out["lon"] = xr.DataArray(lons, dims=["lat", "lon"])
+        grid_out["lat"] = xr.DataArray(lats, dims=["lat", "lon"])
 
         # get nlon/nlat for input/output datsets
         nlon_i = ds_in.sizes["yh"]
@@ -209,42 +209,37 @@ class RegridMOM6:
         """
         ds_out = []
 
+        # MOM6 dataset specific variable and coordinate names
+        coords_xy = {"yh", "xh", "yq", "xq"}
+        variable_map = {
+            "SSU": ("SSV", "U"),
+            "SSV": (None, "skip"),
+            "uo": ("vo", "U"),
+            "vo": (None, "skip"),
+            "taux": ("tauy", "U"),
+            "tauy": (None, "skip"),
+        }
+        ds_in_t = ds_in.rename({"xh": "lon", "yh": "lat", "z_l": "lev", "zl": "lev1"})
+        ds_in_u = ds_in.rename({"xq": "lon", "yh": "lat", "z_l": "lev", "zl": "lev1"})
+        ds_in_v = ds_in.rename({"xh": "lon", "yq": "lat", "z_l": "lev", "zl": "lev1"})
+
+        # interate through variables and regrid
         for var in list(ds_in.keys()):
             coords = ds_in[var].coords.to_index()
 
             # must have lat/lon like coordinates, otherwise append copy
-            coords_xy = {"yh", "xh", "yq", "xq"}
             if len(set(coords.names) & coords_xy) < 2:
                 ds_out.append(ds_in[var])
                 continue
 
             # choose regridding type
-            variable_map = {
-                "SSU": ("SSV", "U"),
-                "SSV": (None, "skip"),
-                "uo": ("vo", "U"),
-                "vo": (None, "skip"),
-                "taux": ("tauy", "U"),
-                "tauy": (None, "skip"),
-            }
             if var in variable_map.keys():
                 var2, pos = variable_map[var]
             else:
                 var2, pos = (None, "T")
 
-            # 3-dimensional data?
-            if coords.names[1] == "z_l":
-                dims = ["time", "lev", "lat", "lon"]
-            elif coords.names[1] == "zl":
-                # Should this be interpolated to "z_l" instead
-                dims = ["time", "lev1", "lat", "lon"]
-            else:
-                dims = ["time", "lat", "lon"]
-
-            # scalar fields
-            if pos == "T":
-                da_out = self.rg_tt(ds_in[var])
-                da_out = da_out.rename(dict(zip(da_out.dims, dims)))
+            # helper to update attrs of da_out and append to ds_out
+            def update_attrs(da_out, var):
                 da_out.attrs.update(
                     {
                         "long_name": ds_in[var].long_name,
@@ -253,14 +248,17 @@ class RegridMOM6:
                 )
                 ds_out.append(da_out.to_dataset(name=var))
 
+            # scalar fields
+            if pos == "T":
+                # interpolate
+                da_out = self.rg_tt(ds_in_t[var])
+                update_attrs(da_out, var)
+
             # vector fields
             if pos == "U" and self.rotation_file is not None:
-                # interplate u and v to t-point, then rotate currents/winds to
-                # earth relative before interpolation
-
                 # interpolate to t-points
-                interp_u = self.rg_ut(ds_in[var])
-                interp_v = self.rg_vt(ds_in[var2])
+                interp_u = self.rg_ut(ds_in_u[var])
+                interp_v = self.rg_vt(ds_in_v[var2])
 
                 # rotate to earth-relative
                 urot = interp_u * self.ds_rot.cos_rot + interp_v * self.ds_rot.sin_rot
@@ -270,27 +268,9 @@ class RegridMOM6:
                 uinterp_out = self.rg_tt(urot)
                 vinterp_out = self.rg_tt(vrot)
 
-                # construct u datarray
-                da_out = uinterp_out
-                da_out = da_out.rename(dict(zip(da_out.dims, dims)))
-                da_out.attrs.update(
-                    {
-                        "long_name": ds_in[var].long_name,
-                        "units": ds_in[var].units,
-                    }
-                )
-                ds_out.append(da_out.to_dataset(name=var))
-
-                # construct v datarray
-                da_out = vinterp_out
-                da_out = da_out.rename(dict(zip(da_out.dims, dims)))
-                da_out.attrs.update(
-                    {
-                        "long_name": ds_in[var2].long_name,
-                        "units": ds_in[var2].units,
-                    }
-                )
-                ds_out.append(da_out.to_dataset(name=var2))
+                # append vars
+                update_attrs(uinterp_out, var)
+                update_attrs(vinterp_out, var2)
 
         # merge dataarrays into a dataset and set attributes
         ds_out = xr.merge(ds_out, compat="override")
