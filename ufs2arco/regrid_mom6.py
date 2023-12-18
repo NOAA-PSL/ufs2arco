@@ -212,27 +212,25 @@ class RegridMOM6:
         for var in list(ds_in.keys()):
             coords = ds_in[var].coords.to_index()
 
-            # must have 3 coordinates, otherwise append copy
-            if len(coords.names) <= 2:
+            # must have lat/lon like coordinates, otherwise append copy
+            coords_xy = {"yh", "xh", "yq", "xq"}
+            if len(set(coords.names) & coords_xy) < 2:
                 ds_out.append(ds_in[var])
                 continue
 
             # choose regridding type
-            if coords.names[0] != "time":
-                raise ValueError("First coordinate should be time")
+            variable_map = {
+                "SSU": ("SSV", "U"),
+                "SSV": (None, "skip"),
+                "uo": ("vo", "U"),
+                "vo": (None, "skip"),
+                "taux": ("tauy", "U"),
+                "tauy": (None, "skip"),
+            }
+            if var in variable_map.keys():
+                var2, pos = variable_map[var]
             else:
-                variable_map = {
-                    "SSU": ("SSV", "U"),
-                    "SSV": (None, "skip"),
-                    "uo": ("vo", "U"),
-                    "vo": (None, "skip"),
-                    "taux": ("tauy", "U"),
-                    "tauy": (None, "skip"),
-                }
-                if var in variable_map.keys():
-                    var2, pos = variable_map[var]
-                else:
-                    var2, pos = (None, "T")
+                var2, pos = (None, "T")
 
             # 3-dimensional data?
             if coords.names[1] == "z_l":
