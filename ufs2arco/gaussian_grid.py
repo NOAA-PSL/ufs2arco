@@ -9,14 +9,10 @@ def gaussian_latitudes(n):
     """Construct latitudes and latitude bounds for a Gaussian grid.
 
     Args:
-
-    * n:
-        The Gaussian grid number (half the number of latitudes in the
-        grid.
+        n (int): The Gaussian grid number (half the number of latitudes in the grid.
     Returns:
-        A 2-tuple where the first element is a length `n` array of
-        latitudes (in degrees) and the second element is an `(n, 2)`
-        array of bounds.
+        latitudes (numpy.array): length ``n`` array of latitudes in degrees
+        bounds2d (numpy.array): ``(n, 2)`` array of grid bounds
     """
     if abs(int(n)) != n:
         raise ValueError("n must be a non-negative integer")

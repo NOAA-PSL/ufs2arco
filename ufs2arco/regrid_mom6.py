@@ -1,8 +1,14 @@
 import os
 import yaml
+import warnings
 import xarray as xr
 import numpy as np
-import xesmf as xe
+try:
+    import xesmf as xe
+    _has_xesmf = True
+except ImportError:
+    _has_xesmf = False
+
 from .gaussian_grid import gaussian_latitudes
 
 
@@ -10,10 +16,9 @@ class RegridMOM6:
     """
     Regrid ocean dataset that is on a tripolar grid to a different grid (primarily Gaussian grid).
 
-    Required fields in config:
-        rotation_file (str): path to file containing rotation fields "sin_rot" and "cos_rot"
 
     Optional fields in config:
+        rotation_file (str): path to file containing rotation fields "sin_rot" and "cos_rot", required for regridding vector fields
         weights_file_t2t (str): path to t2t interpolation weights file
         weights_file_u2t (str): path to u2t interpolation weights file
         weights_file_v2t (str): path to v2t interpolation weights file
@@ -27,7 +32,7 @@ class RegridMOM6:
 
         >>> lats, lons = RegridMOM6.compute_gaussian_grid(180, 360)
 
-        Open ocean dataset using xarray or preferably MOM6Dataset.open_dataset()
+        Open ocean dataset using xarray or preferably :meth:`MOM6Dataset.open_dataset`
 
         >>> ds = xr.open_mfdataset("./input/ocn_1994_08_02_??.nc")
 
@@ -36,7 +41,9 @@ class RegridMOM6:
         >>> rg = RegridMOM6(lats, lons, ds, config_filename = "config-replay.yaml")
 
         Regrid dataset using weights computed above
+
         >>> ds = rg.regrid(ds)
+
     """
 
     def __init__(
@@ -49,13 +56,15 @@ class RegridMOM6:
     ) -> None:
         """
         Initialize the RegridMOM6 object.
-        :param lats1d_out: One-dimensional array containing latitudes of the output grid.
-        :param lons1d_out: One-dimensional array containing longitudes of the output grid.
-        :param config_filename: YAML config file specifying options for regridding.
-        :param ds_in: MOM6 xarray Dataset
-        :param interp_method: Type of interpolation, default="bilinear".
+        Args:
+            lats1d_out (array_like): One-dimensional array containing latitudes of the output grid.
+            lons1d_out (array_like): One-dimensional array containing longitudes of the output grid.
+            config_filename (str): YAML config file specifying options for regridding.
+            ds_in (xarray.Dataset): MOM6 xarray Dataset
+            interp_method (str, optional): Type of interpolation, default="bilinear".
         """
-
+if not _has_xesmf:
+    raise ImportError(f"Cannot import xesmf. Install with 'conda install -c conda-forge xesmf', and note the environment must be deactivated and reactivated")
         super(RegridMOM6, self).__init__()
         name = self.__class__.__name__
 
@@ -97,9 +106,13 @@ class RegridMOM6:
     def create_regridder(self, ds_in: xr.Dataset) -> None:
         """
         Create regridder: computes weights and creates three xesmf.Regridder instances.
-        :param ds_in: MOM6 xarray dataset needed for creating the regridder.
+        Args:
+            ds_in (xarray.Dataset): MOM6 xarray dataset needed for creating the regridder.
+
         """
-        self.rotation_file = self.config["rotation_file"]
+        self.rotation_file = self.config.get("rotation_file", None)
+        if self.rotation_file is None:
+            warnings.warn(f"RegridMOM6.__init__: Could not find 'rotation_file' in configuration yaml. Vector fields will be silently ignored.")
 
         # open input dataset
         ds_in_t = ds_in.rename({"xh": "lon", "yh": "lat"})
@@ -107,9 +120,10 @@ class RegridMOM6:
         ds_in_v = ds_in.rename({"xh": "lon", "yq": "lat"})
 
         # open rotation dataset
-        ds_rot = xr.open_dataset(self.rotation_file)
-        ds_rot = ds_rot[["cos_rot", "sin_rot"]]
-        self.ds_rot = ds_rot.rename({"xh": "lon", "yh": "lat"})
+        if self.rotation_file is not None:
+            ds_rot = xr.open_dataset(self.rotation_file)
+            ds_rot = ds_rot[["cos_rot", "sin_rot"]]
+            self.ds_rot = ds_rot.rename({"xh": "lon", "yh": "lat"})
 
         # create output dataset
         lons, lats = np.meshgrid(self.lons1d_out, self.lats1d_out)
@@ -145,30 +159,35 @@ class RegridMOM6:
             reuse_weights=reuse,
             filename=weights_file_t2t,
         )
-        reuse = os.path.exists(weights_file_u2t)
-        self.rg_ut = xe.Regridder(
-            ds_in_u,
-            ds_in_t,
-            self.interp_method,
-            periodic=True,
-            reuse_weights=reuse,
-            filename=weights_file_u2t,
-        )
-        reuse = os.path.exists(weights_file_v2t)
-        self.rg_vt = xe.Regridder(
-            ds_in_v,
-            ds_in_t,
-            self.interp_method,
-            periodic=True,
-            reuse_weights=reuse,
-            filename=weights_file_v2t,
-        )
+        if self.rotation_file is not None:
+            reuse = os.path.exists(weights_file_u2t)
+            self.rg_ut = xe.Regridder(
+                ds_in_u,
+                ds_in_t,
+                self.interp_method,
+                periodic=True,
+                reuse_weights=reuse,
+                filename=weights_file_u2t,
+            )
+        if self.rotation_file is not None:
+            reuse = os.path.exists(weights_file_v2t)
+            self.rg_vt = xe.Regridder(
+                ds_in_v,
+                ds_in_t,
+                self.interp_method,
+                periodic=True,
+                reuse_weights=reuse,
+                filename=weights_file_v2t,
+            )
 
     def regrid(self, ds_in: xr.Dataset) -> xr.Dataset:
         """
         Regrid a single ocean file.
-        :param ds_in: Input MOM6 xarray Dataset to regrid.
-        :return: Regridded MOM6 xarray Dataset
+        Args:
+            ds_in (xarray.Dataset): Input MOM6 xarray Dataset to regrid.
+            
+        Returns:
+            ds_out (xarray.Dataset): Regridded MOM6 xarray Dataset
         """
         ds_out = []
 
@@ -220,7 +239,7 @@ class RegridMOM6:
                 ds_out.append(da_out.to_dataset(name=var))
 
             # vector fields
-            if pos == "U":
+            if pos == "U" and self.rotation_file is not None:
                 # interplate u and v to t-point, then rotate currents/winds to
                 # earth relative before interpolation
 
