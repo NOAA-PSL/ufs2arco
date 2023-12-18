@@ -3,8 +3,10 @@ import yaml
 import warnings
 import xarray as xr
 import numpy as np
+
 try:
     import xesmf as xe
+
     _has_xesmf = True
 except ImportError:
     _has_xesmf = False
@@ -36,11 +38,11 @@ class RegridMOM6:
 
         >>> ds = xr.open_mfdataset("./input/ocn_1994_08_02_??.nc")
 
-        Construct RegridMOM6 object, specifying output grid lats & lons and a config file
+        Construct RegridMOM6 object, specifying output grid lats & lons, dataset and config file
 
         >>> rg = RegridMOM6(lats, lons, ds, config_filename = "config-replay.yaml")
 
-        Regrid dataset using weights computed above
+        Regrid dataset
 
         >>> ds = rg.regrid(ds)
 
@@ -63,8 +65,12 @@ class RegridMOM6:
             ds_in (xarray.Dataset): MOM6 xarray Dataset
             interp_method (str, optional): Type of interpolation, default="bilinear".
         """
-if not _has_xesmf:
-    raise ImportError(f"Cannot import xesmf. Install with 'conda install -c conda-forge xesmf', and note the environment must be deactivated and reactivated")
+        if not _has_xesmf:
+            raise ImportError(
+                f"Cannot import xesmf. Install with 'conda install -c conda-forge xesmf',"
+                f" and note the environment must be deactivated and reactivated"
+            )
+
         super(RegridMOM6, self).__init__()
         name = self.__class__.__name__
 
@@ -78,7 +84,7 @@ if not _has_xesmf:
         self.interp_method = interp_method
 
         # create regridder
-        self.create_regridder(ds_in)
+        self._create_regridder(ds_in)
 
     @staticmethod
     def compute_gaussian_grid(nlat, nlon) -> (np.array, np.array):
@@ -95,7 +101,9 @@ if not _has_xesmf:
         return latitudes, longitudes
 
     @staticmethod
-    def read_grid(file, lats_name="grid_yt", lons_name="grid_xt") -> (np.array, np.array):
+    def read_grid(
+        file, lats_name="grid_yt", lons_name="grid_xt"
+    ) -> (np.array, np.array):
         """Read grid latitudes and longitudes from a netcdf file"""
         ds = xr.open_dataset(file)
         latitudes = ds[lats_name].values
@@ -103,7 +111,7 @@ if not _has_xesmf:
         ds.close()
         return latitudes, longitudes
 
-    def create_regridder(self, ds_in: xr.Dataset) -> None:
+    def _create_regridder(self, ds_in: xr.Dataset) -> None:
         """
         Create regridder: computes weights and creates three xesmf.Regridder instances.
         Args:
@@ -112,9 +120,12 @@ if not _has_xesmf:
         """
         self.rotation_file = self.config.get("rotation_file", None)
         if self.rotation_file is None:
-            warnings.warn(f"RegridMOM6.__init__: Could not find 'rotation_file' in configuration yaml. Vector fields will be silently ignored.")
+            warnings.warn(
+                f"RegridMOM6.__init__: Could not find 'rotation_file' in configuration yaml. "
+                f"Vector fields will be silently ignored."
+            )
 
-        # open input dataset
+        # create renamed datasets
         ds_in_t = ds_in.rename({"xh": "lon", "yh": "lat"})
         ds_in_u = ds_in.rename({"xq": "lon", "yh": "lat"})
         ds_in_v = ds_in.rename({"xh": "lon", "yq": "lat"})
@@ -145,9 +156,15 @@ if not _has_xesmf:
             weights_file_u2t = self.config["weights_file_u2t"]
             weights_file_v2t = self.config["weights_file_v2t"]
         if weights_file_t2t is None:
-            weights_file_t2t = f"weights-{self.ires}.Ct.{self.ores}.Ct.{self.interp_method}.nc"
-            weights_file_u2t = f"weights-{self.ires}.Cu.{self.ires}.Ct.{self.interp_method}.nc"
-            weights_file_v2t = f"weights-{self.ires}.Cv.{self.ires}.Ct.{self.interp_method}.nc"
+            weights_file_t2t = (
+                f"weights-{self.ires}.Ct.{self.ores}.Ct.{self.interp_method}.nc"
+            )
+            weights_file_u2t = (
+                f"weights-{self.ires}.Cu.{self.ires}.Ct.{self.interp_method}.nc"
+            )
+            weights_file_v2t = (
+                f"weights-{self.ires}.Cv.{self.ires}.Ct.{self.interp_method}.nc"
+            )
 
         # create regridding instances
         reuse = os.path.exists(weights_file_t2t)
@@ -169,7 +186,6 @@ if not _has_xesmf:
                 reuse_weights=reuse,
                 filename=weights_file_u2t,
             )
-        if self.rotation_file is not None:
             reuse = os.path.exists(weights_file_v2t)
             self.rg_vt = xe.Regridder(
                 ds_in_v,
@@ -182,10 +198,10 @@ if not _has_xesmf:
 
     def regrid(self, ds_in: xr.Dataset) -> xr.Dataset:
         """
-        Regrid a single ocean file.
+        Regrid a MOM6 xarray dataset.
         Args:
             ds_in (xarray.Dataset): Input MOM6 xarray Dataset to regrid.
-            
+
         Returns:
             ds_out (xarray.Dataset): Regridded MOM6 xarray Dataset
         """
@@ -217,7 +233,6 @@ if not _has_xesmf:
                     var2, pos = (None, "T")
 
             # 3-dimensional data?
-            assert(len(coords.names) > 2)
             if coords.names[1] == "z_l":
                 dims = ["time", "lev", "lat", "lon"]
             elif coords.names[1] == "zl":
@@ -248,12 +263,8 @@ if not _has_xesmf:
                 interp_v = self.rg_vt(ds_in[var2])
 
                 # rotate to earth-relative
-                urot = (
-                    interp_u * self.ds_rot.cos_rot + interp_v * self.ds_rot.sin_rot
-                )
-                vrot = (
-                    interp_v * self.ds_rot.cos_rot - interp_u * self.ds_rot.sin_rot
-                )
+                urot = interp_u * self.ds_rot.cos_rot + interp_v * self.ds_rot.sin_rot
+                vrot = interp_v * self.ds_rot.cos_rot - interp_u * self.ds_rot.sin_rot
 
                 # interoplate
                 uinterp_out = self.rg_tt(urot)
