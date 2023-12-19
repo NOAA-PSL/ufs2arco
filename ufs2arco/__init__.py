@@ -4,3 +4,4 @@ from .cice6dataset import CICE6Dataset
 from .fv3dataset import FV3Dataset
 from .mom6dataset import MOM6Dataset
 from .regrid_mom6 import RegridMOM6
+from .regrid_cice6 import RegridCICE6
