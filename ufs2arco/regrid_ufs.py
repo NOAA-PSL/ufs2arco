@@ -80,17 +80,6 @@ class RegridUFS(ABC):
             ds_in (xarray.Dataset): xarray dataset needed for creating the regridder.
         """
 
-    @abstractmethod
-    def regrid(self, ds_in: xr.Dataset) -> xr.Dataset:
-        """
-        Regrid an xarray dataset.
-        Args:
-            ds_in (xarray.Dataset): Input xarray Dataset to regrid.
-
-        Returns:
-            ds_out (xarray.Dataset): Regridded xarray Dataset
-        """
-
     @staticmethod
     def compute_gaussian_grid(nlat, nlon) -> (np.array, np.array):
         """Compute gaussian grid latitudes and longitudes"""
@@ -115,3 +104,103 @@ class RegridUFS(ABC):
         longitudes = ds[lons_name].values
         ds.close()
         return latitudes, longitudes
+
+    def regrid_tripolar(
+        self,
+        ds_in: xr.Dataset,
+        ds_rot: xr.Dataset,
+        rg_tt: xe.Regridder,
+        rg_ut: xe.Regridder,
+        rg_vt: xe.Regridder,
+        coords_xy: set,
+        variable_map: dict,
+    ) -> xr.Dataset:
+        """
+        Regrid an xarray dataset.
+        Args:
+            ds_in (xarray.Dataset): Input xarray Dataset to regrid.
+            ds_rot (xarray.Dataset): Dataset containing rotation angles
+            rg_tt (xesmf.Regridder): Regridder object mapping t-points to output grid
+            rg_ut (xesmf.Regridder): Regridder object mapping u-points to t-points
+            rg_vt (xesmf.Regridder): Regridder object mapping v-points to t-points
+            coords_xy (set): A list of spatial coordinate names used in ds_in
+            variable_map (dict): A dictionary mapping vector field names to a set
+                    containing two elements e.g. sea-surface velocity
+                        "SSU": ("SSV", "U")
+                        "SSV": (None, "skip)
+        Returns:
+            ds_out (xarray.Dataset): Regridded xarray Dataset
+        """
+        ds_out = []
+
+        # interate through variables and regrid
+        for var in list(ds_in.keys()):
+            coords = ds_in[var].coords.to_index()
+
+            # must have lat/lon like coordinates, otherwise append copy
+            if len(set(coords.names) & coords_xy) < 2:
+                ds_out.append(ds_in[var])
+                continue
+
+            # choose regridding type
+            if var in variable_map.keys():
+                var2, pos = variable_map[var]
+            else:
+                var2, pos = (None, "T")
+
+            # helper to update attrs of da_out and append to ds_out
+            def update_attrs(da_out, var):
+                da_out.attrs.update(
+                    {
+                        "long_name": ds_in[var].long_name,
+                        "units": ds_in[var].units,
+                    }
+                )
+                ds_out.append(da_out.to_dataset(name=var))
+
+            # scalar fields
+            if pos == "T":
+                # interpolate
+                da_out = rg_tt(ds_in[var])
+                update_attrs(da_out, var)
+
+            # vector fields
+            if pos == "U" and ds_rot is not None:
+                # interpolate to t-points
+                interp_u = rg_ut(ds_in[var])
+                interp_v = rg_vt(ds_in[var2])
+
+                # rotate to earth-relative
+                urot = interp_u * ds_rot.cos_rot + interp_v * ds_rot.sin_rot
+                vrot = interp_v * ds_rot.cos_rot - interp_u * ds_rot.sin_rot
+
+                # interoplate
+                uinterp_out = rg_tt(urot)
+                vinterp_out = rg_tt(vrot)
+
+                # append vars
+                update_attrs(uinterp_out, var)
+                update_attrs(vinterp_out, var2)
+
+        # merge dataarrays into a dataset and set attributes
+        ds_out = xr.merge(ds_out, compat="override")
+        ds_out.attrs = ds_in.attrs
+        ds_out = ds_out.assign_coords(lon=("lon", self.lons1d_out))
+        ds_out = ds_out.assign_coords(lat=("lat", self.lats1d_out))
+        ds_out = ds_out.assign_coords(time=("time", ds_in.time.values))
+        ds_out["lon"].attrs.update(
+            {
+                "units": "degrees_east",
+                "axis": "X",
+                "standard_name": "longitude",
+            }
+        )
+        ds_out["lat"].attrs.update(
+            {
+                "units": "degrees_north",
+                "axis": "Y",
+                "standard_name": "latiitude",
+            }
+        )
+
+        return ds_out

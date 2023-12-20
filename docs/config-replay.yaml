@@ -159,6 +159,7 @@ RegridMOM6:
     periodic: True
 
 RegridCICE6:
+    rotation_file:
     weights_file_t2t:
     weights_file_u2t:
     periodic: True
