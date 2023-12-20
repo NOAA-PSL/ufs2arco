@@ -18,6 +18,13 @@ class RegridUFS(ABC):
     """
     Regrid a UFS dataset
 
+        Args:
+            lats1d_out (array_like): One-dimensional array containing latitudes of the output grid.
+            lons1d_out (array_like): One-dimensional array containing longitudes of the output grid.
+            config_filename (str): YAML config file specifying options for regridding.
+            ds_in (xarray.Dataset): CICE6 xarray Dataset
+            interp_method (str, optional): Type of interpolation, default="bilinear".
+            
     Example:
 
         Construct the output grid. The following static methods are provided in this class
@@ -49,13 +56,7 @@ class RegridUFS(ABC):
         interp_method: str = "bilinear",
     ) -> None:
         """
-        Initialize the RegridCICE6 object.
-        Args:
-            lats1d_out (array_like): One-dimensional array containing latitudes of the output grid.
-            lons1d_out (array_like): One-dimensional array containing longitudes of the output grid.
-            config_filename (str): YAML config file specifying options for regridding.
-            ds_in (xarray.Dataset): CICE6 xarray Dataset
-            interp_method (str, optional): Type of interpolation, default="bilinear".
+        Initialize the RegridUFS object.
         """
         super(RegridUFS, self).__init__()
         name = self.__class__.__name__
