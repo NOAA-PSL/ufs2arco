@@ -7,11 +7,9 @@ from .gaussian_grid import gaussian_latitudes
 
 try:
     import xesmf as xe
+    _has_xesmf = True
 except ImportError:
-    raise ImportError(
-        f"Cannot import xesmf. Install with 'conda install -c conda-forge xesmf',"
-        f" and note the environment must be deactivated and reactivated"
-    )
+    _has_xesmf = False
 
 
 class RegridUFS(ABC):
@@ -58,6 +56,13 @@ class RegridUFS(ABC):
         """
         Initialize the RegridUFS object.
         """
+        
+        if not _has_xesmf:
+            raise ImportError(
+                f"Cannot import xesmf. Install with 'conda install -c conda-forge xesmf',"
+                f" and note the environment must be deactivated and reactivated"
+            )
+        
         super(RegridUFS, self).__init__()
         name = self.__class__.__name__
 
