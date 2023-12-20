@@ -18,13 +18,13 @@ class RegridUFS(ABC):
     """
     Regrid a UFS dataset
 
-        Args:
-            lats1d_out (array_like): One-dimensional array containing latitudes of the output grid.
-            lons1d_out (array_like): One-dimensional array containing longitudes of the output grid.
-            config_filename (str): YAML config file specifying options for regridding.
-            ds_in (xarray.Dataset): CICE6 xarray Dataset
-            interp_method (str, optional): Type of interpolation, default="bilinear".
-            
+    Args:
+        lats1d_out (array_like): One-dimensional array containing latitudes of the output grid.
+        lons1d_out (array_like): One-dimensional array containing longitudes of the output grid.
+        config_filename (str): YAML config file specifying options for regridding.
+        ds_in (xarray.Dataset): CICE6 xarray Dataset
+        interp_method (str, optional): Type of interpolation, default="bilinear".
+
     Example:
 
         Construct the output grid. The following static methods are provided in this class
@@ -118,6 +118,7 @@ class RegridUFS(ABC):
     ) -> xr.Dataset:
         """
         Regrid an xarray dataset.
+
         Args:
             ds_in (xarray.Dataset): Input xarray Dataset to regrid.
             ds_rot (xarray.Dataset): Dataset containing rotation angles
@@ -125,10 +126,10 @@ class RegridUFS(ABC):
             rg_ut (xesmf.Regridder): Regridder object mapping u-points to t-points
             rg_vt (xesmf.Regridder): Regridder object mapping v-points to t-points
             coords_xy (set): A list of spatial coordinate names used in ds_in
-            variable_map (dict): A dictionary mapping vector field names to a set
-                    containing two elements e.g. sea-surface velocity
-                        "SSU": ("SSV", "U")
-                        "SSV": (None, "skip)
+            variable_map (dict): A dictionary mapping vector field names to a set e.g. sea-surface velocity
+                       - "SSU": ("SSV", "U"),
+                       - "SSV": (None, "skip)
+
         Returns:
             ds_out (xarray.Dataset): Regridded xarray Dataset
         """
