@@ -4,7 +4,7 @@ import warnings
 import xarray as xr
 import numpy as np
 
-from .regrid_ufs import RegridUFS
+from .ufsregridder import UFSRegridder
 
 try:
     import xesmf as xe
@@ -12,7 +12,7 @@ except ImportError:
     pass
 
 
-class RegridCICE6(RegridUFS):
+class CICE6Regridder(UFSRegridder):
     """
     Regrid cice dataset that is on a tripolar grid to a different grid (primarily Gaussian grid).
 
@@ -24,7 +24,10 @@ class RegridCICE6(RegridUFS):
         periodic (bool): Is the grid periodic in longitude?
     """
 
-    __doc__ = __doc__ + RegridUFS.__doc__
+    __doc__ = __doc__ + UFSRegridder.__doc__
+
+    rg_tt = None
+    rg_ut = None
 
     def __init__(
         self,
@@ -34,7 +37,7 @@ class RegridCICE6(RegridUFS):
         config_filename: str,
         interp_method: str = "bilinear",
     ) -> None:
-        super(RegridCICE6, self).__init__(
+        super(CICE6Regridder, self).__init__(
             lats1d_out, lons1d_out, ds_in, config_filename, interp_method
         )
 
@@ -54,7 +57,7 @@ class RegridCICE6(RegridUFS):
             self.ds_rot["sin_rot"] = np.sin(ds_in["ANGLE"])
         else:
             warnings.warn(
-                f"RegridMOM6.__init__: Could not find 'rotation_file' in configuration yaml. "
+                f"CICE6Regridder._create_regridder: Could not find 'rotation_file' in configuration yaml. "
                 f"Vector fields will be silently ignored."
             )
 
@@ -81,37 +84,33 @@ class RegridCICE6(RegridUFS):
         self.ores = f"{nlon_o}x{nlat_o}"
 
         # paths to interpolation weights files
-        if "weights_file_t2t" in self.config.keys():
-            weights_file_t2t = self.config["weights_file_t2t"]
-            weights_file_u2t = self.config["weights_file_u2t"]
-        if weights_file_t2t is None:
-            weights_file_t2t = (
-                f"weights-{self.ires}.Ct.{self.ores}.Ct.{self.interp_method}.nc"
-            )
-            weights_file_u2t = (
-                f"weights-{self.ires}.Cu.{self.ires}.Ct.{self.interp_method}.nc"
-            )
+        wfiles = dict()
+        for key in ["weights_file_t2t", "weights_file_u2t"]:
+            vin = key[-3]
+            default = f"weights-cice6-{self.ires}.C{vin}.{self.ores}.Ct.{self.interp_method}.nc"
+            path = self.config.get(key, None)
+            wfiles[key] = path if path is not None else default
 
         # create regridding instances
         periodic = self.config["periodic"]
-        reuse = os.path.exists(weights_file_t2t)
+        reuse = os.path.exists(wfiles["weights_file_t2t"])
         self.rg_tt = xe.Regridder(
             ds_in_t,
             grid_out,
             self.interp_method,
             periodic=periodic,
             reuse_weights=reuse,
-            filename=weights_file_t2t,
+            filename=wfiles["weights_file_t2t"],
         )
         if self.ds_rot is not None:
-            reuse = os.path.exists(weights_file_u2t)
+            reuse = os.path.exists(wfiles["weights_file_u2t"])
             self.rg_ut = xe.Regridder(
                 ds_in_u,
                 ds_in_t,
                 self.interp_method,
                 periodic=periodic,
                 reuse_weights=reuse,
-                filename=weights_file_u2t,
+                filename=wfiles["weights_file_u2t"],
             )
 
     def regrid(self, ds_in: xr.Dataset) -> xr.Dataset:
@@ -140,7 +139,7 @@ class RegridCICE6(RegridUFS):
             "strocny_h": (None, "skip"),
         }
 
-        return super(RegridCICE6, self).regrid_tripolar(
+        return super(CICE6Regridder, self).regrid_tripolar(
             ds_in,
             self.ds_rot,
             self.rg_tt,

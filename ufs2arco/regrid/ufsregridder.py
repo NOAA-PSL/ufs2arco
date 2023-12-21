@@ -12,9 +12,8 @@ except ImportError:
     _has_xesmf = False
 
 
-class RegridUFS(ABC):
+class UFSRegridder(ABC):
     """
-    Regrid a UFS dataset
 
     Args:
         lats1d_out (array_like): One-dimensional array containing latitudes of the output grid.
@@ -25,20 +24,21 @@ class RegridUFS(ABC):
 
     Example:
 
+        This example uses the :class:`CICE6Regridder`, but similar capabilities exist for :class:`MOM6Regridder`.
         Construct the output grid. The following static methods are provided in this class
             - compute_gaussian_grid
             - compute_latlon_grid
             - read_grid
 
-        >>> lats, lons = RegridUFS.compute_gaussian_grid(180, 360)
+        >>> lats, lons = CICE6Regridder.compute_gaussian_grid(180, 360)
 
-        Open cice dataset using xarray or preferably :meth:`CICE6Dataset.open_dataset`
+        Open dataset using xarray or preferably :meth:`CICE6Dataset.open_dataset`
 
         >>> ds = xr.open_mfdataset("./input/{ocn_,iceh_}*.nc")
 
-        Construct RegridUFS object, specifying output grid lats & lons, dataset and config file
+        Construct :class:`CICE6Regridder` object, specifying output grid lats & lons, dataset and config file
 
-        >>> rg = RegridUFS(lats, lons, ds, config_filename = "config-replay.yaml")
+        >>> rg = CICE6Regridder(lats, lons, ds, config_filename = "config-replay.yaml")
 
         Regrid dataset
 
@@ -54,16 +54,16 @@ class RegridUFS(ABC):
         interp_method: str = "bilinear",
     ) -> None:
         """
-        Initialize the RegridUFS object.
+        Initialize the UFSRegridder object.
         """
-        
+
         if not _has_xesmf:
             raise ImportError(
                 f"Cannot import xesmf. Install with 'conda install -c conda-forge xesmf',"
                 f" and note the environment must be deactivated and reactivated"
             )
-        
-        super(RegridUFS, self).__init__()
+
+        super(UFSRegridder, self).__init__()
         name = self.__class__.__name__
 
         # Load configuration from YAML file
@@ -155,21 +155,12 @@ class RegridUFS(ABC):
             else:
                 var2, pos = (None, "T")
 
-            # helper to update attrs of da_out and append to ds_out
-            def update_attrs(da_out, var):
-                da_out.attrs.update(
-                    {
-                        "long_name": ds_in[var].long_name,
-                        "units": ds_in[var].units,
-                    }
-                )
-                ds_out.append(da_out.to_dataset(name=var))
 
             # scalar fields
             if pos == "T":
                 # interpolate
                 da_out = rg_tt(ds_in[var])
-                update_attrs(da_out, var)
+                ds_out.append(_xda_to_xds(da_out, var, ds_in[var].attrs))
 
             # vector fields
             if pos == "U" and ds_rot is not None:
@@ -186,8 +177,8 @@ class RegridUFS(ABC):
                 vinterp_out = rg_tt(vrot)
 
                 # append vars
-                update_attrs(uinterp_out, var)
-                update_attrs(vinterp_out, var2)
+                ds_out.append(_xda_to_xds(uinterp_out, var, ds_in[var].attrs))
+                ds_out.append(_xda_to_xds(vinterp_out, var2, ds_in[var2].attrs))
 
         # merge dataarrays into a dataset and set attributes
         ds_out = xr.merge(ds_out, compat="override")
@@ -211,3 +202,14 @@ class RegridUFS(ABC):
         )
 
         return ds_out
+
+def _xda_to_xds(da_out, var, attrs):
+    """helper to update attrs and prepare for ds_out"""
+    xds = da_out.to_dataset(name=var)
+    xds[var].attrs.update(
+        {
+            "long_name": attrs["long_name"],
+            "units": attrs["units"],
+        }
+    )
+    return xds
