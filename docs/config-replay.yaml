@@ -149,7 +149,7 @@ CICE6Dataset:
         - Tsfc
         - aice
 
-RegridMOM6:
+MOM6Regridder:
     rotation_file:
     weights_file_t2t:
     weights_file_u2t:

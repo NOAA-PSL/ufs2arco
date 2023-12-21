@@ -4,7 +4,7 @@ import warnings
 import xarray as xr
 import numpy as np
 
-from .regrid_ufs import RegridUFS
+from .ufsregridder import UFSRegridder
 
 try:
     import xesmf as xe
@@ -12,24 +12,22 @@ except ImportError:
     pass
 
 
-class RegridMOM6(RegridUFS):
+class CICE6Regridder(UFSRegridder):
     """
-    Regrid ocean dataset that is on a tripolar grid to a different grid (primarily Gaussian grid).
+    Regrid cice dataset that is on a tripolar grid to a different grid (primarily Gaussian grid).
 
 
     Optional fields in config:
         rotation_file (str): path to file containing rotation fields "sin_rot" and "cos_rot", required for regridding vector fields
         weights_file_t2t (str): path to t2t interpolation weights file
         weights_file_u2t (str): path to u2t interpolation weights file
-        weights_file_v2t (str): path to v2t interpolation weights file
         periodic (bool): Is the grid periodic in longitude?
     """
 
+    __doc__ = __doc__ + UFSRegridder.__doc__
+
     rg_tt = None
     rg_ut = None
-    rg_vt = None
-
-    __doc__ = __doc__ + RegridUFS.__doc__
 
     def __init__(
         self,
@@ -39,7 +37,7 @@ class RegridMOM6(RegridUFS):
         config_filename: str,
         interp_method: str = "bilinear",
     ) -> None:
-        super(RegridMOM6, self).__init__(
+        super(CICE6Regridder, self).__init__(
             lats1d_out, lons1d_out, ds_in, config_filename, interp_method
         )
 
@@ -50,22 +48,26 @@ class RegridMOM6(RegridUFS):
         self.ds_rot = None
         if self.rotation_file is not None:
             ds_rot = xr.open_dataset(self.rotation_file)
-            ds_rot = ds_rot[["cos_rot", "sin_rot"]]
-            self.ds_rot = ds_rot.rename({"xh": "lon", "yh": "lat"})
-        elif "cos_rot" in ds_in and "sin_rot" in ds_in:
             self.ds_rot = xr.Dataset()
-            self.ds_rot["cos_rot"] = ds_in["cos_rot"]
-            self.ds_rot["sin_rot"] = ds_in["sin_rot"]
+            self.ds_rot["cos_rot"] = np.cos(ds_rot["ANGLE"])
+            self.ds_rot["sin_rot"] = np.sin(ds_rot["ANGLE"])
+        elif "ANGLE" in ds_in:
+            self.ds_rot = xr.Dataset()
+            self.ds_rot["cos_rot"] = np.cos(ds_in["ANGLE"])
+            self.ds_rot["sin_rot"] = np.sin(ds_in["ANGLE"])
         else:
             warnings.warn(
-                f"RegridMOM6._create_regridder: Could not find 'rotation_file' in configuration yaml. "
+                f"CICE6Regridder._create_regridder: Could not find 'rotation_file' in configuration yaml. "
                 f"Vector fields will be silently ignored."
             )
 
-        # create renamed datasets
-        ds_in_t = ds_in.rename({"xh": "lon", "yh": "lat"})
-        ds_in_u = ds_in.rename({"xq": "lon", "yh": "lat"})
-        ds_in_v = ds_in.rename({"xh": "lon", "yq": "lat"})
+        # create input dataset with t-/u- coordinates
+        ds_in_t = xr.Dataset()
+        ds_in_t["lon"] = ds_in["TLON"]
+        ds_in_t["lat"] = ds_in["TLAT"]
+        ds_in_u = xr.Dataset()
+        ds_in_u["lon"] = ds_in["ULON"]
+        ds_in_u["lat"] = ds_in["ULAT"]
 
         # create output dataset
         lons, lats = np.meshgrid(self.lons1d_out, self.lats1d_out)
@@ -74,8 +76,8 @@ class RegridMOM6(RegridUFS):
         grid_out["lat"] = xr.DataArray(lats, dims=["lat", "lon"])
 
         # get nlon/nlat for input/output datsets
-        nlon_i = ds_in.sizes["yh"]
-        nlat_i = ds_in.sizes["xh"]
+        nlon_i = ds_in.sizes["ni"]
+        nlat_i = ds_in.sizes["nj"]
         nlon_o = len(self.lons1d_out)
         nlat_o = len(self.lats1d_out)
         self.ires = f"{nlon_i}x{nlat_i}"
@@ -83,9 +85,9 @@ class RegridMOM6(RegridUFS):
 
         # paths to interpolation weights files
         wfiles = dict()
-        for key in ["weights_file_t2t", "weights_file_u2t", "weights_file_v2t"]:
+        for key in ["weights_file_t2t", "weights_file_u2t"]:
             vin = key[-3]
-            default = f"weights-mom6-{self.ires}.C{vin}.{self.ores}.Ct.{self.interp_method}.nc"
+            default = f"weights-cice6-{self.ires}.C{vin}.{self.ores}.Ct.{self.interp_method}.nc"
             path = self.config.get(key, None)
             wfiles[key] = path if path is not None else default
 
@@ -110,35 +112,39 @@ class RegridMOM6(RegridUFS):
                 reuse_weights=reuse,
                 filename=wfiles["weights_file_u2t"],
             )
-            reuse = os.path.exists(wfiles["weights_file_v2t"])
-            self.rg_vt = xe.Regridder(
-                ds_in_v,
-                ds_in_t,
-                self.interp_method,
-                periodic=periodic,
-                reuse_weights=reuse,
-                filename=wfiles["weights_file_v2t"],
-            )
 
     def regrid(self, ds_in: xr.Dataset) -> xr.Dataset:
+        ds_out = []
 
-        # define MOM6 dataset specific coordinates and vector fields map
-        coords_xy = {"yh", "xh", "yq", "xq"}
+        # CICE6 dataset specific variable and coordinate names
+        coords_xy = {"nj", "ni"}
         variable_map = {
-            "SSU": ("SSV", "U"),
-            "SSV": (None, "skip"),
-            "uo": ("vo", "U"),
-            "vo": (None, "skip"),
-            "taux": ("tauy", "U"),
-            "tauy": (None, "skip"),
+            "uvel": ("vvel", "U"),
+            "vvel": (None, "skip"),
+            "strairx": ("strairy", "U"),
+            "strairy": (None, "skip"),
+            "strocnx": ("strocny", "U"),
+            "strocny": (None, "skip"),
+            "uvel_d": ("vvel_d", "U"),
+            "vvel_d": (None, "skip"),
+            "strairx_d": ("strairy_d", "U"),
+            "strairy_d": (None, "skip"),
+            "strocnx_d": ("strocny_d", "U"),
+            "strocny_d": (None, "skip"),
+            "uvel_h": ("vvel_h", "U"),
+            "vvel_h": (None, "skip"),
+            "strairx_h": ("strairy_h", "U"),
+            "strairy_h": (None, "skip"),
+            "strocnx_h": ("strocny_h", "U"),
+            "strocny_h": (None, "skip"),
         }
 
-        return super(RegridMOM6, self).regrid_tripolar(
+        return super(CICE6Regridder, self).regrid_tripolar(
             ds_in,
             self.ds_rot,
             self.rg_tt,
             self.rg_ut,
-            self.rg_vt,
+            self.rg_ut,
             coords_xy,
             variable_map,
         )

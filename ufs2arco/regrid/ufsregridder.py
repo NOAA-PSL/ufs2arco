@@ -12,7 +12,7 @@ except ImportError:
     _has_xesmf = False
 
 
-class RegridUFS(ABC):
+class UFSRegridder(ABC):
     """
 
     Args:
@@ -29,15 +29,15 @@ class RegridUFS(ABC):
             - compute_latlon_grid
             - read_grid
 
-        >>> lats, lons = RegridUFS.compute_gaussian_grid(180, 360)
+        >>> lats, lons = UFSRegridder.compute_gaussian_grid(180, 360)
 
         Open cice dataset using xarray or preferably :meth:`CICE6Dataset.open_dataset`
 
         >>> ds = xr.open_mfdataset("./input/{ocn_,iceh_}*.nc")
 
-        Construct RegridUFS object, specifying output grid lats & lons, dataset and config file
+        Construct UFSRegridder object, specifying output grid lats & lons, dataset and config file
 
-        >>> rg = RegridUFS(lats, lons, ds, config_filename = "config-replay.yaml")
+        >>> rg = UFSRegridder(lats, lons, ds, config_filename = "config-replay.yaml")
 
         Regrid dataset
 
@@ -53,7 +53,7 @@ class RegridUFS(ABC):
         interp_method: str = "bilinear",
     ) -> None:
         """
-        Initialize the RegridUFS object.
+        Initialize the UFSRegridder object.
         """
 
         if not _has_xesmf:
@@ -62,7 +62,7 @@ class RegridUFS(ABC):
                 f" and note the environment must be deactivated and reactivated"
             )
 
-        super(RegridUFS, self).__init__()
+        super(UFSRegridder, self).__init__()
         name = self.__class__.__name__
 
         # Load configuration from YAML file

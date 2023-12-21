@@ -1,2 +1,2 @@
-from .regrid_mom6 import RegridMOM6
-from .regrid_cice6 import RegridCICE6
+from .mom6regridder import MOM6Regridder
+from .cice6regridder import CICE6Regridder
