@@ -26,6 +26,9 @@ class RegridCICE6(RegridUFS):
 
     __doc__ = __doc__ + RegridUFS.__doc__
 
+    rg_tt = None
+    rg_ut = None
+
     def __init__(
         self,
         lats1d_out: np.array,

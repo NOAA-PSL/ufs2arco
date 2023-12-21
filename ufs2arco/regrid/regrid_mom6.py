@@ -25,6 +25,10 @@ class RegridMOM6(RegridUFS):
         periodic (bool): Is the grid periodic in longitude?
     """
 
+    rg_tt = None
+    rg_ut = None
+    rg_vt = None
+
     __doc__ = __doc__ + RegridUFS.__doc__
 
     def __init__(
