@@ -84,7 +84,7 @@ class RegridCICE6(RegridUFS):
         wfiles = dict()
         for key in ["weights_file_t2t", "weights_file_u2t"]:
             vin = key[-3]
-            default = f"weights-{self.ires}.C{vin}.{self.ores}.Ct.{self.interp_method}.nc"
+            default = f"weights-cice6-{self.ires}.C{vin}.{self.ores}.Ct.{self.interp_method}.nc"
             path = self.config.get(key, None)
             wfiles[key] = path if path is not None else default
 
