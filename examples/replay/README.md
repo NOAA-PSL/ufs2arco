@@ -5,6 +5,14 @@
 See [this notebook](read_replay_gcs.ipynb) for an example of reading the
 resulting zarr store.
 
+## Where to run
+
+I ran this on GCP, on the replay-mover cluster that can be found by those with
+access to the cg-ml4da project.
+It has 15 c2-standard-60 nodes in the "compute" (i.e., on demand) partition,
+with some in the spot partition for debugging.
+It also has 1Tb of Lustre storage to for the intermediate storage.
+
 ## 1 Degree Data
 
 [move_one_degree.py](move_one_degree.py)
@@ -12,6 +20,12 @@ moves the UFS output from the Replay runs at 1 degree from
 [here](https://noaa-ufs-gefsv13replay-pds.s3.amazonaws.com/index.html#1deg/)
 to zarr on
 [this GCS bucket](https://console.cloud.google.com/storage/browser/noaa-ufs-gefsv13replay).
+
+I ran the python script from the controller node:
+
+```python
+python move_one_degree.py
+```
 
 Currently only the FV3 data is being moved, and it can be found
 [in this zarr store](https://console.cloud.google.com/storage/browser/noaa-ufs-gefsv13replay/ufs-hr1/1.00-degree/03h-freq/zarr/fv3.zarr).

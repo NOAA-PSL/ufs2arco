@@ -39,7 +39,12 @@ class ReplayMover1Degree():
 
     @property
     def xtime(self):
-        """These are the time stamps of the resulting dataset, assuming we are grabbing fhr00 and fhr03"""
+        """These are the time stamps of the resulting dataset, assuming we are grabbing fhr00 and fhr03.
+
+        This was created by processing a few DA cycles with the desired forecast hours, and figuring out
+        operations were needed to map from a list of all DA cycles to the resulting ``"time"``
+        array in the final dataset.
+        """
         time = pd.date_range(start="1994-01-01", end="1999-06-13T09:00:00", freq="3h")
         iau_time = time - timedelta(hours=6)
         return xr.DataArray(iau_time, coords={"time": iau_time}, dims="time", attrs={"long_name": "time", "axis": "T"})
