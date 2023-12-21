@@ -120,8 +120,8 @@ CICE6Dataset:
         VGRDi       : 7
         VGRDa       : 5
         VGRDs       : 5
-        lat         : 30
-        lon         : 30
+        nj          : 30
+        ni          : 30
 
     coords:
         - TLON
@@ -154,10 +154,4 @@ RegridMOM6:
     weights_file_t2t:
     weights_file_u2t:
     weights_file_v2t:
-    periodic: True
-
-RegridCICE6:
-    rotation_file:
-    weights_file_t2t:
-    weights_file_u2t:
     periodic: True
