@@ -102,15 +102,16 @@ class RegridCICE6(RegridUFS):
             reuse_weights=reuse,
             filename=weights_file_t2t,
         )
-        reuse = os.path.exists(weights_file_u2t)
-        self.rg_ut = xe.Regridder(
-            ds_in_u,
-            ds_in_t,
-            self.interp_method,
-            periodic=periodic,
-            reuse_weights=reuse,
-            filename=weights_file_u2t,
-        )
+        if self.ds_rot is not None:
+            reuse = os.path.exists(weights_file_u2t)
+            self.rg_ut = xe.Regridder(
+                ds_in_u,
+                ds_in_t,
+                self.interp_method,
+                periodic=periodic,
+                reuse_weights=reuse,
+                filename=weights_file_u2t,
+            )
 
     def regrid(self, ds_in: xr.Dataset) -> xr.Dataset:
         ds_out = []
