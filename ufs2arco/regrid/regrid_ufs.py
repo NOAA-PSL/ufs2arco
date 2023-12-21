@@ -36,7 +36,7 @@ class RegridUFS(ABC):
 
         >>> ds = xr.open_mfdataset("./input/{ocn_,iceh_}*.nc")
 
-        Construct RegridCICE6 object, specifying output grid lats & lons, dataset and config file
+        Construct RegridUFS object, specifying output grid lats & lons, dataset and config file
 
         >>> rg = RegridUFS(lats, lons, ds, config_filename = "config-replay.yaml")
 
@@ -132,8 +132,8 @@ class RegridUFS(ABC):
             rg_vt (xesmf.Regridder): Regridder object mapping v-points to t-points
             coords_xy (set): A list of spatial coordinate names used in ds_in
             variable_map (dict): A dictionary mapping vector field names to a set e.g. sea-surface velocity
-                       - "SSU": ("SSV", "U"),
-                       - "SSV": (None, "skip)
+                       "SSU": ("SSV", "U"),
+                       "SSV": (None, "skip)
 
         Returns:
             ds_out (xarray.Dataset): Regridded xarray Dataset

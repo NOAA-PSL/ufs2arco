@@ -45,8 +45,9 @@ class RegridCICE6(RegridUFS):
         self.ds_rot = None
         if self.rotation_file is not None:
             ds_rot = xr.open_dataset(self.rotation_file)
-            ds_rot = ds_rot[["cos_rot", "sin_rot"]]
-            self.ds_rot = ds_rot.rename({"xh": "lon", "yh": "lat"})
+            self.ds_rot = xr.Dataset()
+            self.ds_rot["cos_rot"] = np.cos(ds_rot["ANGLE"])
+            self.ds_rot["sin_rot"] = np.sin(ds_rot["ANGLE"])
         elif "ANGLE" in ds_in:
             self.ds_rot = xr.Dataset()
             self.ds_rot["cos_rot"] = np.cos(ds_in["ANGLE"])
