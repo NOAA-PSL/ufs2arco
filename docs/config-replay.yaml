@@ -72,10 +72,8 @@ MOM6Dataset:
         time        : 1
         z_l         : -1
         z_i         : -1
-        yh          : 60
-        xh          : 60
-        yq          : 60
-        xq          : 60
+        lat         : 60
+        lon         : 60
 
     coords:
         - xh
@@ -122,8 +120,8 @@ CICE6Dataset:
         VGRDi       : 7
         VGRDa       : 5
         VGRDs       : 5
-        nj          : 30
-        ni          : 30
+        lat         : 30
+        lon         : 30
 
     coords:
         - TLON
