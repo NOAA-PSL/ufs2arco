@@ -24,20 +24,21 @@ class UFSRegridder(ABC):
 
     Example:
 
+        This example uses the :class:`CICE6Regridder`, but similar capabilities exist for :class:`MOM6Regridder`.
         Construct the output grid. The following static methods are provided in this class
             - compute_gaussian_grid
             - compute_latlon_grid
             - read_grid
 
-        >>> lats, lons = UFSRegridder.compute_gaussian_grid(180, 360)
+        >>> lats, lons = CICE6Regridder.compute_gaussian_grid(180, 360)
 
-        Open cice dataset using xarray or preferably :meth:`CICE6Dataset.open_dataset`
+        Open dataset using xarray or preferably :meth:`CICE6Dataset.open_dataset`
 
         >>> ds = xr.open_mfdataset("./input/{ocn_,iceh_}*.nc")
 
-        Construct UFSRegridder object, specifying output grid lats & lons, dataset and config file
+        Construct :class:`CICE6Regridder` object, specifying output grid lats & lons, dataset and config file
 
-        >>> rg = UFSRegridder(lats, lons, ds, config_filename = "config-replay.yaml")
+        >>> rg = CICE6Regridder(lats, lons, ds, config_filename = "config-replay.yaml")
 
         Regrid dataset
 
