@@ -6,9 +6,10 @@ from abc import ABC, abstractmethod
 from .gaussian_grid import gaussian_latitudes
 
 try:
-    import xesmf as xe
+    from xesmf import Regridder
     _has_xesmf = True
 except ImportError:
+    Regridder = None
     _has_xesmf = False
 
 
