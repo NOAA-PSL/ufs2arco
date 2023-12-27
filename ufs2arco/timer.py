@@ -49,7 +49,7 @@ class Timer:
             raise TimerError("Timer is not running. Use .start() to start it")
         elapsed_time = self.get_elapsed()
         self._start_time = None
-        self.print(mytitle+f": {elapsed_time:0.4f} seconds\n")
+        self.print(f"{mytitle}: {elapsed_time:.4f} seconds\n")
         return float(elapsed_time)
 
     def print(self, mystr):
