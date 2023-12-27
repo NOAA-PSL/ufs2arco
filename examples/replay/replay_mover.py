@@ -398,13 +398,3 @@ class ReplayMoverQuarterDegree(ReplayMover1Degree):
                     this_file = join(this_dir, f"{fp}{date.year:04d}{date.month:02d}{date.day:02d}{date.hour:02d}_fhr{fhr:02d}_control")
                     files.append(this_file)
         return [join(upper, this_file) for this_file in files]
-
-
-def batched(iterable, n):
-    """reimplementation of itertools.batched for earlier versions that don't have this handy function"""
-    # batched('ABCDEFG', 3) --> ABC DEF G
-    if n < 1:
-        raise ValueError('n must be at least one')
-    it = iter(iterable)
-    while batch := tuple(itertools.islice(it, n)):
-        yield batch
