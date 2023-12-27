@@ -115,9 +115,9 @@ class UFSRegridder(ABC):
         self,
         ds_in: xr.Dataset,
         ds_rot: xr.Dataset,
-        rg_tt: xe.Regridder,
-        rg_ut: xe.Regridder,
-        rg_vt: xe.Regridder,
+        rg_tt: Regridder,
+        rg_ut: Regridder,
+        rg_vt: Regridder,
         coords_xy: set,
         variable_map: dict,
     ) -> xr.Dataset:
