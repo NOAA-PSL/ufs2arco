@@ -27,7 +27,7 @@ class Timer:
         if self.is_running:
             raise TimerError("Timer is running. Use .stop() to stop it")
 
-        self.print(f" --- {mytitle} --- ")
+        self._print(f" --- {mytitle} --- ")
         self._start_time = time.perf_counter()
 
     def get_elapsed(self):
@@ -49,21 +49,20 @@ class Timer:
             raise TimerError("Timer is not running. Use .start() to start it")
         elapsed_time = self.get_elapsed()
         self._start_time = None
-        self.print(f"{mytitle}: {elapsed_time:.4f} seconds\n")
+        self._print(f"{mytitle}: {elapsed_time:.4f} seconds\n")
         return float(elapsed_time)
 
-    def print(self, mystr):
+    def _print(self, *args, **kwargs):
         """Print the timing to :attr:`filename` if specified, or to screen.
 
-        Args:
-            mystr (str): to be printed
+        All arguments and keyword arguments are passed to ``print()``
         """
 
         if self.filename is None:
-            print(mystr)
+            print(*args, **kwargs)
         else:
             with open(self.filename,'a') as file:
-                print(mystr,file=file)
+                print(*args, file=file, **kwargs)
 
 class TimerError(Exception):
     """A custom exception used to report errors in use of Timer class"""
