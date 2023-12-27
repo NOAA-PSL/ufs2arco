@@ -9,6 +9,7 @@ class Timer:
         self._start_time = None
         self.filename = filename
 
+    @property
     def is_running(self):
         """If this timer is running, return True
 
@@ -23,7 +24,7 @@ class Timer:
         Args:
             mytitle (str, optional): indicate the thing that's about to run and be timed
         """
-        if self._start_time is not None:
+        if self.is_running:
             raise TimerError("Timer is running. Use .stop() to stop it")
 
         self.print(f" --- {mytitle} --- ")
@@ -44,7 +45,7 @@ class Timer:
         Returns:
             (float): amount of time elapsed in seconds
         """
-        if self._start_time is None:
+        if not self.is_running:
             raise TimerError("Timer is not running. Use .start() to start it")
         elapsed_time = self.get_elapsed()
         self._start_time = None
