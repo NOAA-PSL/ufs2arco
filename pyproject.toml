@@ -23,6 +23,8 @@ dependencies = [
     "fsspec",
     "s3fs",
     "gcsfs",
+    "pytest",
+    "coverage",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +37,7 @@ source="https://github.com/NOAA-PSL/ufs2arco"
 documentation="https://ufs2arco.readthedocs.io/en/latest/"
 
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
+requires = ["setuptools>=64.0.0", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
