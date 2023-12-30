@@ -35,6 +35,8 @@ exclude_patterns = []
 napoleon_custom_sections = [("Returns", "params_style"),
                             ("Sets Attributes", "params_style"),
                             ("Assumptions", "notes_style"),
+                            ("Required Fields in Config", "params_style"),
+                            ("Optional Fields in Config", "params_style"),
                             ]
 
 
