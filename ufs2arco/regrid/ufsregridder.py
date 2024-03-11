@@ -194,6 +194,9 @@ class UFSRegridder(ABC):
                 ds_out.append(_xda_to_xds(uinterp_out, var, ds_in[var].attrs))
                 ds_out.append(_xda_to_xds(vinterp_out, var2, ds_in[var2].attrs))
 
+            elif ds_rot is None:
+                warnings.warn(f"UFSRegridder.regrid_tripolar: rotation information (ds_rot) not provided, skipping vector fields ({var}, {var2})")
+
         # merge dataarrays into a dataset and set attributes
         ds_out = xr.merge(ds_out, compat="override")
         ds_out.attrs = ds_in.attrs
