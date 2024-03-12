@@ -155,7 +155,6 @@ class UFSRegridder(ABC):
 
         # interate through variables and regrid
         for var in data_vars:
-            print(f"Regridding {var}")
             coords = ds_in[var].coords.to_index()
 
             # must have lat/lon like coordinates, otherwise append copy
@@ -194,8 +193,8 @@ class UFSRegridder(ABC):
                 ds_out.append(_xda_to_xds(uinterp_out, var, ds_in[var].attrs))
                 ds_out.append(_xda_to_xds(vinterp_out, var2, ds_in[var2].attrs))
 
-            elif ds_rot is None:
-                warnings.warn(f"UFSRegridder.regrid_tripolar: rotation information (ds_rot) not provided, skipping vector fields ({var}, {var2})")
+            elif pos == "U" and ds_rot is None:
+                warnings.warn(f"UFSRegridder.regrid_tripolar: rotation_file not provided, skipping vector fields ({var}, {var2})")
 
         # merge dataarrays into a dataset and set attributes
         ds_out = xr.merge(ds_out, compat="override")
