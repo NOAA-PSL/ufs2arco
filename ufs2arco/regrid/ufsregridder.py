@@ -2,6 +2,7 @@ import yaml
 import numpy as np
 import xarray as xr
 from abc import ABC, abstractmethod
+import warnings
 
 from .gaussian_grid import gaussian_latitudes
 
@@ -66,10 +67,14 @@ class UFSRegridder(ABC):
 
         super(UFSRegridder, self).__init__()
         name = self.__class__.__name__
+        # Look for the "regrid" section of e.g. MOM6Dataset
+        name = name.replace("Regridder", "Dataset")
 
         # Load configuration from YAML file
         with open(config_filename, "r") as f:
-            self.config = yaml.safe_load(f).get(name, {})
+            dataset_config = yaml.safe_load(f).get(name, {})
+            self.config = dataset_config.get("regrid", {})
+            self.data_vars = dataset_config.get("data_vars", "")
 
         # specify an output resolution
         self.lats1d_out = lats1d_out
@@ -141,8 +146,15 @@ class UFSRegridder(ABC):
         """
         ds_out = []
 
+        # Only loop through data variables we want to keep
+        # If user didn't give any, then loop through all variables
+        data_vars = self.data_vars if len(self.data_vars) > 0 else list(ds_in.keys())
+
+        # make sure desired variables are actually in the dataset
+        data_vars = [k for k in data_vars if k in ds_in]
+
         # interate through variables and regrid
-        for var in list(ds_in.keys()):
+        for var in data_vars:
             coords = ds_in[var].coords.to_index()
 
             # must have lat/lon like coordinates, otherwise append copy
@@ -180,6 +192,9 @@ class UFSRegridder(ABC):
                 # append vars
                 ds_out.append(_xda_to_xds(uinterp_out, var, ds_in[var].attrs))
                 ds_out.append(_xda_to_xds(vinterp_out, var2, ds_in[var2].attrs))
+
+            elif pos == "U" and ds_rot is None:
+                warnings.warn(f"UFSRegridder.regrid_tripolar: rotation_file not provided, skipping vector fields ({var}, {var2})")
 
         # merge dataarrays into a dataset and set attributes
         ds_out = xr.merge(ds_out, compat="override")

@@ -101,6 +101,13 @@ MOM6Dataset:
         - SSH
         - MLD_0125
 
+    regrid:
+        rotation_file:
+        weights_file_t2t:
+        weights_file_u2t:
+        weights_file_v2t:
+        periodic: True
+
 CICE6Dataset:
     file_prefixes:
         - "iceh_ic."
@@ -148,10 +155,3 @@ CICE6Dataset:
         - hi
         - Tsfc
         - aice
-
-MOM6Regridder:
-    rotation_file:
-    weights_file_t2t:
-    weights_file_u2t:
-    weights_file_v2t:
-    periodic: True
