@@ -7,12 +7,6 @@ FV3Dataset:
     coords_path_out: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/coordinates/zarr/"
     forecast_hours  : [0, 3]
 
-    chunks_in:
-        time        : 1
-        pfull       : 1
-        grid_yt     : 768
-        grid_xt     : 1536
-
     chunks_out:
         time        : 1
         pfull       : 1

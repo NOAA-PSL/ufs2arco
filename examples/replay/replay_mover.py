@@ -1,5 +1,6 @@
 from os.path import join, isdir
 from datetime import datetime, timedelta
+import logging
 import yaml
 from shutil import rmtree
 import itertools
@@ -136,7 +137,6 @@ class ReplayMover1Degree():
 
         walltime = Timer()
         localtime = Timer()
-        replay = FV3Dataset(path_in=self.cached_path, config_filename=self.config_filename)
 
         store_coords = False # we don't need a separate coords dataset for FV3
         for cycle in self.my_cycles(job_id):
@@ -144,7 +144,7 @@ class ReplayMover1Degree():
             localtime.start(f"Reading {str(cycle)}")
 
             try:
-                self.move_single_dataset(cycle)
+                self.move_single_dataset(job_id, cycle)
             except Exception as e:
                 logging.exception(e)
                 print(f"ReplayMover.run({job_id}): Failed to store {str(cycle)}")
@@ -153,22 +153,26 @@ class ReplayMover1Degree():
 
         walltime.stop("Total Walltime")
 
-    def move_single_dataset(self, cycle):
+    def move_single_dataset(self, job_id, cycle):
         """Store a single cycle to zarr"""
 
+        replay = FV3Dataset(path_in=self.cached_path, config_filename=self.config_filename)
         xds = replay.open_dataset(cycle, **self.ods_kwargs(job_id))
 
         index = list(self.xtime.values).index(xds.time.values[0])
         tslice = slice(index, index+2)
 
+        region = {
+            "time": tslice,
+            "pfull": slice(None, None),
+            "grid_yt": slice(None, None),
+            "grid_xt": slice(None, None),
+        }
+        region = {k : v for k,v in region.items() if k in xds.dims}
+
         replay.store_dataset(
             xds,
-            region={
-                "time": tslice,
-                "pfull": slice(None, None),
-                "grid_yt": slice(None, None),
-                "grid_xt": slice(None, None),
-                },
+            region=region,
             storage_options=self.storage_options,
         )
         # This is a hacky way to clear the cache, since we don't create a filesystem object
@@ -226,7 +230,7 @@ class ReplayMover1Degree():
 
         localtime.start("Storing to zarr")
         store = NestedDirectoryStore(path=replay.data_path) if replay.is_nested else replay.data_path
-        dds.to_zarr(store, compute=False, storage_options=self.storage_options)
+        dds.to_zarr(store, compute=False, storage_options=self.storage_options, mode="w")
         localtime.stop()
 
         # This is a hacky way to clear the cache, since we don't create a filesystem object

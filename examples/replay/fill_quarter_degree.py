@@ -12,7 +12,6 @@ def submit_slurm_filler(job_id, mover):
         f"from replay_filler import ReplayFiller\n"+\
         f"mover = ReplayMoverQuarterDegree(\n"+\
         f"    n_jobs={mover.n_jobs},\n"+\
-        f"    n_cycles={mover.n_cycles},\n"+\
         f"    config_filename='{mover.config_filename}',\n"+\
         f"    storage_options={mover.storage_options},\n"+\
         f"    main_cache_path='{mover.main_cache_path}',\n"+\
@@ -56,8 +55,7 @@ if __name__ == "__main__":
 
     # Recreated from what we used to put up quarter degree in the first place
     mover = ReplayMoverQuarterDegree(
-        n_jobs=15
-        n_cycles=1,
+        n_jobs=1,
         config_filename="config-0.25-degree.yaml",
         storage_options={"token": "/contrib/Tim.Smith/.gcs/replay-service-account.json"},
         main_cache_path="/lustre/Tim.Smith/tmp-replay/0.25-degree",
