@@ -63,11 +63,10 @@ class UFSDataset:
     def default_open_dataset_kwargs(self) -> Dict:
         kw = {
             "parallel": True,
+            "chunks": self.chunks_in,
             "decode_times": True,
             "preprocess": self._preprocess,
         }
-        if len(self.chunks_in)>0:
-            kw["chunks"] = self.chunks_in
         return kw
 
     def __init__(self, path_in: Callable, config_filename: str, is_nested: bool = False) -> None:
