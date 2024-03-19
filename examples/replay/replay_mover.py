@@ -230,7 +230,7 @@ class ReplayMover1Degree():
 
         localtime.start("Storing to zarr")
         store = NestedDirectoryStore(path=replay.data_path) if replay.is_nested else replay.data_path
-        dds.to_zarr(store, compute=False, storage_options=self.storage_options, mode="w")
+        dds.to_zarr(store, compute=False, storage_options=self.storage_options)
         localtime.stop()
 
         # This is a hacky way to clear the cache, since we don't create a filesystem object
