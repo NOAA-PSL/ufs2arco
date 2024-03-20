@@ -7,16 +7,9 @@ FV3Dataset:
     coords_path_out: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/coordinates/zarr/"
     forecast_hours  : [0, 3]
 
-    chunks_in:
-        # estimated 37MB per chunk (the full 3D field)
-        time        : 1
-        pfull       : 127
-        grid_yt     : 768
-        grid_xt     : 1536
-
     chunks_out:
         time        : 1
-        pfull       : 127
+        pfull       : 1
         grid_yt     : 768
         grid_xt     : 1536
 
@@ -29,56 +22,182 @@ FV3Dataset:
         - bk
 
     data_vars:
-        # 3D atmospheric vars
-        - tmp
-        - ugrd
-        - vgrd
-        - delz
-        - dzdt
-        - dpres
-        - spfh
-        - o3mr
-        # 3D land vars
-        - soilt1
-        - soilt2
-        - soilt3
-        - soilt4
+        - acond
+        - albdo_ave
+        - alnsf
+        - alnwf
+        - alvsf
+        - alvwf
+        - c0
+        - cd
+        - cduvb_ave
+        - cldfra
+        - cnvprcp
+        - cnwat
+        - cpofp
+        - cprat_ave
+        - cpratb_ave
+        - crain
+        - csdlf
+        - csdsf
+        - csulf
+        - csulftoa
+        - csusf
+        - csusftoa
+        - cwork_aveclm
+        - dconv
+        - dlwrf
+        - dlwrf_ave
+        - dswrf
+        - dswrf_ave
+        - dswrf_avetoa
+        - dtcool
+        - duvb_ave
+        - ecan_acc
+        - edir_acc
+        - etran_acc
+        - evbs_ave
+        - evcw_ave
+        - f10m
+        - facsf
+        - facwf
+        - ffhh
+        - ffmm
+        - fldcp
+        - fricv
+        - frozr
+        - frozrb
+        - frzr
+        - frzrb
+        - gflux
+        - gflux_ave
+        - hgt_hyblev1
+        - hpbl
+        - icec
+        - icetk
+        - land
+        - lfrac
+        - lhtfl
+        - lhtfl_ave
+        - nbdsf_ave
+        - nddsf_ave
+        - orog
+        - pah_ave
+        - pahi
+        - pevpr
+        - pevpr_ave
+        - prate_ave
+        - prateb_ave
+        - pres_avehcb
+        - pres_avehct
+        - pres_avelcb
+        - pres_avelct
+        - pres_avemcb
+        - pres_avemct
+        - prescnvclb
+        - prescnvclt
+        - pressfc
+        - pwat
+        - qrain
+        - rhonewsn
+        - sbsno_ave
+        - sfcr
+        - sfexc
+        - shdmax
+        - shdmin
+        - shtfl
+        - shtfl_ave
+        - sltyp
+        - snoalb
+        - snod
+        - snohf
+        - snowc_ave
         - soill1
         - soill2
         - soill3
         - soill4
+        - soilm
+        - soilt1
+        - soilt2
+        - soilt3
+        - soilt4
         - soilw1
         - soilw2
         - soilw3
         - soilw4
-        # 2D vars
-        - snod
-        - prateb_ave
-        - pressfc
-        - weasd
-        - f10m
-        - sfcr
-        # Surface forcing vars
-        - land
-        - vtype
         - sotyp
-        - veg
-        - icec
-        - tmpsfc
-        # For TOA solar radiation
-        - dswrf_avetoa
-        - ulwrf_avetoa
-        - uswrf_avetoa
-        # Ease comparison
+        - spfh2m
+        - spfh_hyblev1
+        - spfhmax_max2m
+        - spfhmin_min2m
+        - ssrun_acc
+        - sunsd_acc
+        - tcdc_avebndcl
+        - tcdc_aveclm
+        - tcdc_avehcl
+        - tcdc_avelcl
+        - tcdc_avemcl
+        - tcdccnvcl
+        - tg3
+        - tisfc
+        - tmax_max2m
+        - tmin_min2m
         - tmp2m
+        - tmp_avehct
+        - tmp_avelct
+        - tmp_avemct
+        - tmp_hyblev1
+        - tmpsfc
+        - tprcp
+        - trans_ave
+        - tref
+        - tsnowp
+        - tsnowpb
+        - u-gwd_ave
+        - uflx_ave
         - ugrd10m
+        - ugrd_hyblev1
+        - ulwrf
+        - ulwrf_ave
+        - ulwrf_avetoa
+        - uswrf
+        - uswrf_ave
+        - uswrf_avetoa
+        - v-gwd_ave
+        - vbdsf_ave
+        - vddsf_ave
+        - veg
+        - vflx_ave
         - vgrd10m
-        # For cloudy assimilation
+        - vgrd_hyblev1
+        - vtype
+        - w0
+        - wa_acc
+        - watr_acc
+        - wd
+        - weasd
+        - wilt
+        - xs
+        - xt
+        - xtts
+        - xu
+        - xv
+        - xz
+        - xzts
+        - zc
         - clwmr
+        - delz
+        - dpres
+        - dzdt
         - grle
+        - hgtsfc
         - icmr
+        - nicp
+        - ntrnc
+        - o3mr
         - rwmr
         - snmr
-        # For future operational implementation
-        - ntrnc
-        - nicp
+        - spfh
+        - tmp
+        - ugrd
+        - vgrd
