@@ -20,6 +20,7 @@ def submit_slurm_mover(job_id, mover):
         f"    config_filename='{mover.config_filename}',\n"+\
         f"    storage_options={mover.storage_options},\n"+\
         f"    main_cache_path='{mover.main_cache_path}',\n"+\
+        f"    component='{mover.component}',\n"+\
         f")\n"+\
         f"mover.run({job_id})"
 
@@ -62,6 +63,7 @@ if __name__ == "__main__":
         config_filename="config-1.00-degree.yaml",
         storage_options={"token": "/contrib/Tim.Smith/.gcs/replay-service-account.json"},
         main_cache_path="/lustre/Tim.Smith/tmp-replay/1.00-degree",
+        component="fv3",
     )
 
     localtime.start("Make and Store Container Dataset")
