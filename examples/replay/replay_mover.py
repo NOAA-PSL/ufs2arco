@@ -23,7 +23,7 @@ class ReplayMover1Degree():
 
     @property
     def xcycles(self):
-        return xr.DataArray(self.cycles, coords={"cycles": cycles}, dims="cycles")
+        return xr.DataArray(self.cycles, coords={"cycles": self.cycles}, dims="cycles")
 
 
     @property
@@ -97,6 +97,7 @@ class ReplayMover1Degree():
     ):
         self.n_jobs = n_jobs
         self.config_filename = config_filename
+        self.component = component
         self.storage_options = storage_options if storage_options is not None else dict()
         self.main_cache_path = main_cache_path
 
@@ -122,8 +123,8 @@ class ReplayMover1Degree():
         # for move_single_dataset, we have to figure out how many resulting timestamps we have
         # within a single DA cycle
         try:
-            assert "freq" in pd.date_range(config[name]["cycles"])
-            assert "freq" in pd.date_range(config[name]["time"])
+            assert "freq" in config[name]["cycles"].keys()
+            assert "freq" in config[name]["time"].keys()
 
         except:
             raise KeyError("ReplayMover.__init__: we need 'freq' inside the config 'cycles' and 'time' sections")
@@ -145,6 +146,7 @@ class ReplayMover1Degree():
 
         walltime = Timer()
         localtime = Timer()
+        walltime.start()
 
         store_coords = False # we don't need a separate coords dataset for FV3
         for cycle in self.my_cycles(job_id):
@@ -169,6 +171,11 @@ class ReplayMover1Degree():
 
         index = list(self.xtime.values).index(xds.time.values[0])
         tslice = slice(index, index+self.n_steps_per_cycle)
+
+        # subset the variables here in order to remove extraneous dimensions
+        if len(replay.data_vars)>0:
+            data_vars = [x for x in replay.data_vars if x in xds]
+            xds = xds[data_vars]
 
         spatial_region = {k: slice(None, None) for k in xds.dims if k != "time"}
         region = {
@@ -328,7 +335,7 @@ class ReplayMover1Degree():
             this_dir = f"{date.year:04d}/{date.month:02d}/{date.year:04d}{date.month:02d}{date.day:02d}{date.hour:02d}"
             for fp in file_prefixes:
                 for fhr in forecast_hours:
-					this_date = cycle+timedelta(hours=fhr)
+                    this_date = cycle+timedelta(hours=fhr)
                     this_file = f"{this_dir}/{fp}{this_date.year:04d}_{this_date.month:02d}_{this_date.day:02d}_{this_date.hour:02d}.nc"
                     files.append(this_file)
         return [join(upper, this_file) for this_file in files]
@@ -376,7 +383,7 @@ class ReplayMover1Degree():
         iau_offset = -6 if self.component == "fv3" else 0
         repeater = tuple(np.timedelta64(timedelta(hours=fhr-iau_offset)) for fhr in self.forecast_hours)
         ftime = np.array(
-            [repeater for _ in range(len(xds["time"])//len(repeater)],
+            [repeater for _ in range(len(xds["time"])//len(repeater))]
         ).flatten()
 
         xds["ftime"] = xr.DataArray(
