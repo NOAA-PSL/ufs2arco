@@ -9,6 +9,7 @@ dependencies:
     - matplotlib
 # xarray et al
     - xarray
+    - cf_xarray
     - netCDF4
     - h5netcdf
     - bottleneck

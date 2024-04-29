@@ -44,28 +44,25 @@ class MOM6Regridder(UFSRegridder):
             lats1d_out, lons1d_out, ds_in, config_filename, interp_method
         )
 
-    def _create_regridder(self, ds_in: xr.Dataset) -> None:
+    def create_grid_in(
+        self,
+        mom6_grid: xr.Dataset,
+    ) -> xr.Dataset:
+        """Convert mom6 grid into a grid that is ready to be used by regridder.
+        This comes from here: https://mom6-analysiscookbook.readthedocs.io/en/latest/notebooks/Horizontal_Remapping.html
 
-        # create rotation dataset
-        self.rotation_file = self.config.get("rotation_file", None)
-        self.ds_rot = None
-        if self.rotation_file is not None:
-            ds_rot = xr.open_dataset(self.rotation_file)
-            ds_rot = ds_rot[["cos_rot", "sin_rot"]]
-            self.ds_rot = ds_rot.rename({"xh": "lon", "yh": "lat"})
-        elif "cos_rot" in ds_in and "sin_rot" in ds_in:
-            self.ds_rot = xr.Dataset()
-            self.ds_rot["cos_rot"] = ds_in["cos_rot"]
-            self.ds_rot["sin_rot"] = ds_in["sin_rot"]
-        else:
-            warnings.warn(
-                f"MOM6Regridder._create_regridder: Could not find 'rotation_file' in configuration yaml. "
-                f"Vector fields will be silently ignored."
-            )
+        Args:
+            mom6_grid (xr.Dataset):
+                Dataset with all necessary mom6 metadata.
 
-        # create input dataset
-        mom6_grid = self.config.get("rotation_file", None)
-        mom6_grid = xr.open_dataset(mom6_grid)
+        Returns:
+            ds_in_t (xr.Dataset):
+                Dataset ready to be used as input grid for tracers.
+            ds_in_v (xr.Dataset):
+                Dataset ready to be used as input grid for v velocity.
+            ds_in_u (xr.Dataset):
+                Dataset ready to be used as input grid for u velocity.
+        """
         grid_in = xr.Dataset()
         grid_in["lon"] = mom6_grid["geolon"]
         grid_in["lat"] = mom6_grid["geolat"]
@@ -100,9 +97,25 @@ class MOM6Regridder(UFSRegridder):
             {"lat_v": "lat", "lon_v": "lon"}
         )
 
-        # create output dataset
-        lons = self.lons1d_out
-        lats = self.lats1d_out
+        return ds_in_t, ds_in_u, ds_in_v
+    
+    def create_grid_out(
+        self,
+        lats: np.array,
+        lons: np.array,
+    ) -> xr.Dataset:
+        """Take lat/lon of our grid and create a grid that is ready for regridder.
+
+        Args:
+            lats (np.array):
+                Lats of grid_out.
+            lons (xr.Dataset):
+                Lons of grid_out.
+
+        Returns:
+            grid_out (xr.Dataset):
+                Grid out that is ready for regridding.
+        """
         grid_out = xr.Dataset()
         grid_out["lon"] = xr.DataArray(lons, dims=["lon"])
         grid_out["lat"] = xr.DataArray(lats, dims=["lat"])
@@ -115,6 +128,36 @@ class MOM6Regridder(UFSRegridder):
         )
         grid_out = grid_out.assign({"lat_b": lat_corners, "lon_b": lon_corners})
         grid_out = grid_out.drop_vars(["lat_bounds", "lon_bounds"])
+
+        return grid_out
+    
+    def _create_regridder(self, ds_in: xr.Dataset) -> None:
+
+        # create rotation dataset
+        self.rotation_file = self.config.get("rotation_file", None)
+        self.ds_rot = None
+        if self.rotation_file is not None:
+            mom6_grid = xr.open_dataset(self.rotation_file)
+            ds_rot = mom6_grid[["cos_rot", "sin_rot"]]
+            self.ds_rot = ds_rot.rename({"xh": "lon", "yh": "lat"})
+        elif "cos_rot" in ds_in and "sin_rot" in ds_in:
+            self.ds_rot = xr.Dataset()
+            self.ds_rot["cos_rot"] = ds_in["cos_rot"]
+            self.ds_rot["sin_rot"] = ds_in["sin_rot"]
+        else:
+            warnings.warn(
+                f"MOM6Regridder._create_regridder: Could not find 'rotation_file' in configuration yaml. "
+                f"Vector fields will be silently ignored."
+            )
+
+        # create renamed datasets
+        ds_in_t, ds_in_u, ds_in_v = self.create_grid_in(mom6_grid=mom6_grid)
+
+        # create output dataset
+        grid_out = self.create_grid_out(
+            lats = self.lats1d_out,
+            lons = self.lons1d_out,
+        )
 
         # get nlon/nlat for input/output datsets
         nlon_i = ds_in.sizes["yh"]
