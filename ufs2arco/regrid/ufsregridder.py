@@ -8,6 +8,7 @@ from .gaussian_grid import gaussian_latitudes
 
 try:
     from xesmf import Regridder
+
     _has_xesmf = True
 except ImportError:
     Regridder = None
@@ -53,7 +54,7 @@ class UFSRegridder(ABC):
         lons1d_out: np.array,
         ds_in: xr.Dataset,
         config_filename: str,
-        interp_method: str = "bilinear",
+        interp_method: str = "conservative",
     ) -> None:
         """
         Initialize the UFSRegridder object.
@@ -168,7 +169,6 @@ class UFSRegridder(ABC):
             else:
                 var2, pos = (None, "T")
 
-
             # scalar fields
             if pos == "T":
                 # interpolate
@@ -182,8 +182,12 @@ class UFSRegridder(ABC):
                 interp_v = rg_vt(ds_in[var2])
 
                 # rotate to earth-relative
-                urot = interp_u * ds_rot.cos_rot + interp_v * ds_rot.sin_rot
-                vrot = interp_v * ds_rot.cos_rot - interp_u * ds_rot.sin_rot
+                urot = (
+                    interp_u * ds_rot.cos_rot.values + interp_v * ds_rot.sin_rot.values
+                )
+                vrot = (
+                    interp_v * ds_rot.cos_rot.values - interp_u * ds_rot.sin_rot.values
+                )
 
                 # interoplate
                 uinterp_out = rg_tt(urot)
@@ -194,7 +198,9 @@ class UFSRegridder(ABC):
                 ds_out.append(_xda_to_xds(vinterp_out, var2, ds_in[var2].attrs))
 
             elif pos == "U" and ds_rot is None:
-                warnings.warn(f"UFSRegridder.regrid_tripolar: rotation_file not provided, skipping vector fields ({var}, {var2})")
+                warnings.warn(
+                    f"UFSRegridder.regrid_tripolar: rotation_file not provided, skipping vector fields ({var}, {var2})"
+                )
 
         # merge dataarrays into a dataset and set attributes
         ds_out = xr.merge(ds_out, compat="override")
@@ -218,6 +224,7 @@ class UFSRegridder(ABC):
         )
 
         return ds_out
+
 
 def _xda_to_xds(da_out, var, attrs):
     """helper to update attrs and prepare for ds_out"""

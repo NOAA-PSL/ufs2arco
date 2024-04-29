@@ -3,6 +3,7 @@ import yaml
 import warnings
 import xarray as xr
 import numpy as np
+import cf_xarray as cfxr
 
 from .ufsregridder import UFSRegridder
 
@@ -37,7 +38,7 @@ class MOM6Regridder(UFSRegridder):
         lons1d_out: np.array,
         ds_in: xr.Dataset,
         config_filename: str,
-        interp_method: str = "bilinear",
+        interp_method: str = "conservative",
     ) -> None:
         super(MOM6Regridder, self).__init__(
             lats1d_out, lons1d_out, ds_in, config_filename, interp_method
@@ -62,16 +63,58 @@ class MOM6Regridder(UFSRegridder):
                 f"Vector fields will be silently ignored."
             )
 
+        # create input dataset
+        mom6_grid = self.config.get("rotation_file", None)
+        mom6_grid = xr.open_dataset(mom6_grid)
+        grid_in = xr.Dataset()
+        grid_in["lon"] = mom6_grid["geolon"]
+        grid_in["lat"] = mom6_grid["geolat"]
+        grid_in["lon_u"] = mom6_grid["geolon_u"]
+        grid_in["lat_u"] = mom6_grid["geolat_u"]
+        grid_in["lon_v"] = mom6_grid["geolon_v"]
+        grid_in["lat_v"] = mom6_grid["geolat_v"]
+        ny, nx = grid_in["lon"].shape
+        lon_b = np.empty((ny + 1, nx + 1))
+        lat_b = np.empty((ny + 1, nx + 1))
+        lon_b[1:, 1:] = mom6_grid["geolon_c"].values
+        lat_b[1:, 1:] = mom6_grid["geolat_c"].values
+        # periodicity
+        lon_b[:, 0] = lon_b[:, -1]
+        lat_b[:, 0] = lat_b[:, -1]
+        # south edge
+        dy = (lat_b[2, :] - lat_b[1, :]).mean()
+        lat_b[0, 1:] = lat_b[1, 1:] - dy
+        lon_b[0, 1:] = lon_b[1, 1:]
+        # corner point
+        lon_b[0, 0] = lon_b[1, 0]
+        lat_b[0, 0] = lat_b[0, 1]
+        grid_in["lon_b"] = xr.DataArray(data=lon_b)
+        grid_in["lat_b"] = xr.DataArray(data=lat_b)
+
         # create renamed datasets
-        ds_in_t = ds_in.rename({"xh": "lon", "yh": "lat"})
-        ds_in_u = ds_in.rename({"xq": "lon", "yh": "lat"})
-        ds_in_v = ds_in.rename({"xh": "lon", "yq": "lat"})
+        ds_in_t = grid_in[["lon", "lat", "lat_b", "lon_b"]]
+        ds_in_u = grid_in[["lon_u", "lat_u", "lat_b", "lon_b"]].rename(
+            {"lat_u": "lat", "lon_u": "lon"}
+        )
+        ds_in_v = grid_in[["lon_v", "lat_v", "lat_b", "lon_b"]].rename(
+            {"lat_v": "lat", "lon_v": "lon"}
+        )
 
         # create output dataset
-        lons, lats = np.meshgrid(self.lons1d_out, self.lats1d_out)
+        lons = self.lons1d_out
+        lats = self.lats1d_out
         grid_out = xr.Dataset()
-        grid_out["lon"] = xr.DataArray(lons, dims=["lat", "lon"])
-        grid_out["lat"] = xr.DataArray(lats, dims=["lat", "lon"])
+        grid_out["lon"] = xr.DataArray(lons, dims=["lon"])
+        grid_out["lat"] = xr.DataArray(lats, dims=["lat"])
+        grid_out = grid_out.cf.add_bounds(["lat", "lon"])
+        lat_corners = cfxr.bounds_to_vertices(
+            bounds=grid_out["lat_bounds"], bounds_dim="bounds", order=None
+        )
+        lon_corners = cfxr.bounds_to_vertices(
+            bounds=grid_out["lon_bounds"], bounds_dim="bounds", order=None
+        )
+        grid_out = grid_out.assign({"lat_b": lat_corners, "lon_b": lon_corners})
+        grid_out = grid_out.drop_vars(["lat_bounds", "lon_bounds"])
 
         # get nlon/nlat for input/output datsets
         nlon_i = ds_in.sizes["yh"]
