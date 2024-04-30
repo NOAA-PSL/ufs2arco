@@ -12,7 +12,7 @@ import xarray as xr
 import dask.array as darray
 from zarr import NestedDirectoryStore
 
-from ufs2arco import FV3Dataset, MOM6Dataset, CICE6Dataset, Timer
+from ufs2arco import FV3Dataset, MOM6Dataset, CICE6Dataset, Timer, MOM6Regridder
 
 class ReplayMover1Degree():
 
@@ -162,12 +162,39 @@ class ReplayMover1Degree():
             localtime.stop()
 
         walltime.stop("Total Walltime")
+    
+    def regrid_to_gaussian(
+            self,
+            xds: xr.Dataset,
+            gaussian_grid_path: str,
+    ) -> xr.Dataset:
+        """Regrid (if needed) - will be used of ocean/sea ice data"""
+        gaussian_grid = xr.open_zarr(
+            gaussian_grid_path,
+            storage_options={"token": "anon"},
+            )
+        lons = gaussian_grid['grid_xt'].values
+        lats = gaussian_grid['grid_yt'].values
+        rg = MOM6Regridder(
+            lats1d_out=lats, 
+            lons1d_out=lons,
+            ds_in=xds, 
+            config_filename=self.config_filename,
+            )
+        xds = rg.regrid(xds)
+        
 
     def move_single_dataset(self, job_id, cycle):
         """Store a single cycle to zarr"""
 
         replay = self.Dataset(path_in=self.cached_path, config_filename=self.config_filename)
         xds = replay.open_dataset(cycle, **self.ods_kwargs(job_id))
+
+        if "regrid" in replay.config.keys():
+            xds = self.regrid_to_gaussian(
+                xds=xds,
+                gaussian_grid=replay.config['gaussian_grid'],
+                )
 
         index = list(self.xtime.values).index(xds.time.values[0])
         tslice = slice(index, index+self.n_steps_per_cycle)
