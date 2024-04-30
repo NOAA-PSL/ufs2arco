@@ -7,6 +7,16 @@ FV3Dataset:
     coords_path_out: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/coordinates/zarr/"
     forecast_hours  : [0, 3]
 
+    cycles:
+        start       : "1994-01-01T00"
+        end         : "2023-10-13T06"
+        freq        : "6h"
+
+    time:
+        start       : "1993-12-31T18"
+        end         : "2023-10-13T03"
+        freq        : "3h"
+
     chunks_out:
         time        : 1
         pfull       : 1
