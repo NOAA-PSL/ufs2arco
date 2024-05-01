@@ -183,6 +183,8 @@ class ReplayMover1Degree():
             )
         xds = rg.regrid(xds)
         
+        return xds
+        
 
     def move_single_dataset(self, job_id, cycle):
         """Store a single cycle to zarr"""
@@ -193,7 +195,7 @@ class ReplayMover1Degree():
         if "regrid" in replay.config.keys():
             xds = self.regrid_to_gaussian(
                 xds=xds,
-                gaussian_grid=replay.config['gaussian_grid'],
+                gaussian_grid_path=replay.config['gaussian_grid'],
                 )
 
         index = list(self.xtime.values).index(xds.time.values[0])
@@ -237,7 +239,7 @@ class ReplayMover1Degree():
         if "regrid" in replay.config.keys():
             xds = self.regrid_to_gaussian(
                 xds=xds,
-                gaussian_grid=replay.config['gaussian_grid'],
+                gaussian_grid_path=replay.config['gaussian_grid'],
                 )
 
         xds = xds.reset_coords()
@@ -335,7 +337,7 @@ class ReplayMover1Degree():
         return [join(upper, this_file) for this_file in files]
 
     @staticmethod
-    def mom6_path(dates, forecast_hours, file_prefixes):
+    def mom6_path(cycles, forecast_hours, file_prefixes):
         """This is passed to :class:`MOM6Dataset`, and it generates the paths to read from for the given inputs
 
         Note:
@@ -362,16 +364,18 @@ class ReplayMover1Degree():
                 'filecache::s3://noaa-ufs-gefsv13replay-pds/1deg/1994/01/1994010106/ocn_1994_01_01_06.nc']
         """
         upper = "filecache::s3://noaa-ufs-gefsv13replay-pds/1deg"
-        dates = [dates] if not isinstance(dates, Iterable) else dates
+        cycles = [cycles] if not isinstance(cycles, list) else cycles
 
         files = []
-        for date in dates:
-            this_dir = f"{date.year:04d}/{date.month:02d}/{date.year:04d}{date.month:02d}{date.day:02d}{date.hour:02d}"
+        for cycle in cycles:
+            this_dir = f"{cycle.year:04d}/{cycle.month:02d}/{cycle.year:04d}{cycle.month:02d}{cycle.day:02d}{cycle.hour:02d}"
+
             for fp in file_prefixes:
                 for fhr in forecast_hours:
                     this_date = cycle+timedelta(hours=fhr)
                     this_file = f"{this_dir}/{fp}{this_date.year:04d}_{this_date.month:02d}_{this_date.day:02d}_{this_date.hour:02d}.nc"
                     files.append(this_file)
+
         return [join(upper, this_file) for this_file in files]
 
 
@@ -477,13 +481,13 @@ class ReplayMoverQuarterDegree(ReplayMover1Degree):
         return [join(upper, this_file) for this_file in files]
 
     @staticmethod
-    def mom6_path(dates, forecast_hours, file_prefixes):
+    def mom6_path(cycles, forecast_hours, file_prefixes):
         upper = "filecache::s3://noaa-ufs-gefsv13replay-pds"
-        dates = [dates] if not isinstance(dates, Iterable) else dates
+        cycles = [cycles] if not isinstance(cycles, list) else cycles
 
         files = []
-        for date in dates:
-            this_dir = f"{date.year:04d}/{date.month:02d}/{date.year:04d}{date.month:02d}{date.day:02d}{date.hour:02d}"
+        for cycle in cycles:
+            this_dir = f"{cycle.year:04d}/{cycle.month:02d}/{cycle.year:04d}{cycle.month:02d}{cycle.day:02d}{cycle.hour:02d}"
             for fp in file_prefixes:
                 for fhr in forecast_hours:
                     this_date = cycle+timedelta(hours=fhr)

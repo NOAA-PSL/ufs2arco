@@ -185,6 +185,7 @@ class MOM6Regridder(UFSRegridder):
             periodic=periodic,
             reuse_weights=reuse,
             filename=wfiles["weights_file_t2t"],
+            unmapped_to_nan=True,
         )
         if self.ds_rot is not None:
             reuse = os.path.exists(wfiles["weights_file_u2t"])
@@ -195,6 +196,7 @@ class MOM6Regridder(UFSRegridder):
                 periodic=periodic,
                 reuse_weights=reuse,
                 filename=wfiles["weights_file_u2t"],
+                unmapped_to_nan=True,
             )
             reuse = os.path.exists(wfiles["weights_file_v2t"])
             self.rg_vt = xe.Regridder(
@@ -204,6 +206,7 @@ class MOM6Regridder(UFSRegridder):
                 periodic=periodic,
                 reuse_weights=reuse,
                 filename=wfiles["weights_file_v2t"],
+                unmapped_to_nan=True,
             )
 
     def regrid(self, ds_in: xr.Dataset) -> xr.Dataset:
