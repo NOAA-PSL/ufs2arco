@@ -211,3 +211,78 @@ FV3Dataset:
         - tmp
         - ugrd
         - vgrd
+
+MOM6Dataset:
+    file_prefixes:
+        - ocn_
+    
+    path_out: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/03h-freq/zarr/"
+    coords_path_out: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/coordinates/zarr/"
+    forecast_hours: [0]
+
+    cycles:
+        start: "1994-01-01T00"
+        end: "1999-06-13T06"
+        freq: "6h"
+
+    time:
+        start: "1993-12-31T18"
+        end: "1999-06-13T03"
+        freq: "3h"
+
+    chunks_in:
+        time: 1
+        z_l: 1
+        z_i: 1
+        zl: 1
+        yh: -1
+        xh: -1
+        yq: -1
+        xq: -1
+
+    chunks_out:
+        time: 1
+        z_l: 1
+        z_i: 1
+        zl: 1
+        lat: -1
+        lon: -1
+
+    coords:
+        - xh
+        - xq
+        - yh
+        - yq
+        - z_l
+        - z_i
+        - zl
+
+    data_vars:
+        - evap
+        - fprec
+        - Heat_PmE
+        - ho
+        - latent
+        - lprec
+        - lrunoff
+        - LW
+        - LwLatSens
+        - pbo
+        - sensible
+        - SW
+        - taux
+        - tauy
+        - temp
+        - uo
+        - vo
+        - so
+        - SSH
+
+    regrid:
+        rotation_file: mom6_grid_0.25_degree.nc
+        weights_file_t2t:
+        weights_file_u2t:
+        weights_file_v2t:
+        periodic: True
+
+    gaussian_grid: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/03h-freq/zarr/fv3.zarr"
