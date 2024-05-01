@@ -233,6 +233,13 @@ class ReplayMover1Degree():
         localtime.start("Reading Single Dataset")
         cycle = self.my_cycles(0)[0]
         xds = replay.open_dataset(cycle, **self.ods_kwargs(0))
+
+        if "regrid" in replay.config.keys():
+            xds = self.regrid_to_gaussian(
+                xds=xds,
+                gaussian_grid=replay.config['gaussian_grid'],
+                )
+
         xds = xds.reset_coords()
         localtime.stop()
 
