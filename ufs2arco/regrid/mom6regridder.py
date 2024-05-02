@@ -38,10 +38,9 @@ class MOM6Regridder(UFSRegridder):
         lons1d_out: np.array,
         ds_in: xr.Dataset,
         config_filename: str,
-        interp_method: str = "conservative",
     ) -> None:
         super(MOM6Regridder, self).__init__(
-            lats1d_out, lons1d_out, ds_in, config_filename, interp_method
+            lats1d_out, lons1d_out, ds_in, config_filename
         )
 
     def create_grid_in(
@@ -165,10 +164,11 @@ class MOM6Regridder(UFSRegridder):
         self.ores = f"{nlon_o}x{nlat_o}"
 
         # paths to interpolation weights files
+        interp_method = self.config["interp_method"]
         wfiles = dict()
         for key in ["weights_file_t2t", "weights_file_u2t", "weights_file_v2t"]:
             vin = key[-3]
-            default = f"weights-mom6-{self.ires}.C{vin}.{self.ores}.Ct.{self.interp_method}.nc"
+            default = f"weights-mom6-{self.ires}.C{vin}.{self.ores}.Ct.{interp_method}.nc"
             path = self.config.get(key, None)
             wfiles[key] = path if path is not None else default
 
@@ -178,7 +178,7 @@ class MOM6Regridder(UFSRegridder):
         self.rg_tt = xe.Regridder(
             ds_in_t,
             grid_out,
-            self.interp_method,
+            interp_method,
             periodic=periodic,
             reuse_weights=reuse,
             filename=wfiles["weights_file_t2t"],
@@ -189,7 +189,7 @@ class MOM6Regridder(UFSRegridder):
             self.rg_ut = xe.Regridder(
                 ds_in_u,
                 ds_in_t,
-                self.interp_method,
+                interp_method,
                 periodic=periodic,
                 reuse_weights=reuse,
                 filename=wfiles["weights_file_u2t"],
@@ -199,7 +199,7 @@ class MOM6Regridder(UFSRegridder):
             self.rg_vt = xe.Regridder(
                 ds_in_v,
                 ds_in_t,
-                self.interp_method,
+                interp_method,
                 periodic=periodic,
                 reuse_weights=reuse,
                 filename=wfiles["weights_file_v2t"],

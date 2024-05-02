@@ -12,7 +12,14 @@ import xarray as xr
 import dask.array as darray
 from zarr import NestedDirectoryStore
 
-from ufs2arco import FV3Dataset, MOM6Dataset, CICE6Dataset, Timer, MOM6Regridder
+from ufs2arco import (
+    FV3Dataset, 
+    MOM6Dataset, 
+    CICE6Dataset, 
+    Timer, 
+    MOM6Regridder,
+    CICE6Regridder
+)
 
 class ReplayMover1Degree():
 
@@ -110,15 +117,20 @@ class ReplayMover1Degree():
         self.cycles = pd.date_range(**config[name]["cycles"])
         self.time = pd.date_range(**config[name]["time"])
 
+        self.Regridder = None
         if component.lower() == "fv3":
             self.Dataset = FV3Dataset
             self.cached_path = self.fv3_path
+            if "regrid" in self.config.keys():
+                raise NotImplementedError
         elif component.lower() == "mom6":
             self.Dataset = MOM6Dataset
             self.cached_path = self.mom6_path
+            self.Regridder = MOM6Regridder
         elif component.lower() == "cice6":
             self.Dataset = CICE6Dataset
             self.cached_path = self.cice6_path
+            self.Regridder = CICE6Regridder
 
         # for move_single_dataset, we have to figure out how many resulting timestamps we have
         # within a single DA cycle
@@ -175,7 +187,7 @@ class ReplayMover1Degree():
             )
         lons = gaussian_grid['grid_xt'].values
         lats = gaussian_grid['grid_yt'].values
-        rg = MOM6Regridder(
+        rg = self.Regridder(
             lats1d_out=lats, 
             lons1d_out=lons,
             ds_in=xds, 

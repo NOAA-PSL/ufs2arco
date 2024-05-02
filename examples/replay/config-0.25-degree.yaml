@@ -222,12 +222,12 @@ MOM6Dataset:
 
     cycles:
         start: "1994-01-01T00"
-        end: "1999-06-13T06"
+        end: "2023-12-31T06"
         freq: "6h"
 
     time:
-        start: "1993-12-31T18"
-        end: "1999-06-13T03"
+        start: "1994-01-01T00"
+        end: "2023-12-31T06"
         freq: "3h"
 
     chunks_in:
@@ -284,5 +284,6 @@ MOM6Dataset:
         weights_file_u2t:
         weights_file_v2t:
         periodic: True
+        interp_method: "conservative"
 
     gaussian_grid: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/03h-freq/zarr/fv3.zarr"

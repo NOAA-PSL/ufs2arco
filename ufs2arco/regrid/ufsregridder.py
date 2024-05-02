@@ -54,7 +54,6 @@ class UFSRegridder(ABC):
         lons1d_out: np.array,
         ds_in: xr.Dataset,
         config_filename: str,
-        interp_method: str = "conservative",
     ) -> None:
         """
         Initialize the UFSRegridder object.
@@ -80,7 +79,7 @@ class UFSRegridder(ABC):
         # specify an output resolution
         self.lats1d_out = lats1d_out
         self.lons1d_out = lons1d_out
-        self.interp_method = interp_method
+        self.interp_method = self.config["interp_method"]
 
         # create regridder
         self._create_regridder(ds_in)
