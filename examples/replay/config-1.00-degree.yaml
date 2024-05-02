@@ -235,13 +235,13 @@ MOM6Dataset:
     time:
         start: "1993-12-31T18"
         end: "1999-06-13T03"
-        freq: "3h"
+        freq: "6h"
 
     chunks_in:
         time: 1
-        z_l: 1
-        z_i: 1
-        zl: 1
+        z_l: -1
+        z_i: -1
+        zl: -1
         yh: -1
         xh: -1
         yq: -1
@@ -249,9 +249,9 @@ MOM6Dataset:
 
     chunks_out:
         time: 1
-        z_l: 1
-        z_i: 1
-        zl: 1
+        z_l: -1
+        z_i: -1
+        zl: -1
         lat: -1
         lon: -1
 

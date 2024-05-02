@@ -70,6 +70,8 @@ class MOM6Regridder(UFSRegridder):
         grid_in["lat_u"] = mom6_grid["geolat_u"]
         grid_in["lon_v"] = mom6_grid["geolon_v"]
         grid_in["lat_v"] = mom6_grid["geolat_v"]
+        grid_in['cos_rot'] = mom6_grid["cos_rot"]
+        grid_in['sin_rot'] = mom6_grid["sin_rot"]
         ny, nx = grid_in["lon"].shape
         lon_b = np.empty((ny + 1, nx + 1))
         lat_b = np.empty((ny + 1, nx + 1))
@@ -96,8 +98,9 @@ class MOM6Regridder(UFSRegridder):
         ds_in_v = grid_in[["lon_v", "lat_v", "lat_b", "lon_b"]].rename(
             {"lat_v": "lat", "lon_v": "lon"}
         )
+        ds_rot =  grid_in[['cos_rot','sin_rot']]
 
-        return ds_in_t, ds_in_u, ds_in_v
+        return ds_in_t, ds_in_u, ds_in_v, ds_rot
     
     def create_grid_out(
         self,
@@ -138,20 +141,14 @@ class MOM6Regridder(UFSRegridder):
         self.ds_rot = None
         if self.rotation_file is not None:
             mom6_grid = xr.open_dataset(self.rotation_file)
-            ds_rot = mom6_grid[["cos_rot", "sin_rot"]]
-            self.ds_rot = ds_rot.rename({"xh": "lon", "yh": "lat"})
-        elif "cos_rot" in ds_in and "sin_rot" in ds_in:
-            self.ds_rot = xr.Dataset()
-            self.ds_rot["cos_rot"] = ds_in["cos_rot"]
-            self.ds_rot["sin_rot"] = ds_in["sin_rot"]
         else:
             warnings.warn(
-                f"MOM6Regridder._create_regridder: Could not find 'rotation_file' in configuration yaml. "
-                f"Vector fields will be silently ignored."
+                "MOM6Regridder._create_regridder: Could not find 'rotation_file' in configuration yaml. "
+                "If using conservative regridding, it will fail. Otherwise, just vector fields will be ignored."
             )
 
         # create renamed datasets
-        ds_in_t, ds_in_u, ds_in_v = self.create_grid_in(mom6_grid=mom6_grid)
+        ds_in_t, ds_in_u, ds_in_v, self.ds_rot = self.create_grid_in(mom6_grid=mom6_grid)
 
         # create output dataset
         grid_out = self.create_grid_out(

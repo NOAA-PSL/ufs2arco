@@ -183,10 +183,10 @@ class UFSRegridder(ABC):
 
                 # rotate to earth-relative
                 urot = (
-                    interp_u * ds_rot.cos_rot.values + interp_v * ds_rot.sin_rot.values
+                    interp_u * ds_rot.cos_rot + interp_v * ds_rot.sin_rot
                 )
                 vrot = (
-                    interp_v * ds_rot.cos_rot.values - interp_u * ds_rot.sin_rot.values
+                    interp_v * ds_rot.cos_rot - interp_u * ds_rot.sin_rot
                 )
 
                 # interoplate
