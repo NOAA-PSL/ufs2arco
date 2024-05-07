@@ -216,9 +216,8 @@ MOM6Dataset:
     file_prefixes:
         - ocn_
     
-    path_out: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/03h-freq/zarr/"
-    coords_path_out: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/coordinates/zarr/"
-    forecast_hours: [0]
+    path_out: "gcs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree/06h-freq/zarr/"
+    forecast_hours: [-6]
 
     cycles:
         start: "1994-01-01T00"
@@ -226,9 +225,9 @@ MOM6Dataset:
         freq: "6h"
 
     time:
-        start: "1994-01-01T00"
-        end: "2023-12-31T06"
-        freq: "3h"
+        start: "1993-12-31T18"
+        end: "2023-12-31T00"
+        freq: "6h"
 
     chunks_in:
         time: 1
