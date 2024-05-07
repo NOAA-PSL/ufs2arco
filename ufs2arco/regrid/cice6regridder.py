@@ -35,10 +35,9 @@ class CICE6Regridder(UFSRegridder):
         lons1d_out: np.array,
         ds_in: xr.Dataset,
         config_filename: str,
-        interp_method: str = "bilinear",
     ) -> None:
         super(CICE6Regridder, self).__init__(
-            lats1d_out, lons1d_out, ds_in, config_filename, interp_method
+            lats1d_out, lons1d_out, ds_in, config_filename
         )
 
     def _create_regridder(self, ds_in: xr.Dataset) -> None:
@@ -85,9 +84,10 @@ class CICE6Regridder(UFSRegridder):
 
         # paths to interpolation weights files
         wfiles = dict()
+        interp_method = self.config["interp_method"]
         for key in ["weights_file_t2t", "weights_file_u2t"]:
             vin = key[-3]
-            default = f"weights-cice6-{self.ires}.C{vin}.{self.ores}.Ct.{self.interp_method}.nc"
+            default = f"weights-cice6-{self.ires}.C{vin}.{self.ores}.Ct.{interp_method}.nc"
             path = self.config.get(key, None)
             wfiles[key] = path if path is not None else default
 
@@ -97,7 +97,7 @@ class CICE6Regridder(UFSRegridder):
         self.rg_tt = xe.Regridder(
             ds_in_t,
             grid_out,
-            self.interp_method,
+            interp_method,
             periodic=periodic,
             reuse_weights=reuse,
             filename=wfiles["weights_file_t2t"],
@@ -107,7 +107,7 @@ class CICE6Regridder(UFSRegridder):
             self.rg_ut = xe.Regridder(
                 ds_in_u,
                 ds_in_t,
-                self.interp_method,
+                interp_method,
                 periodic=periodic,
                 reuse_weights=reuse,
                 filename=wfiles["weights_file_u2t"],

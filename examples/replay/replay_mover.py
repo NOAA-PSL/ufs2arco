@@ -12,7 +12,14 @@ import xarray as xr
 import dask.array as darray
 from zarr import NestedDirectoryStore
 
-from ufs2arco import FV3Dataset, MOM6Dataset, CICE6Dataset, Timer
+from ufs2arco import (
+    FV3Dataset, 
+    MOM6Dataset, 
+    CICE6Dataset, 
+    Timer, 
+    MOM6Regridder,
+    CICE6Regridder
+)
 
 class ReplayMover1Degree():
 
@@ -110,15 +117,20 @@ class ReplayMover1Degree():
         self.cycles = pd.date_range(**config[name]["cycles"])
         self.time = pd.date_range(**config[name]["time"])
 
+        self.Regridder = None
         if component.lower() == "fv3":
             self.Dataset = FV3Dataset
             self.cached_path = self.fv3_path
+            if "regrid" in self.config.keys():
+                raise NotImplementedError
         elif component.lower() == "mom6":
             self.Dataset = MOM6Dataset
             self.cached_path = self.mom6_path
+            self.Regridder = MOM6Regridder
         elif component.lower() == "cice6":
             self.Dataset = CICE6Dataset
             self.cached_path = self.cice6_path
+            self.Regridder = CICE6Regridder
 
         # for move_single_dataset, we have to figure out how many resulting timestamps we have
         # within a single DA cycle
@@ -162,12 +174,41 @@ class ReplayMover1Degree():
             localtime.stop()
 
         walltime.stop("Total Walltime")
+    
+    def regrid_to_gaussian(
+            self,
+            xds: xr.Dataset,
+            gaussian_grid_path: str,
+    ) -> xr.Dataset:
+        """Regrid (if needed) - will be used of ocean/sea ice data"""
+        gaussian_grid = xr.open_zarr(
+            gaussian_grid_path,
+            storage_options={"token": "anon"},
+            )
+        lons = gaussian_grid['grid_xt'].values
+        lats = gaussian_grid['grid_yt'].values
+        rg = self.Regridder(
+            lats1d_out=lats, 
+            lons1d_out=lons,
+            ds_in=xds, 
+            config_filename=self.config_filename,
+            )
+        xds = rg.regrid(xds)
+        
+        return xds
+        
 
     def move_single_dataset(self, job_id, cycle):
         """Store a single cycle to zarr"""
 
         replay = self.Dataset(path_in=self.cached_path, config_filename=self.config_filename)
         xds = replay.open_dataset(cycle, **self.ods_kwargs(job_id))
+
+        if "regrid" in replay.config.keys():
+            xds = self.regrid_to_gaussian(
+                xds=xds,
+                gaussian_grid_path=replay.config['gaussian_grid'],
+                )
 
         index = list(self.xtime.values).index(xds.time.values[0])
         tslice = slice(index, index+self.n_steps_per_cycle)
@@ -206,6 +247,13 @@ class ReplayMover1Degree():
         localtime.start("Reading Single Dataset")
         cycle = self.my_cycles(0)[0]
         xds = replay.open_dataset(cycle, **self.ods_kwargs(0))
+
+        if "regrid" in replay.config.keys():
+            xds = self.regrid_to_gaussian(
+                xds=xds,
+                gaussian_grid_path=replay.config['gaussian_grid'],
+                )
+
         xds = xds.reset_coords()
         localtime.stop()
 
@@ -301,7 +349,7 @@ class ReplayMover1Degree():
         return [join(upper, this_file) for this_file in files]
 
     @staticmethod
-    def mom6_path(dates, forecast_hours, file_prefixes):
+    def mom6_path(cycles, forecast_hours, file_prefixes):
         """This is passed to :class:`MOM6Dataset`, and it generates the paths to read from for the given inputs
 
         Note:
@@ -328,16 +376,18 @@ class ReplayMover1Degree():
                 'filecache::s3://noaa-ufs-gefsv13replay-pds/1deg/1994/01/1994010106/ocn_1994_01_01_06.nc']
         """
         upper = "filecache::s3://noaa-ufs-gefsv13replay-pds/1deg"
-        dates = [dates] if not isinstance(dates, Iterable) else dates
+        cycles = [cycles] if not isinstance(cycles, list) else cycles
 
         files = []
-        for date in dates:
-            this_dir = f"{date.year:04d}/{date.month:02d}/{date.year:04d}{date.month:02d}{date.day:02d}{date.hour:02d}"
+        for cycle in cycles:
+            this_dir = f"{cycle.year:04d}/{cycle.month:02d}/{cycle.year:04d}{cycle.month:02d}{cycle.day:02d}{cycle.hour:02d}"
+
             for fp in file_prefixes:
                 for fhr in forecast_hours:
                     this_date = cycle+timedelta(hours=fhr)
                     this_file = f"{this_dir}/{fp}{this_date.year:04d}_{this_date.month:02d}_{this_date.day:02d}_{this_date.hour:02d}.nc"
                     files.append(this_file)
+
         return [join(upper, this_file) for this_file in files]
 
 
@@ -443,13 +493,13 @@ class ReplayMoverQuarterDegree(ReplayMover1Degree):
         return [join(upper, this_file) for this_file in files]
 
     @staticmethod
-    def mom6_path(dates, forecast_hours, file_prefixes):
+    def mom6_path(cycles, forecast_hours, file_prefixes):
         upper = "filecache::s3://noaa-ufs-gefsv13replay-pds"
-        dates = [dates] if not isinstance(dates, Iterable) else dates
+        cycles = [cycles] if not isinstance(cycles, list) else cycles
 
         files = []
-        for date in dates:
-            this_dir = f"{date.year:04d}/{date.month:02d}/{date.year:04d}{date.month:02d}{date.day:02d}{date.hour:02d}"
+        for cycle in cycles:
+            this_dir = f"{cycle.year:04d}/{cycle.month:02d}/{cycle.year:04d}{cycle.month:02d}{cycle.day:02d}{cycle.hour:02d}"
             for fp in file_prefixes:
                 for fhr in forecast_hours:
                     this_date = cycle+timedelta(hours=fhr)
