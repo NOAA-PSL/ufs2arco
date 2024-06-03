@@ -27,7 +27,8 @@ class Timer:
         if self.is_running:
             raise TimerError("Timer is running. Use .stop() to stop it")
 
-        self._print(f" --- {mytitle} --- ")
+        if mytitle != "":
+            self._print(f" --- {mytitle} --- ")
         self._start_time = time.perf_counter()
 
     def get_elapsed(self):
@@ -49,7 +50,8 @@ class Timer:
             raise TimerError("Timer is not running. Use .start() to start it")
         elapsed_time = self.get_elapsed()
         self._start_time = None
-        self._print(f"{mytitle}: {elapsed_time:.4f} seconds\n")
+        if mytitle is not None:
+            self._print(f"{mytitle}: {elapsed_time:.4f} seconds\n")
         return float(elapsed_time)
 
     def _print(self, *args, **kwargs):
