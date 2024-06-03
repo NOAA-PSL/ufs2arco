@@ -54,6 +54,14 @@ class Timer:
             self._print(f"{mytitle}: {elapsed_time:.4f} seconds\n")
         return float(elapsed_time)
 
+    def now(self):
+        """Return the time elapsed since timer was started, without stopping the timer
+
+        Returns:
+            (float): elapsed time in seconds
+        """
+        return float(self.get_elapsed())
+
     def _print(self, *args, **kwargs):
         """Print the timing to :attr:`filename` if specified, or to screen.
 
