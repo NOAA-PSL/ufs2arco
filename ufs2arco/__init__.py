@@ -1,4 +1,4 @@
-__version__ = "0.0.2"
+__version__ = "0.1.0"
 
 from .cice6dataset import CICE6Dataset
 from .fv3dataset import FV3Dataset
