@@ -1,6 +1,6 @@
 [project]
 name = "ufs2arco"
-version = "0.1.0"
+version = "0.1.1"
 description = "Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Cloud Optimized (ARCO) format"
 authors = [
     {name="Timothy Smith", email="tim.smith@noaa.gov"},
