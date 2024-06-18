@@ -1,11 +1,13 @@
 [project]
 name = "ufs2arco"
-version = "0.0.2"
+version = "0.1.0"
 description = "Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Cloud Optimized (ARCO) format"
 authors = [
     {name="Timothy Smith", email="tim.smith@noaa.gov"},
-    {name="Lauryn Eldridge", email="leldridge@wvhtf.org"},
-    {name="Ken Witt", email="kwitt@wvhtf.org"},
+    {name="Daniel Abdi"},
+    {name="Mariah Pope"},
+    {name="Lauryn Eldridge"},
+    {name="Ken Witt"},
 ]
 license = {file = "LICENSE.txt"}
 readme = "README.md"
