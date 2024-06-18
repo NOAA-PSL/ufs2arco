@@ -1,6 +1,6 @@
 [project]
 name = "ufs2arco"
-version = "0.1.0"
+version = "0.1.1"
 description = "Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Cloud Optimized (ARCO) format"
 authors = [
     {name="Timothy Smith", email="tim.smith@noaa.gov"},
@@ -42,5 +42,5 @@ documentation="https://ufs2arco.readthedocs.io/en/latest/"
 requires = ["setuptools>=64.0.0", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["ufs2arco"]
+[tool.setuptools]
+packages = ["ufs2arco"]
