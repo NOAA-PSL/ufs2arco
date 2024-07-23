@@ -96,7 +96,7 @@ class Layers2Pressure():
             prsi (xr.DataArray): 3D pressure field (or 4D if input has time) at vertical grid interfaces (Pa)
         """
 
-        return self.ak + pressfc*self.bk
+        return self.ak.astype(pressfc.dtype) + pressfc*self.bk.astype(pressfc.dtype)
 
     def calc_pressure_thickness(self, prsi) -> xr.DataArray:
         """Compute pressure thickness at each vertical level
