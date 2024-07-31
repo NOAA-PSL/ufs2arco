@@ -163,6 +163,37 @@ class Layers2Pressure():
         # see https://github.com/NOAA-GFDL/GFDL_atmos_cubed_sphere/blob/ab195d5026ca4c221b6cbb3888c8ae92d711f89a/driver/fvGFS/atmosphere.F90#L2125-L2131
         return dpres*rTv / (-self.g*delz)
 
+
+    def calc_geopotential(self, hgtsfc, delz):
+        """Note delz has to have vertical coordinate named level not pfull"""
+
+        # a coordinate helper
+        kp1_left = xr.DataArray(
+            np.arange(len(self.level)),
+            coords={"level": self.level.values},
+        )
+
+        # Geopotential at the surface
+        phi0 = self.g * hgtsfc
+        phi0 = phi0.expand_dims({"kp1": [len(self.level)]})
+
+        # Concatenate, cumulative sum from the ground to TOA
+        dz = self.g*np.abs(delz)
+        dz["kp1"] = kp1_left.sel(level=delz["level"])
+        dz = dz.swap_dims({"level": "kp1"}).drop_vars("level")
+
+        phii = xr.concat([dz,phi0], dim="kp1")
+
+        phii = phii.sortby("kp1", ascending=False)
+        phii = phii.cumsum("kp1")
+        phii = phii.sortby("kp1", ascending=True)
+
+        # At last, geopotential is interfacial value + .5 * layer thickness * gravity
+        geopotential = phii - 0.5 * dz
+        geopotential = geopotential.swap_dims({"kp1": "level"}).drop_vars("kp1")
+        geopotential.attrs["units"] = "m^2 / s^2"
+        return geopotential
+
     def interp2pressure(self, xda, pstar, prsl, cds=None):
         """Interpolate data on FV3 native vertical grid to pressure level (p*)
 
@@ -218,8 +249,7 @@ class Layers2Pressure():
         })
 
 
-    def calc_geopotential(self, dpres, delz, hgtsfc):
-        raise NotImplementedError
+
 
     def _dkp1_to_level(self, xda):
         xda = xda.rename({"kp1": "k"})
