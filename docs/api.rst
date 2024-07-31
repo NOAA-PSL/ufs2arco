@@ -19,5 +19,6 @@ Regridding
 .. autosummary::
    :toctree: generated/
 
+   ufs2arco.Layers2Pressure
    ufs2arco.MOM6Regridder
    ufs2arco.CICE6Regridder
