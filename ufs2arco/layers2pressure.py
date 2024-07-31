@@ -168,16 +168,19 @@ class Layers2Pressure():
         """
 
         if cds is None:
-            cds = _get_interp_coefficients(pstar, prsl)
+            cds = self.get_interp_coefficients(pstar, prsl)
 
         xda_left = xda.where(cds["is_left"]).sum("level")
         xda_right = xda.where(cds["is_right"]).sum("level")
 
-        return xda_left + (xda_right - xda_left) * cds["factor"]
+        result = xda_left + (xda_right - xda_left) * cds["factor"]
+
+        mask = (cds["is_right"].sum("level") > 0) & (cds["is_left"].sum("level") > 0)
+        return result.where(mask)
 
 
     @staticmethod
-    def _get_interp_coefficients(pstar: float, prsl: xr.DataArray) -> xr.Dataset:
+    def get_interp_coefficients(pstar: float, prsl: xr.DataArray) -> xr.Dataset:
         dlev = pstar - prsl
         dloglev = np.log(pstar) - np.log(prsl)
 
