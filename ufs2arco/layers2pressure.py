@@ -181,6 +181,15 @@ class Layers2Pressure():
 
     @staticmethod
     def get_interp_coefficients(pstar: float, prsl: xr.DataArray) -> xr.Dataset:
+        """Compute the coefficients needed to interpolate between pressure levels
+
+        Args:
+            pstar (float): pressure level to interpolate to in same units as prsl
+            prsl (xr.DataArray): layer mean pressure
+
+        Returns:
+            cds (xr.Dataset): with coefficients needed to do interpolation
+        """
         dlev = pstar - prsl
         dloglev = np.log(pstar) - np.log(prsl)
 
