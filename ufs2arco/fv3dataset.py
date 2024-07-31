@@ -50,6 +50,7 @@ class FV3Dataset(UFSDataset):
         return xds
 
 
+
 class Layers2Pressure():
     """A class to interpolate from Lagrangian layers to pressure levels, and also compute layer thickness, etc"""
     g = 9.80665     # m / s^2
@@ -165,7 +166,14 @@ class Layers2Pressure():
 
 
     def calc_geopotential(self, hgtsfc, delz):
-        """Note delz has to have vertical coordinate named level not pfull"""
+        """Compute geopotential field
+
+        Args:
+            hgtsfc, delz (xr.DataArray): surface/orographic height, and vertical layer thickness
+
+        Returns:
+            geopotential (xr.DataArray): height in [m^2 / s^2] (i.e. height * gravity)
+        """
 
         # a coordinate helper
         kp1_left = xr.DataArray(
