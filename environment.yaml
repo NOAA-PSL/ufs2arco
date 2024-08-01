@@ -16,6 +16,7 @@ dependencies:
     - dask[complete]
     - zarr
     - cftime
+    - cfgrib
 # jupyter etc
     - jupyter
     - ipython
