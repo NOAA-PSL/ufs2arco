@@ -151,7 +151,8 @@ class Layers2Pressure():
         # At last, geopotential is interfacial value + .5 * layer thickness * gravity
         geopotential = phii - 0.5 * dz
         geopotential = geopotential.swap_dims({"kp1": "level"}).drop_vars("kp1")
-        geopotential.attrs["units"] = "m^2 / s^2"
+        geopotential.attrs["units"] = "m**2 / s**2"
+        geopotential.attrs["description"] = "Diagnosed using ufs2arco.Layers2Pressure.calc_geopotential"
         return geopotential
 
     def interp2pressure(self, xda, pstar, prsl, cds=None):
