@@ -4,7 +4,10 @@ from typing import Tuple
 
 from absl import app
 from absl import flags
+import logging
 import apache_beam as beam
+from apache_beam.options.pipeline_options import PipelineOptions
+from apache_beam.runners.dask.dask_runner import DaskRunner
 import numpy as np
 import xarray as xr
 import xarray_beam as xbeam
@@ -16,7 +19,8 @@ from localzarr import ChunksToZarr
 
 INPUT_PATH = flags.DEFINE_string('input_path', None, help='Input Zarr path')
 OUTPUT_PATH = flags.DEFINE_string('output_path', None, help='Output Zarr path')
-RUNNER = flags.DEFINE_string('runner', None, 'beam.runners.Runner')
+RUNNER = flags.DEFINE_string('runner', "DirectRunner", 'beam.runners.Runner')
+TIME_LENGTH = flags.DEFINE_integer('time_length', None, help="Number of time slices to use for debugging")
 
 def calc_geopotential(
     key: xbeam.Key,
@@ -34,15 +38,18 @@ def calc_geopotential(
     return key, newds
 
 def main(argv):
+
     setup_log()
     path = INPUT_PATH.value
     kwargs = {}
+
     if "gs://" in path or "gcs://" in path:
         kwargs["storage_options"] = {"token": "anon"}
-    source_dataset, source_chunks = xbeam.open_zarr(path, **kwargs)
 
-    source_dataset = source_dataset.isel(time=slice(10))
+    source_dataset, source_chunks = xbeam.open_zarr(path, **kwargs)
     source_dataset = source_dataset.drop_vars(["cftime", "ftime"])
+    if TIME_LENGTH.value is not None:
+        source_dataset = source_dataset.isel(time=slice(int(TIME_LENGTH.value)))
 
     # create template
     tds = source_dataset[["tmp"]].rename({"tmp": "geopotential"})
@@ -54,14 +61,19 @@ def main(argv):
     output_chunks = {k: source_chunks[k] for k in tds["geopotential"].dims}
 
     template = xbeam.make_template(tds)
+    kwargs = dict()
+    if "gs://" in OUTPUT_PATH.value:
+        kwargs["storage_options"] = {"token": "/contrib/Tim.Smith/.gcs/replay-service-account.json"}
 
     with beam.Pipeline(runner=RUNNER.value, argv=argv) as root:
         (
             root
             | xbeam.DatasetToChunks(source_dataset, source_chunks)
             | beam.MapTuple(calc_geopotential)
-            | ChunksToZarr(OUTPUT_PATH.value, template, output_chunks)
+            | ChunksToZarr(OUTPUT_PATH.value, template, output_chunks, **kwargs)
         )
+
+    logging.info("Done")
 
 if __name__ == "__main__":
     app.run(main)
