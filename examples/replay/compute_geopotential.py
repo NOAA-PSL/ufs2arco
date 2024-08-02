@@ -21,6 +21,7 @@ INPUT_PATH = flags.DEFINE_string('input_path', None, help='Input Zarr path')
 OUTPUT_PATH = flags.DEFINE_string('output_path', None, help='Output Zarr path')
 RUNNER = flags.DEFINE_string('runner', "DirectRunner", 'beam.runners.Runner')
 TIME_LENGTH = flags.DEFINE_integer('time_length', None, help="Number of time slices to use for debugging")
+NUM_WORKERS = flags.DEFINE_integer('num_workers', None, help="Number of workers for the runner")
 
 def calc_geopotential(
     key: xbeam.Key,
@@ -61,16 +62,22 @@ def main(argv):
     output_chunks = {k: source_chunks[k] for k in tds["geopotential"].dims}
 
     template = xbeam.make_template(tds)
-    kwargs = dict()
+    storage_options = None
     if "gs://" in OUTPUT_PATH.value:
-        kwargs["storage_options"] = {"token": "/contrib/Tim.Smith/.gcs/replay-service-account.json"}
+        storage_options = {"token": "/contrib/Tim.Smith/.gcs/replay-service-account.json"}
 
-    with beam.Pipeline(runner=RUNNER.value, argv=argv) as root:
+    pipeline_kwargs = {}
+    if NUM_WORKERS.value is not None:
+        pipeline_kwargs["options"]=PipelineOptions(
+            direct_num_workers=NUM_WORKERS.value,
+        )
+
+    with beam.Pipeline(runner=RUNNER.value, argv=argv, **pipeline_kwargs) as root:
         (
             root
             | xbeam.DatasetToChunks(source_dataset, source_chunks)
             | beam.MapTuple(calc_geopotential)
-            | ChunksToZarr(OUTPUT_PATH.value, template, output_chunks, **kwargs)
+            | ChunksToZarr(OUTPUT_PATH.value, template, output_chunks, storage_options=storage_options)
         )
 
     logging.info("Done")
