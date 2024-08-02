@@ -60,6 +60,7 @@ def main(argv):
         "description": "Diagnosed using ufs2arco.Layers2Pressure.calc_geopotential",
         "long_name": "geopotential height",
     }
+    input_chunks = {k: source_chunks[k] if k != "pfull" else 127 for k in tds["geopotential"].dims}
     output_chunks = {k: source_chunks[k] for k in tds["geopotential"].dims}
 
     template = xbeam.make_template(tds)
@@ -76,7 +77,7 @@ def main(argv):
     with beam.Pipeline(runner=RUNNER.value, argv=argv, **pipeline_kwargs) as root:
         (
             root
-            | xbeam.DatasetToChunks(source_dataset, source_chunks)
+            | xbeam.DatasetToChunks(source_dataset, input_chunks, num_threads=NUM_THREADS.value)
             | beam.MapTuple(calc_geopotential)
             | ChunksToZarr(OUTPUT_PATH.value, template, output_chunks, num_threads=NUM_THREADS.value, storage_options=storage_options)
         )
