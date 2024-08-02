@@ -22,6 +22,7 @@ OUTPUT_PATH = flags.DEFINE_string('output_path', None, help='Output Zarr path')
 RUNNER = flags.DEFINE_string('runner', "DirectRunner", 'beam.runners.Runner')
 TIME_LENGTH = flags.DEFINE_integer('time_length', None, help="Number of time slices to use for debugging")
 NUM_WORKERS = flags.DEFINE_integer('num_workers', None, help="Number of workers for the runner")
+NUM_THREADS = flags.DEFINE_integer('num_threads', None, help="Passed to ChunksToZarr")
 
 def calc_geopotential(
     key: xbeam.Key,
@@ -77,7 +78,7 @@ def main(argv):
             root
             | xbeam.DatasetToChunks(source_dataset, source_chunks)
             | beam.MapTuple(calc_geopotential)
-            | ChunksToZarr(OUTPUT_PATH.value, template, output_chunks, storage_options=storage_options)
+            | ChunksToZarr(OUTPUT_PATH.value, template, output_chunks, num_threads=NUM_THREADS.value, storage_options=storage_options)
         )
 
     logging.info("Done")
