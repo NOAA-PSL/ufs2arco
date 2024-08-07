@@ -15,7 +15,7 @@ def submit_slurm_checker(resolution, varname):
         f"from verify_gcs import run_verification\n"+\
         f"run_verification('{resolution}', '{varname}')"
 
-    slurm_dir = f"slurm/verify-{resolution}-degree"
+    slurm_dir = f"slurm/verify-{resolution}"
     txt = "#!/bin/bash\n\n" +\
         f"#SBATCH -J verify_{varname}\n"+\
         f"#SBATCH -o {slurm_dir}/{varname}.%j.out\n"+\
@@ -64,11 +64,13 @@ def run_verification(resolution, varname):
 
     timer.start(f"Checking {varname}")
     ds = xr.open_zarr(
-        f"gcs://noaa-ufs-gefsv13replay/ufs-hr1/{resolution}-degree/03h-freq/zarr/fv3.zarr",
+        f"gcs://noaa-ufs-gefsv13replay/ufs-hr1/{resolution}/03h-freq/zarr/fv3.zarr",
         storage_options={"token": "anon"},
     )
 
     point2d = ds[varname].isel(grid_xt=100, grid_yt=100)
+    if resolution in ("1.00-degree", "0.25-degree-subsampled"):
+        point2d = point2d.load()
     all_missing_cycles = []
     if "pfull" in point2d.dims:
 
@@ -93,11 +95,11 @@ def run_verification(resolution, varname):
 if __name__ == "__main__":
 
 
-    resolution = "1.00"
-    ds = xr.open_zarr(
-        f"gcs://noaa-ufs-gefsv13replay/ufs-hr1/{resolution}-degree/03h-freq/zarr/fv3.zarr",
-        storage_options={"token": "anon"},
-    )
-    data_vars = list(ds.data_vars)
-    for key in data_vars:
-        submit_slurm_checker(resolution, key)
+    for resolution in ["1.00-degree", "0.25-degree-subsampled"]:
+        ds = xr.open_zarr(
+            f"gcs://noaa-ufs-gefsv13replay/ufs-hr1/{resolution}/03h-freq/zarr/fv3.zarr",
+            storage_options={"token": "anon"},
+        )
+        data_vars = list(ds.data_vars)
+        for key in data_vars:
+            submit_slurm_checker(resolution, key)
