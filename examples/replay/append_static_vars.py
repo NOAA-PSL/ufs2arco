@@ -1,4 +1,9 @@
-"""Compute geopotential from Replay dataset"""
+"""Compute static variables surface orography and land/sea mask,
+append it back to the original or store it locally depending on inputs
+
+Note: this was heavily borrowed from this xarray-beam example:
+https://github.com/google/xarray-beam/blob/main/examples/era5_climatology.py
+"""
 
 from typing import Tuple
 
