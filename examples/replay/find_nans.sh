@@ -10,7 +10,7 @@ awk '!/ 0 NaN/ && (/NaN/) {print FILENAME, $1, $2, $3, $4}' slurm/verify-1.00-de
 echo ""
 echo ""
 
-echo " --- 0.25 Degree ---"
+echo " --- 0.25 Degree Subsampled ---"
 awk '!/ 0 NaN/ && (/NaN/) {print FILENAME, $1, $2, $3, $4}' slurm/verify-0.25-degree-subsampled/*.out
 echo ""
 echo ""
