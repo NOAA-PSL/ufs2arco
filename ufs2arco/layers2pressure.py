@@ -171,7 +171,7 @@ class Layers2Pressure():
         temp: xr.DataArray,
         spfh: xr.DataArray,
     ) -> xr.DataArray:
-        """Compute layer thickness at each vertical level
+        """Compute a hydrostatic approximation of the layer thickness at each vertical level.
 
         Args:
             pressfc, temp, spfh (xr.DataArray): surface pressure, temperature, and specific humidity
@@ -193,6 +193,9 @@ class Layers2Pressure():
         delz: xr.DataArray,
     ) -> xr.DataArray:
         """Compute pressure at vertical grid cell center (i.e., layer mean)
+
+        Note:
+            If ``delz`` is computed by :meth:`calc_delz`, then a hydrostatic approximation is used. This may be inconsistent with the original simulation/dataset.
 
         Args:
             pressfc, temp, spfh, delz (xr.DataArray): surface pressure, temperature, specific humidity, and layer thickness
@@ -220,6 +223,9 @@ class Layers2Pressure():
 
     def calc_geopotential(self, hgtsfc: xr.DataArray, delz: xr.DataArray) -> xr.DataArray:
         """Compute geopotential field
+
+        Note:
+            If ``delz`` is computed by :meth:`calc_delz`, then a hydrostatic approximation is used. This may be inconsistent with the original simulation/dataset.
 
         Args:
             hgtsfc, delz (xr.DataArray): surface/orographic height, and vertical layer thickness
