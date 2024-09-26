@@ -5,7 +5,19 @@ import numpy as np
 import xarray as xr
 
 class Layers2Pressure():
-    """A class to interpolate from Lagrangian layers to pressure levels, and also compute layer thickness, etc"""
+    """A class to interpolate from Lagrangian layers to pressure levels, and also compute layer thickness, etc
+
+    Args:
+        ak, bk (np.ndarray, optional): coefficients that define the vertical grid. If not provided, will
+            default to the 127 vertical levels defined for NOAA GFS
+        pfull, phalf (np.ndarray, optional): if ak and bk are provided, these are not necessary since they
+            can be computed from those coefficients. However, these can be provided in case there are slight
+            numerical differences between how these values are computed here, versus the grid information
+            from an existing dataset.
+        level_name, interface_name (str, optional): names to use for the vertical coordinate at
+            cell center and interfaces, defaulting to "pfull" and "phalf" as in FV3. However,
+            new names can be provided in order to work with datasets that use a different name.
+    """
     g = 9.80665     # m / s^2
     Rd = 287.05     # J / kg / K
     Rv = 461.5      # J / kg / K
@@ -19,7 +31,12 @@ class Layers2Pressure():
         bk: Optional[np.ndarray]=None,
         pfull: Optional[np.ndarray]=None,
         phalf: Optional[np.ndarray]=None,
+        level_name: Optional[str]="pfull",
+        interface_name: Optional[str]="phalf",
     ):
+
+        self.level_name = level_name
+        self.interface_name = interface_name
 
         if ak is None and bk is None:
             self.xds = self._get_default_vertical_grid()
@@ -29,6 +46,7 @@ class Layers2Pressure():
 
             newxds = self._get_xds(ak, bk, pfull, phalf)
             self.xds = newxds
+
 
     def _get_default_vertical_grid(self):
 
@@ -43,8 +61,8 @@ class Layers2Pressure():
         return self._get_xds(ak, bk, pfull)
 
 
-    @staticmethod
     def _get_xds(
+        self,
         ak: np.ndarray,
         bk: np.ndarray,
         pfull: Optional[np.ndarray]=None,
@@ -65,19 +83,19 @@ class Layers2Pressure():
         # Now convert
         phalf = xr.DataArray(
             phalf,
-            coords={"phalf": phalf},
-            dims=("phalf",),
+            coords={self.interface_name: phalf},
+            dims=(self.interface_name,),
         )
         pfull = xr.DataArray(
             pfull,
-            coords={"pfull": pfull},
-            dims=("pfull",),
+            coords={self.level_name: pfull},
+            dims=(self.level_name,),
         )
 
         ak = xr.DataArray(
             ak,
-            coords={"phalf": phalf},
-            dims=("phalf",),
+            coords={self.interface_name: phalf},
+            dims=(self.interface_name,),
         )
         bk = xr.DataArray(
             bk,
@@ -88,10 +106,10 @@ class Layers2Pressure():
         xds = xr.Dataset({
             "ak": ak,
             "bk": bk,
-            "pfull": pfull,
-            "phalf": phalf,
+            self.level_name: pfull,
+            self.interface_name: phalf,
         })
-        xds = xds.set_coords(["ak", "bk", "phalf", "pfull"])
+        xds = xds.set_coords(["ak", "bk", self.interface_name, self.level_name])
         return xds
 
     @property
@@ -104,11 +122,11 @@ class Layers2Pressure():
 
     @property
     def pfull(self):
-        return self.xds["pfull"]
+        return self.xds[self.level_name]
 
     @property
     def phalf(self):
-        return self.xds["phalf"]
+        return self.xds[self.interface_name]
 
 
     def calc_pressure_interfaces(self, pressfc: xr.DataArray) -> xr.DataArray:
@@ -132,8 +150,8 @@ class Layers2Pressure():
         Returns:
             dpres (xr.DataArray): Pressure thickness at each vertical level (Pa)
         """
-        dpres = prsi.diff("phalf", label="lower")
-        return self._dphalf_to_pfull(dpres)
+        dpres = prsi.diff(self.interface_name, label="lower")
+        return self._dphalf_to_pfull(dpres, name="dpres")
 
     def calc_dlogp(self, prsi: xr.DataArray) -> xr.DataArray:
         """Compute difference of log of interface pressure
@@ -144,8 +162,8 @@ class Layers2Pressure():
         Returns:
             dlogp (xr.DataArray): np.log(prsi).diff("phalf")
         """
-        dlogp = np.log(prsi).diff("phalf", label="lower")
-        return self._dphalf_to_pfull(dlogp)
+        dlogp = np.log(prsi).diff(self.interface_name, label="lower")
+        return self._dphalf_to_pfull(dlogp, name="dlogp")
 
     def calc_delz(
         self,
@@ -163,7 +181,7 @@ class Layers2Pressure():
         """
         prsi = self.calc_pressure_interfaces(pressfc)
         dlogp = self.calc_dlogp(prsi)
-        dlogp = dlogp.sel(pfull=temp["pfull"])
+        dlogp = dlogp.sel({self.level_name: temp[self.level_name]})
         spfh_thresh = spfh.where(spfh > self.q_min, self.q_min)
         return -self.Rd /  self.g * temp * (1. + self.z_vir*spfh_thresh) * dlogp
 
@@ -185,7 +203,7 @@ class Layers2Pressure():
 
         prsi = self.calc_pressure_interfaces(pressfc)
         dpres = self.calc_pressure_thickness(prsi)
-        dpres = dpres.sel(pfull=temp["pfull"])
+        dpres = dpres.sel({self.level_name: temp[self.level_name]})
 
         # rTv computed here:
         # https://github.com/NOAA-GFDL/GFDL_atmos_cubed_sphere/blob/ab195d5026ca4c221b6cbb3888c8ae92d711f89a/driver/fvGFS/atmosphere.F90#L2199-L2200
@@ -213,7 +231,7 @@ class Layers2Pressure():
         # a coordinate helper
         kp1_left = xr.DataArray(
             np.arange(len(self.pfull)),
-            coords={"pfull": self.pfull.values},
+            coords={self.level_name: self.pfull.values},
         )
 
         # Geopotential at the surface
@@ -222,8 +240,8 @@ class Layers2Pressure():
 
         # Concatenate, cumulative sum from the ground to TOA
         dz = self.g*np.abs(delz)
-        dz["kp1"] = kp1_left.sel(pfull=delz["pfull"])
-        dz = dz.swap_dims({"pfull": "kp1"}).drop_vars("pfull")
+        dz["kp1"] = kp1_left.sel({self.level_name: delz[self.level_name]})
+        dz = dz.swap_dims({self.level_name: "kp1"}).drop_vars(self.level_name)
 
         phii = xr.concat([dz,phi0], dim="kp1")
 
@@ -233,7 +251,7 @@ class Layers2Pressure():
 
         # At last, geopotential is interfacial value + .5 * layer thickness * gravity
         geopotential = phii - 0.5 * dz
-        geopotential = geopotential.swap_dims({"kp1": "pfull"}).drop_vars("kp1")
+        geopotential = geopotential.swap_dims({"kp1": self.level_name}).drop_vars("kp1")
         geopotential.attrs["units"] = "m**2 / s**2"
         geopotential.attrs["description"] = "Diagnosed using ufs2arco.Layers2Pressure.calc_geopotential"
         return geopotential
@@ -260,17 +278,16 @@ class Layers2Pressure():
         if cds is None:
             cds = self.get_interp_coefficients(pstar, prsl)
 
-        xda_left = xda.where(cds["is_left"]).sum("pfull")
-        xda_right = xda.where(cds["is_right"]).sum("pfull")
+        xda_left = xda.where(cds["is_left"]).sum(self.level_name)
+        xda_right = xda.where(cds["is_right"]).sum(self.level_name)
 
         result = xda_left + (xda_right - xda_left) * cds["factor"]
 
-        mask = (cds["is_right"].sum("pfull") > 0) & (cds["is_left"].sum("pfull") > 0)
+        mask = (cds["is_right"].sum(self.level_name) > 0) & (cds["is_left"].sum(self.level_name) > 0)
         return result.where(mask)
 
 
-    @staticmethod
-    def get_interp_coefficients(pstar: float, prsl: xr.DataArray) -> xr.Dataset:
+    def get_interp_coefficients(self, pstar: float, prsl: xr.DataArray) -> xr.Dataset:
         """Compute the coefficients needed to interpolate between pressure levels
 
         Args:
@@ -284,12 +301,12 @@ class Layers2Pressure():
         dloglev = np.log(pstar) - np.log(prsl)
 
         # get coefficients representing pressure distance left and right of pstar
-        is_left = dlev == dlev.where(dlev>=0).min("pfull")
-        is_right = dlev == dlev.where(dlev<=0).max("pfull")
+        is_left = dlev == dlev.where(dlev>=0).min(self.level_name)
+        is_right = dlev == dlev.where(dlev<=0).max(self.level_name)
 
         # TODO: add extrapolation from level to ground here
-        p_left = dloglev.where(is_left).sum("pfull")
-        p_right = -dloglev.where(is_right).sum("pfull")
+        p_left = dloglev.where(is_left).sum(self.level_name)
+        p_right = -dloglev.where(is_right).sum(self.level_name)
 
         denominator = p_left + p_right
         denominator = denominator.where(denominator > 1e-6, 1e-6)
@@ -310,25 +327,10 @@ class Layers2Pressure():
             "factor": factor,
         })
 
-
-    def _dphalf_to_pfull(self, xda):
-        xda["pfull"] = self.pfull
-        xda = xda.swap_dims({"phalf": "pfull"})
-        xda = xda.drop_vars("phalf")
-        return xda
-
-# for now... revert back to pfull...
-# could add this code for the times I wrote level, but this makes more sense...
-#    def _maybe_rename_level2pfull(self, xda):
-#        had_pfull = True
-#        if "level" in xda.dims and "pfull" not in xda.dims:
-#            had_pfull = False
-#            with xr.set_options(keep_attrs=True):
-#                xda = xda.rename({"level": "pfull"})
-#        return xda, had_pfull
-#
-#    def _maybe_rename_pfull2level(self, xda, had_pfull):
-#        if not had_pfull:
-#            with xr.set_options(keep_attrs=True):
-#                xda = xda.rename({"pfull": "level"})
-#        return xda
+    def _dphalf_to_pfull(self, xda, name):
+        xds = xda.to_dataset(name=name)
+        xds = xds.assign_coords(self.pfull.coords)
+        xds[self.level_name] = xds[self.level_name].swap_dims({self.level_name: self.interface_name})
+        xds = xds.swap_dims({self.interface_name: self.level_name})
+        xds = xds.drop_vars(self.interface_name)
+        return xds[name]
