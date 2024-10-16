@@ -30,6 +30,22 @@ python move_one_degree.py
 Currently only the FV3 data is being moved, and it can be found
 [in this zarr store](https://console.cloud.google.com/storage/browser/noaa-ufs-gefsv13replay/ufs-hr1/1.00-degree/03h-freq/zarr/fv3.zarr).
 
+
+### Missing data
+
+There are some time stamps that are missing (the 2D fields are all NaNs for those time steps) for the following fields,
+only in the 1 degree dataset:
+- hgtsfc
+- sltyp
+- weasd
+
+Since hgtsfc and sltyp are static, this doesn't matter, we can just grab the
+first timestamp. If 1 degree weasd is
+needed in the future then we'll need to move this again.
+Also, the field `hgtsfc_static` has been added which rightfully does not have
+the time dimension.
+
+
 ## 1/4 Degree Data
 
 [move_quarter_degree.py](move_quarter_degree.py)
