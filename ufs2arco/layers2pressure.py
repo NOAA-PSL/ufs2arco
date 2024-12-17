@@ -243,11 +243,13 @@ class Layers2Pressure():
         # Geopotential at the surface
         phi0 = self.g * hgtsfc
         phi0 = phi0.expand_dims({"kp1": [len(self.pfull)]})
+        phi0 = phi0.reset_coords(drop=True)
 
         # Concatenate, cumulative sum from the ground to TOA
         dz = self.g*np.abs(delz)
         dz["kp1"] = kp1_left.sel({self.level_name: delz[self.level_name]})
         dz = dz.swap_dims({self.level_name: "kp1"}).drop_vars(self.level_name)
+        dz = dz.reset_coords(drop=True)
 
         phii = xr.concat([dz,phi0], dim="kp1")
 
