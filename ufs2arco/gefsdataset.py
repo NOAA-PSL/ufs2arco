@@ -150,7 +150,7 @@ class GEFSDataset():
         bucket = f"s3://noaa-gefs-pds"
         outer = f"gefs.{date.year:04d}{date.month:02d}{date.day:02d}/{date.hour:02d}/pgrb2{a_or_b}"
         fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}f{fhr:02d}"
-        return f"simplecache::{bucket}/{outer}/{fname}"
+        return f"filecache::{bucket}/{outer}/{fname}"
 
 
     @property
