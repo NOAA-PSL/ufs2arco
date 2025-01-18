@@ -8,7 +8,25 @@ import xarray as xr
 
 from .log import setup_simple_log
 
+
 class GEFSDataset():
+    """Pull GEFS data from s3://noaa-gefs-pds
+
+    Here are the full options
+
+    dates:
+      start: 2017-01-01T00
+      end: ... basically current date
+
+    fhrs: [0, 6]
+    ... need to fill this out
+
+    TODO:
+        * fhrs as start/end since there are many
+        * figure out the threshold dates where bucket format changes
+        * add a create_container method along with store_path attr
+
+    """
 
     def __init__(
         self,
@@ -33,28 +51,40 @@ class GEFSDataset():
         logging.info(f"Forecast Hours:\n{self.fhrs}\n")
         logging.info(f"Members:\n{self.members}\n")
 
-    def open_dataset(self):
+    def __len__(self) -> int:
+        return len(self.dates)
+
+    def open_dataset(self, cache_dir="./gribcache"):
+        """This is the naive version of the code, incorrectly assuming
+
+        1. We can keep the whole dataset in memory
+        2. We can just loop through every single time slice
+        """
 
         dlist = []
         for date in self.dates:
-            flist = []
-            for fhr in self.fhrs:
-                logging.info(f"Reading {date}, {fhr}h for members {self.members[0]} - {self.members[-1]}")
-                single_time_slice = xr.merge(
-                    [
-                        self.open_single_dataset(
-                            date=date,
-                            fhr=fhr,
-                            member=member,
-                        )
-                        for member in self.members
-                    ],
-                )
-                flist.append(single_time_slice)
-            dlist.append(xr.merge(flist))
+            fds = self.open_single_initial_condition(date, cache_dir=cache_dir)
+            dlist.append(fds)
         xds = xr.merge(dlist)
-        print(xds)
         return xds
+
+    def open_single_initial_condition(self, date, cache_dir="./gribcache"):
+        """It is safe to assume we can have this in memory"""
+
+        for fhr in self.fhrs:
+            logging.info(f"Reading {date}, {fhr}h for members {self.members[0]} - {self.members[-1]}")
+            single_time_slice = xr.merge(
+                [
+                    self.open_single_dataset(
+                        date=date,
+                        fhr=fhr,
+                        member=member,
+                    )
+                    for member in self.members
+                ],
+            )
+            flist.append(single_time_slice)
+        return xr.merge(flist)
 
 
     def open_single_dataset(self, date, fhr, member, cache_dir="./gribcache"):
@@ -148,9 +178,13 @@ class GEFSDataset():
         #TODO: is date a datetime, str, etc?
         c_or_p = "c" if member == 0 else "p"
         bucket = f"s3://noaa-gefs-pds"
-        outer = f"gefs.{date.year:04d}{date.month:02d}{date.day:02d}/{date.hour:02d}/pgrb2{a_or_b}"
+        outer = f"gefs.{date.year:04d}{date.month:02d}{date.day:02d}/{date.hour:02d}"
+        middle = ""
+        #if date is after threshold:
+        #    middle = f"pgrb2{a_or_b}"
+
         fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}f{fhr:02d}"
-        return f"filecache::{bucket}/{outer}/{fname}"
+        return f"filecache::{bucket}/{outer}/{middle}/{fname}"
 
 
     @property
