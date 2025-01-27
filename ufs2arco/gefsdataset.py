@@ -71,6 +71,7 @@ class GEFSDataset():
     def open_single_initial_condition(self, date, cache_dir="./gribcache"):
         """It is safe to assume we can have this in memory"""
 
+        flist = []
         for fhr in self.fhrs:
             logging.info(f"Reading {date}, {fhr}h for members {self.members[0]} - {self.members[-1]}")
             single_time_slice = xr.merge(
@@ -175,16 +176,33 @@ class GEFSDataset():
         return xds[varname]
 
     def build_path(self, date, member, fhr, a_or_b):
-        #TODO: is date a datetime, str, etc?
         c_or_p = "c" if member == 0 else "p"
         bucket = f"s3://noaa-gefs-pds"
         outer = f"gefs.{date.year:04d}{date.month:02d}{date.day:02d}/{date.hour:02d}"
-        middle = ""
-        #if date is after threshold:
-        #    middle = f"pgrb2{a_or_b}"
 
-        fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}f{fhr:02d}"
-        return f"filecache::{bucket}/{outer}/{middle}/{fname}"
+        missing_dates = (
+            pd.Timestamp("2020-09-23T06"),
+        )
+        if date in missing_dates:
+            raise ValueError("GEFSDataset.build_path: {date} is missing from the GEFS archive")
+
+        # Thanks to Herbie for figuring these out
+        if date < pd.Timestamp("2017-07-27"):
+            middle = ""
+            fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}f{fhr:03d}"
+
+        elif date < pd.Timestamp("2020-09-23"):
+            middle = f"pgrb2{a_or_b}/"
+            fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}f{fhr:02d}"
+
+        else:
+            middle = f"atmos/pgrb2{a_or_b}p5/"
+            fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}.0p50.f{fhr:03d}"
+
+        fullpath = f"filecache::{bucket}/{outer}/{middle}{fname}"
+        logging.debug(f"GEFSDataset.build_path: reading {fullpath}")
+        return fullpath
+
 
 
     @property
@@ -291,8 +309,3 @@ class GEFSDataset():
         fckw.pop("lsm")
         fckw.pop("orog")
         return fckw
-
-
-
-
-
