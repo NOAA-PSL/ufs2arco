@@ -9,6 +9,8 @@ import queue
 import os
 import shutil
 
+import xarray as xr
+
 from .mpi import MPITopology, _has_mpi
 
 class BatchLoader():
@@ -114,7 +116,7 @@ class BatchLoader():
             batch_dates = self.dates[st:ed]
             dlist = []
             for date in batch_dates:
-                fds = self.open_single_initial_condition(date, cache_dir=self.cache_dir)
+                fds = self.dataset.open_single_initial_condition(date, cache_dir=self.cache_dir)
                 dlist.append(fds)
             xds = xr.merge(dlist)
 

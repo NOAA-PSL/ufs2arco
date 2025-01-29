@@ -61,16 +61,19 @@ class GEFSDataset():
         else:
             self.chunks = self.config["chunks"]
 
-        logging.info(f"{self.config}")
-        logging.info(f"Dates:\n{self.dates}\n")
-        logging.info(f"Forecast Hours:\n{self.fhrs}\n")
-        logging.info(f"Members:\n{self.members}\n")
-        logging.info(f"Store Path:\n{self.store_path}\n")
-        chunkstr = "\n    ".join([f"{key}: {val}" for key, val in self.chunks.items()])
-        logging.info(f"Storage Chunks:\n    {chunkstr}")
+        logging.info(str(self))
 
     def __len__(self) -> int:
         return len(self.dates)
+
+    def __str__(self) -> str:
+        msg = f"\n{self._name}\n"+\
+            "".join(["-" for _ in range(len(self._name))]) + "\n"
+        for key in ["dates", "fhrs", "members", "store_path"]:
+            msg += f"{key:<18s}: {getattr(self, key)}\n"
+        chunkstr = "\n    ".join([f"{key:<18s}: {val}" for key, val in self.chunks.items()])
+        msg += f"chunks\n{chunkstr}"
+        return msg
 
     @property
     def _name(self):
