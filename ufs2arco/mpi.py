@@ -10,7 +10,7 @@ except:
     _has_mpi = False
     warnings.warn(f"graphufs.mpi: Unable to import mpi4py or mpi4jax, cannot use this module")
 
-from graphufs.log import SimpleFormatter
+from .log import SimpleFormatter
 
 class MPITopology():
 

@@ -5,6 +5,7 @@ import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
+import dask
 
 from .log import setup_simple_log
 
@@ -28,6 +29,8 @@ class GEFSDataset():
 
     """
 
+    static_vars = ("lsm", "orog")
+
     def __init__(
         self,
         config_filename: str,
@@ -45,14 +48,99 @@ class GEFSDataset():
             self.config["members"].get("start", 0),
             self.config["members"].get("end", 1)+1,
         )
+        self.store_path = self.config["store_path"]
+        if "chunks" not in self.config:
+            self.chunks = {
+                "t0": 1,
+                "fhr": 1,
+                "member": 1,
+                "pressure": 1,
+                "latitude": -1,
+                "longitude": -1,
+            }
+        else:
+            self.chunks = self.config["chunks"]
 
         logging.info(f"{self.config}")
         logging.info(f"Dates:\n{self.dates}\n")
         logging.info(f"Forecast Hours:\n{self.fhrs}\n")
         logging.info(f"Members:\n{self.members}\n")
+        logging.info(f"Store Path:\n{self.store_path}\n")
+        chunkstr = "\n    ".join([f"{key}: {val}" for key, val in self.chunks.items()])
+        logging.info(f"Storage Chunks:\n    {chunkstr}")
 
     def __len__(self) -> int:
         return len(self.dates)
+
+    @property
+    def _name(self):
+        return f"GEFSDataset"
+
+    def create_container(self, cache_dir="./gribcache", **kwargs):
+        """kwargs get passed to xr.Dataset.to_zarr
+        """
+
+        # open a minimal dataset
+        xds = self.open_single_dataset(
+            date=self.dates[0],
+            fhr=self.fhrs[0],
+            member=self.members[0],
+            cache_dir=cache_dir,
+        )
+
+        # now create the t0, fhr, member dimensions
+        # note that we need to handle static variables carefully
+        unread_dims = {"t0": self.dates, "fhr": self.fhrs, "member": self.members}
+        extra_coords = ["lead_time", "valid_time"]
+
+        # create container
+        nds = xr.Dataset()
+        for key, array in unread_dims.items():
+            nds[key] = xr.DataArray(
+                array,
+                coords={key: array},
+                dims=key,
+                attrs=xds[key].attrs.copy(),
+            )
+        for key in xds.dims:
+            if key not in unread_dims.keys():
+                nds[key] = xds[key].copy()
+
+        # compute the full version of extra_coords
+        nds["lead_time"] = xr.DataArray(
+            [pd.Timedelta(hours=x) for x in self.fhrs],
+            coords=nds["fhr"].coords,
+            attrs=xds["lead_time"].attrs.copy(),
+        )
+
+        nds["valid_time"] = nds["t0"] + nds["lead_time"]
+        nds["valid_time"].attrs = xds["valid_time"].attrs.copy()
+        nds = nds.set_coords(extra_coords)
+
+        # squeeze what we've read
+        xds = xds.squeeze().drop_vars(list(unread_dims.keys())+extra_coords)
+
+        # create container arrays
+        for varname in xds.data_vars:
+            if varname not in self.static_vars:
+                dims = tuple(unread_dims.keys()) + xds[varname].dims
+                shape = tuple(len(nds[d]) for d in unread_dims.keys()) + xds[varname].shape
+                chunks = {list(dims).index(key): self.chunks[key] for key in dims}
+                nds[varname] = xr.DataArray(
+                    data=dask.array.zeros(
+                        shape=shape,
+                        chunks=chunks,
+                        dtype=xds[varname].dtype,
+                    ),
+                    dims=dims,
+                    attrs=xds[varname].attrs.copy(),
+                )
+            else:
+                nds[varname] = xds[varname].copy()
+
+        nds.to_zarr(self.store_path, compute=False, **kwargs)
+        logging.info(f"{self._name}.create_container: stored container at {self.store_path}")
+
 
     def open_dataset(self, cache_dir="./gribcache"):
         """This is the naive version of the code, incorrectly assuming
@@ -209,7 +297,6 @@ class GEFSDataset():
     def _ic_variables(self):
         return {
             "lsm": {
-                "rename": "land_static",
                 "param_list": ["b"],
                 "filter_by_keys": {
                     "typeOfLevel": "surface",
@@ -217,7 +304,6 @@ class GEFSDataset():
                 },
             },
             "orog": {
-                "rename": "land_static",
                 "param_list": ["a"],
                 "filter_by_keys": {
                     "typeOfLevel": "surface",
@@ -306,6 +392,6 @@ class GEFSDataset():
     @property
     def _fc_variables(self):
         fckw = self._ic_variables.copy()
-        fckw.pop("lsm")
-        fckw.pop("orog")
+        for key in self.static_vars:
+            fckw.pop(key)
         return fckw

@@ -8,3 +8,12 @@ fhrs: [0, 6]
 members:
   start: 0
   end: 1
+
+store_path: ./sample-gefs.zarr
+chunks:
+  t0: 1
+  fhr: 1
+  member: 1
+  pressure: 1
+  latitude: -1
+  longitude: -1
