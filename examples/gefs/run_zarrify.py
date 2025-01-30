@@ -36,8 +36,9 @@ if __name__ == "__main__":
 
             # TODO: need that store location
             xds.to_zarr(gefs.store_path, region=region)
+            loader.clear_cache(batch_idx)
 
-        logging.info(f"Done with batch {batch_idx} / {n_batches}")
+        logging.info(f"Done with batch {batch_idx+1} / {n_batches}")
         logging.info(f"    Dates: {batch_dates[0]} - {batch_dates[-1]}")
 
     #    # Potential TODO:

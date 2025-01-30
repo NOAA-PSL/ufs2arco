@@ -71,15 +71,15 @@ class GEFSDataset():
             "".join(["-" for _ in range(len(self._name))]) + "\n"
         for key in ["dates", "fhrs", "members", "store_path"]:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
-        chunkstr = "\n    ".join([f"{key:<18s}: {val}" for key, val in self.chunks.items()])
-        msg += f"chunks\n{chunkstr}"
+        chunkstr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.chunks.items()])
+        msg += f"chunks\n    {chunkstr}"
         return msg
 
     @property
     def _name(self):
         return f"GEFSDataset"
 
-    def create_container(self, cache_dir="./gribcache", **kwargs):
+    def create_container(self, cache_dir="container-cache", **kwargs):
         """kwargs get passed to xr.Dataset.to_zarr
         """
 
@@ -145,7 +145,7 @@ class GEFSDataset():
         logging.info(f"{self._name}.create_container: stored container at {self.store_path}")
 
 
-    def open_dataset(self, cache_dir="./gribcache"):
+    def open_dataset(self, cache_dir="gefs-cache"):
         """This is the naive version of the code, incorrectly assuming
 
         1. We can keep the whole dataset in memory
@@ -154,12 +154,12 @@ class GEFSDataset():
 
         dlist = []
         for date in self.dates:
-            fds = self.open_single_initial_condition(date, cache_dir=cache_dir)
+            fds = self.open_single_initial_condition(date, cache_dir)
             dlist.append(fds)
         xds = xr.merge(dlist)
         return xds
 
-    def open_single_initial_condition(self, date, cache_dir="./gribcache"):
+    def open_single_initial_condition(self, date, cache_dir):
         """It is safe to assume we can have this in memory"""
 
         flist = []
@@ -171,6 +171,7 @@ class GEFSDataset():
                         date=date,
                         fhr=fhr,
                         member=member,
+                        cache_dir=cache_dir,
                     )
                     for member in self.members
                 ],
@@ -179,7 +180,7 @@ class GEFSDataset():
         return xr.merge(flist)
 
 
-    def open_single_dataset(self, date, fhr, member, cache_dir="./gribcache"):
+    def open_single_dataset(self, date, fhr, member, cache_dir):
         """Assume for now:
         1. we are reading from both the a and b files
         2. we are caching both of the files locally
@@ -234,7 +235,7 @@ class GEFSDataset():
 
         xds = xda.to_dataset(name=varname)
         if varname in ["lsm", "orog"]:
-            xds = xds.drop_vars(["step", "time"])
+            xds = xds.drop_vars(["step", "time", "valid_time"])
 
         else:
             xds = xds.rename(
@@ -249,7 +250,7 @@ class GEFSDataset():
                 coords=xds["lead_time"].coords,
                 attrs={
                     "long_name": "hours since initial time",
-                    "units": "hours",
+                    "units": "integer hours",
                 },
             )
             xds["member"] = xr.DataArray(

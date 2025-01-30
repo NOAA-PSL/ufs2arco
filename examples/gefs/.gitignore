@@ -1,3 +1,2 @@
-gribcache/
-batchcache/
+*cache/
 *.zarr

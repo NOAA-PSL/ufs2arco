@@ -36,14 +36,12 @@ class BatchLoader():
         num_workers=0,
         max_queue_size=1,
         start=0,
-        cache_dir="./batchcache",
     ):
 
         self.dataset = dataset
         self.batch_size = batch_size
         self.counter = start
         self.data_counter = start
-        self.cache_dir = cache_dir
 
         self.num_workers = num_workers
         assert max_queue_size > 0
@@ -71,6 +69,9 @@ class BatchLoader():
     @property
     def name(self):
         return str(type(self).__name__)
+
+    def get_cache_dir(self, batch_idx):
+        return f"{self.name.lower()}-cache/{batch_idx}"
 
     def __len__(self) -> int:
         n_dates = len(self.dates)
@@ -115,14 +116,11 @@ class BatchLoader():
             ed = st + self.batch_size
             batch_dates = self.dates[st:ed]
             dlist = []
+            cache_dir = self.get_cache_dir(self.data_counter)
             for date in batch_dates:
-                fds = self.dataset.open_single_initial_condition(date, cache_dir=self.cache_dir)
+                fds = self.dataset.open_single_initial_condition(date, cache_dir=cache_dir)
                 dlist.append(fds)
             xds = xr.merge(dlist)
-
-            # seems like the most threadsafe place to clear the cache directory
-            if os.path.isdir(self.cache_dir):
-                shutil.rmtree(self.cache_dir, ignore_errors=True)
             return xds
 
         else:
@@ -152,6 +150,13 @@ class BatchLoader():
             with self.data_counter_lock:
                 self.data_counter += 1
             return data
+
+    def clear_cache(self, batch_idx):
+        cache_dir = self.get_cache_dir(batch_idx)
+        if os.path.isdir(cache_dir):
+            logging.info(f"{self.name}: clearing {cache_dir}")
+            shutil.rmtree(cache_dir, ignore_errors=True)
+
 
     def task_done(self):
         self.data_queue.task_done()
@@ -228,7 +233,6 @@ class MPIBatchLoader(BatchLoader):
         num_workers=0,
         max_queue_size=1,
         start=0,
-        cache_dir="./batchcache",
     ):
         assert _has_mpi, f"{self.name}.__init__: Unable to import mpi4py, cannot use this class"
 
@@ -241,9 +245,7 @@ class MPIBatchLoader(BatchLoader):
             num_workers=num_workers,
             max_queue_size=max_queue_size,
             start=start,
-            cache_dir=cache_dir,
         )
-        self.cache_dir = os.path.join(cache_dir, f"{mpi_topo.rank}")
         logging.info(str(self))
 
         if self.data_per_process*self.topo.size != batch_size:
@@ -263,16 +265,19 @@ class MPIBatchLoader(BatchLoader):
             msg += f"{key:<18s}: {getattr(self, key):02d}\n"
         return msg
 
+    def get_cache_dir(self, batch_idx):
+        return f"{self.name.lower()}-cache/{self.topo.rank}/{batch_idx}"
 
     def _next_data(self):
         if self.data_counter < len(self):
             st = (self.data_counter * self.batch_size) + self.local_batch_index
             ed = st + self.data_per_process
             batch_dates = self.dates[st:ed]
+            cache_dir = self.get_cache_dir(self.data_counter)
             if len(batch_dates) > 0:
                 dlist = []
                 for date in batch_dates:
-                    fds = self.open_single_initial_condition(date, cache_dir=self.cache_dir)
+                    fds = self.open_single_initial_condition(date, cache_dir=cache_dir)
                     dlist.append(fds)
                 xds = xr.merge(dlist)
 
@@ -280,8 +285,8 @@ class MPIBatchLoader(BatchLoader):
                 if os.path.isdir(self.cache_dir):
                     shutil.rmtree(self.cache_dir, ignore_errors=True)
                 return xds
+
             else:
                 return None
-
         else:
             raise StopIteration
