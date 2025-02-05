@@ -8,9 +8,10 @@ try:
 
 except:
     _has_mpi = False
-    warnings.warn(f"graphufs.mpi: Unable to import mpi4py or mpi4jax, cannot use this module")
+    warnings.warn(f"ufs2arco.mpi: Unable to import mpi4py, cannot use this module")
 
 from .log import SimpleFormatter
+logger = logging.getLogger("ufs2arco")
 
 class MPITopology():
 
@@ -34,20 +35,18 @@ class MPITopology():
         self.friends = tuple(ii for ii in range(self.size) if ii!=self.root)
 
         self._init_log(log_dir=log_dir, level=log_level)
-        logging.info(str(self))
+        logger.info(str(self))
 
 
     def __str__(self):
-        msg = "\nEnvironment Info\n" +\
-            "----------------\n" +\
-            jax.print_environment_info(return_string=True) +\
-            "\n\n" +\
-            f"MPITopology Summary\n" +\
+        msg = f"MPITopology Summary\n" +\
             f"-------------------\n" +\
             f"comm: {self.comm.Get_name()}\n"
         for key in ["rank", "size"]:
             msg += f"{key:<18s}: {getattr(self, key):02d}\n"
         msg += f"{'pid':<18s}: {self.pid}\n"
+        msg += f"{'log_dir':<18s}: {self.log_dir}\n"
+        msg += f"{'logfile':<18s}: {self.logfile}\n"
         msg += "Thread Support\n"+\
             f"{'required_level':<18s}: {self.required_level}\n" +\
             f"{'provided_level':<18s}: {self.provided_level}\n"
@@ -62,18 +61,18 @@ class MPITopology():
         self.logfile = f"{self.log_dir}/log.{self.rank:02d}.{self.size:02d}.out"
         self.progress_file = f"{self.log_dir}/progress.{self.rank:02d}.{self.size:02d}.out"
 
-        logging.basicConfig(
-            level=level,
-            filename=self.logfile,
-            filemode="w+",
-        )
-        logger = logging.getLogger()
-        formatter = SimpleFormatter(fmt="[%(relativeCreated)-7d s] [%(levelname)-7s] %(message)s")
-        for handler in logger.handlers:
-            handler.setFormatter(formatter)
+        logger.setLevel(level=level)
+        formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)-7s] %(message)s")
+        handler = logging.FileHandler(self.logfile, mode="w+")
+        handler.setLevel(level=level)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
 
         with open(self.progress_file, "w"):
             pass
 
     def bcast(self, x):
         return self.comm.bcast(x, root=self.root)
+
+    def barrier(self):
+        return self.comm.barrier()

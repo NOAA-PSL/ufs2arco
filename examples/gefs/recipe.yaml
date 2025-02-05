@@ -1,15 +1,17 @@
 dates:
-  start: 2017-01-01T00
-  end: 2017-01-08T18
+    #  start: 2020-09-24T00
+    #  end: 2020-09-28T18
+  start: 2019-09-24T00
+  end: 2019-09-28T18
   freq: 6h
 
 fhrs: [0, 6]
 
 members:
   start: 0
-  end: 3
+  end: 1
 
-store_path: ./quick.zarr
+store_path: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/forecasts.zarr
 chunks:
   t0: 1
   fhr: 1

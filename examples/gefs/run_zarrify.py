@@ -1,45 +1,42 @@
+from mpi4py import MPI
 import logging
 import pandas as pd
 
 from ufs2arco.mpi import MPITopology
 from ufs2arco.gefsdataset import GEFSDataset
-from ufs2arco.batchloader import BatchLoader
+from ufs2arco.batchloader import BatchLoader, MPIBatchLoader
 
 if __name__ == "__main__":
 
-    config = "./recipe.yaml" # is this even necessary if we could put it all in this script?
-    gefs = GEFSDataset(config)
+    topo = MPITopology(log_dir="/global/cfs/cdirs/m4718/timothys/gefs/one-degree/logs")
+    gefs = GEFSDataset("/global/homes/t/timothys/ufs2arco/examples/gefs/recipe.yaml")
 
-    #topo = MPITopology(log_dir="./logs")
-
-    loader = BatchLoader(
+    loader = MPIBatchLoader(
         dataset=gefs,
         batch_size=4,
         num_workers=0,
         max_queue_size=1,
-    #    mpi_topo=topo,
+        mpi_topo=topo,
+        cache_dir="/pscratch/sd/t/timothys/gefs",
     )
 
-    # which requires a store location...
-    gefs.create_container(mode="w")
+    if topo.is_root:
+        gefs.create_container(cache_dir="/pscratch/sd/t/timothys/gefs/container-cache", mode="w")
+    topo.barrier()
 
+
+    logger = logging.getLogger("ufs2arco")
     n_batches = len(loader)
     for batch_idx, xds in enumerate(loader):
-        if xds is not None:
 
-            # figure out what dates we're working with, and the indices relative to the global list
-            batch_dates = [pd.Timestamp(t0) for t0 in xds["t0"].values]
-            date_indices = [list(gefs.dates).index(date) for date in batch_dates]
+        # xds is None if MPI rank looks for non existent indices (i.e., last batch scenario)
+        # len(xds) == 0 if we couldn't find the file we were looking for
+        has_content = xds is not None and len(xds) > 0
+        if has_content:
 
-            region = {k: slice(None, None) for k in xds.dims}
-            region["t0"] = slice(date_indices[0], date_indices[-1]+1)
-
-            # TODO: need that store location
+            region = gefs.find_my_region(xds)
             xds.to_zarr(gefs.store_path, region=region)
             loader.clear_cache(batch_idx)
 
-        logging.info(f"Done with batch {batch_idx+1} / {n_batches}")
-        logging.info(f"    Dates: {batch_dates[0]} - {batch_dates[-1]}")
 
-    #    # Potential TODO:
-    #    # add progress tracker
+        logger.info(f"Done with batch {batch_idx+1} / {n_batches}")

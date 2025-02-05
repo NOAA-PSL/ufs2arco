@@ -1,6 +1,8 @@
 import sys
 import logging
 
+logger = logging.getLogger("ufs2arco")
+
 class SimpleFormatter(logging.Formatter):
     def format(self, record):
         record.relativeCreated = record.relativeCreated // 1000
@@ -8,11 +10,9 @@ class SimpleFormatter(logging.Formatter):
 
 def setup_simple_log(level=logging.INFO):
 
-    logging.basicConfig(
-        stream=sys.stdout,
-        level=level,
-    )
-    logger = logging.getLogger()
-    formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)s] %(message)s")
-    for handler in logger.handlers:
-        handler.setFormatter(formatter)
+    logger.setLevel(level=level)
+    formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)-7s] %(message)s")
+    handler = logging.StreamHandler(stream=sys.stdout)
+    handler.setLevel(level=level)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)

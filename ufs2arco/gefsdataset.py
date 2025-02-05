@@ -5,10 +5,9 @@ import fsspec
 import numpy as np
 import pandas as pd
 import xarray as xr
-import dask
+import dask.array
 
-from .log import setup_simple_log
-
+logger = logging.getLogger("ufs2arco")
 
 class GEFSDataset():
     """Pull GEFS data from s3://noaa-gefs-pds
@@ -35,7 +34,6 @@ class GEFSDataset():
         self,
         config_filename: str,
     ):
-        setup_simple_log()
 
         with open(config_filename, "r") as f:
             contents = yaml.safe_load(f)
@@ -61,7 +59,7 @@ class GEFSDataset():
         else:
             self.chunks = self.config["chunks"]
 
-        logging.info(str(self))
+        logger.info(str(self))
 
     def __len__(self) -> int:
         return len(self.dates)
@@ -142,7 +140,25 @@ class GEFSDataset():
                 nds[varname] = xds[varname].copy()
 
         nds.to_zarr(self.store_path, compute=False, **kwargs)
-        logging.info(f"{self._name}.create_container: stored container at {self.store_path}")
+        logger.info(f"{self._name}.create_container: stored container at {self.store_path}")
+
+
+    def find_my_region(self, xds):
+        """Given a dataset, that's assumed to be a subset of the initial dataset,
+        find the logical index values where this should be stored in the final zarr store
+
+        Args:
+            xds (xr.Dataset): with a subset of the data (i.e., a couple of initial conditions)
+
+        Returns:
+            region (dict): indicating the zarr region to store in, based on the initial condition indices
+        """
+        batch_dates = [pd.Timestamp(t0) for t0 in xds["t0"].values]
+        date_indices = [list(self.dates).index(date) for date in batch_dates]
+
+        region = {k: slice(None, None) for k in xds.dims}
+        region["t0"] = slice(date_indices[0], date_indices[-1]+1)
+        return region
 
 
     def open_dataset(self, cache_dir="gefs-cache"):
@@ -164,7 +180,7 @@ class GEFSDataset():
 
         flist = []
         for fhr in self.fhrs:
-            logging.info(f"Reading {date}, {fhr}h for members {self.members[0]} - {self.members[-1]}")
+            logger.info(f"Reading {date}, {fhr}h for members {self.members[0]} - {self.members[-1]}")
             single_time_slice = xr.merge(
                 [
                     self.open_single_dataset(
@@ -187,34 +203,46 @@ class GEFSDataset():
         """
 
         # 1. cache the grib files for this date, member, fhr
-        cached_files = {
-           k: fsspec.open_local(
-                self.build_path(
-                    date=date,
-                    member=member,
-                    fhr=fhr,
-                    a_or_b=k,
-                ),
-                s3={"anon": True},
-                filecache={"cache_storage": cache_dir},
+        cached_files = {}
+        for k in ["a", "b"]:
+            path = self.build_path(
+                date=date,
+                member=member,
+                fhr=fhr,
+                a_or_b=k,
             )
-            for k in ["a", "b"]
-        }
+            try:
+                local_file = fsspec.open_local(
+                    path,
+                    s3={"anon": True},
+                    filecache={"cache_storage": cache_dir},
+                )
+            except FileNotFoundError:
+                local_file = None
+                logger.warning(
+                    f"{self._name}: File Not Found: {path}\n\t" +\
+                    f"(date, member, fhr, key) = {date} {member} {fhr} {k}"
+                )
+
+            cached_files[k] = local_file
 
         # 2. read data arrays from those files
         dsdict = {}
-        read_dict = self._ic_variables if fhr == 0 and member == 0 and date == self.dates[0] else self._fc_variables
-        for varname, open_kwargs in read_dict.items():
-            dslist = [
-                self.open_single_variable(
-                    file=cached_files[a_or_b],
-                    varname=varname,
-                    member=member,
-                    filter_by_keys=open_kwargs["filter_by_keys"],
-                )
-                for a_or_b in open_kwargs["param_list"]
-            ]
-            dsdict[varname] = xr.merge(dslist)[varname]
+        if cached_files["a"] is not None and cached_files["b"] is not None:
+
+            is_static = fhr == 0 and member == 0 and date == self.dates[0]
+            read_dict = self._ic_variables if is_static else self._fc_variables
+            for varname, open_kwargs in read_dict.items():
+                dslist = [
+                    self.open_single_variable(
+                        file=cached_files[a_or_b],
+                        varname=varname,
+                        member=member,
+                        filter_by_keys=open_kwargs["filter_by_keys"],
+                    )
+                    for a_or_b in open_kwargs["param_list"]
+                ]
+                dsdict[varname] = xr.merge(dslist)[varname]
 
         xds = xr.Dataset(dsdict)
         return xds
@@ -272,18 +300,12 @@ class GEFSDataset():
         bucket = f"s3://noaa-gefs-pds"
         outer = f"gefs.{date.year:04d}{date.month:02d}{date.day:02d}/{date.hour:02d}"
 
-        missing_dates = (
-            pd.Timestamp("2020-09-23T06"),
-        )
-        if date in missing_dates:
-            raise ValueError("GEFSDataset.build_path: {date} is missing from the GEFS archive")
-
         # Thanks to Herbie for figuring these out
         if date < pd.Timestamp("2017-07-27"):
             middle = ""
             fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}f{fhr:03d}"
 
-        elif date < pd.Timestamp("2020-09-23"):
+        elif date < pd.Timestamp("2020-09-24"):
             middle = f"pgrb2{a_or_b}/"
             fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}f{fhr:02d}"
 
@@ -292,7 +314,7 @@ class GEFSDataset():
             fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}.0p50.f{fhr:03d}"
 
         fullpath = f"filecache::{bucket}/{outer}/{middle}{fname}"
-        logging.debug(f"GEFSDataset.build_path: reading {fullpath}")
+        logger.debug(f"GEFSDataset.build_path: reading {fullpath}")
         return fullpath
 
 

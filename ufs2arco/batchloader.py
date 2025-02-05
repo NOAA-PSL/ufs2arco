@@ -13,6 +13,8 @@ import xarray as xr
 
 from .mpi import MPITopology, _has_mpi
 
+logger = logging.getLogger("ufs2arco")
+
 class BatchLoader():
     """
 
@@ -36,12 +38,14 @@ class BatchLoader():
         num_workers=0,
         max_queue_size=1,
         start=0,
+        cache_dir=".",
     ):
 
         self.dataset = dataset
         self.batch_size = batch_size
         self.counter = start
         self.data_counter = start
+        self.outer_cache_dir = cache_dir
 
         self.num_workers = num_workers
         assert max_queue_size > 0
@@ -71,7 +75,7 @@ class BatchLoader():
         return str(type(self).__name__)
 
     def get_cache_dir(self, batch_idx):
-        return f"{self.name.lower()}-cache/{batch_idx}"
+        return f"{self.outer_cache_dir}/{self.name.lower()}-cache/{batch_idx}"
 
     def __len__(self) -> int:
         n_dates = len(self.dates)
@@ -105,11 +109,11 @@ class BatchLoader():
                 self.counter += 1
             return data
         else:
-            logging.debug(f"BatchLoader.__next__: counter > len(self)")
+            logger.debug(f"BatchLoader.__next__: counter > len(self)")
             raise StopIteration
 
     def _next_data(self):
-        logging.debug(f"BatchLoader._next_data[{self.data_counter}]")
+        logger.debug(f"BatchLoader._next_data[{self.data_counter}]")
 
         if self.data_counter < len(self):
             st = self.data_counter * self.batch_size
@@ -124,7 +128,7 @@ class BatchLoader():
             return xds
 
         else:
-            logging.debug(f"BatchLoader._next_data: data_counter > len(self)")
+            logger.debug(f"BatchLoader._next_data: data_counter > len(self)")
             raise StopIteration
 
     def generate(self):
@@ -134,13 +138,13 @@ class BatchLoader():
                 self.data_queue.put(data)
                 with self.data_counter_lock:
                     self.data_counter += 1
-                logging.debug(f"done putting")
+                logger.debug(f"done putting")
             except StopIteration:
                 self.shutdown()
 
     def get_data(self):
         """Pull a batch of data from the queue"""
-        logging.debug(f"BatchLoader.get_data")
+        logger.debug(f"BatchLoader.get_data")
         if self.num_workers > 0:
             data = self.data_queue.get()
             self.task_done()
@@ -154,13 +158,13 @@ class BatchLoader():
     def clear_cache(self, batch_idx):
         cache_dir = self.get_cache_dir(batch_idx)
         if os.path.isdir(cache_dir):
-            logging.info(f"{self.name}: clearing {cache_dir}")
+            logger.info(f"{self.name}: clearing {cache_dir}")
             shutil.rmtree(cache_dir, ignore_errors=True)
 
 
     def task_done(self):
         self.data_queue.task_done()
-        logging.debug(f"BatchLoader: marked task_done")
+        logger.debug(f"BatchLoader: marked task_done")
 
     def restart(self, idx=0, cancel=False, **kwargs):
         """Restart the :attr:`data_counter` and ThreadPoolExecutor to get ready for the pass through the data
@@ -168,7 +172,7 @@ class BatchLoader():
         Args:
             cancel (bool): if True, cancel any remaining queue items/tasks with :meth:`.cancel`
         """
-        logging.debug(f"BatchLoader.restart")
+        logger.debug(f"BatchLoader.restart")
 
         # start filling the queue
         if self.num_workers > 0:
@@ -199,7 +203,7 @@ class BatchLoader():
         i = 1
         if self.num_workers > 0:
             while not self.data_queue.empty():
-                logging.debug(f"BatchLoader.cancel: Queue not empty. (count, data_count) = ({self.counter}, {self.data_counter})... getting data {i}")
+                logger.debug(f"BatchLoader.cancel: Queue not empty. (count, data_count) = ({self.counter}, {self.data_counter})... getting data {i}")
                 self.get_data()
                 i+=1
 
@@ -210,7 +214,7 @@ class BatchLoader():
             cancel (bool): If true, cancel any remaining tasks...
                 Don't do this right after a for loop though, since the for loop may not finish due to a deadlock
         """
-        logging.debug(f"BatchLoader.shutdown")
+        logger.debug(f"BatchLoader.shutdown")
         if self.num_workers > 0:
             self.stop_event.set()
             if cancel:
@@ -233,6 +237,7 @@ class MPIBatchLoader(BatchLoader):
         num_workers=0,
         max_queue_size=1,
         start=0,
+        cache_dir=".",
     ):
         assert _has_mpi, f"{self.name}.__init__: Unable to import mpi4py, cannot use this class"
 
@@ -245,16 +250,13 @@ class MPIBatchLoader(BatchLoader):
             num_workers=num_workers,
             max_queue_size=max_queue_size,
             start=start,
+            cache_dir=cache_dir,
         )
-        logging.info(str(self))
+        logger.info(str(self))
 
         if self.data_per_process*self.topo.size != batch_size:
-            logging.warning(f"{self.name}.__init__: batch_size = {batch_size} not divisible by MPI Size = {self.topo.size}")
-            logging.warning(f"{self.name}.__init__: some data will be skipped in each batch")
-
-        # need to see if this is still true
-        if batch_size > 1 and not drop_last:
-            logging.warning(f"{self.name}.__init__: with batch_size>1 and drop_last=False, some MPI processes may grab incorrect indices in last batch. Expect an error at the end of the dataset")
+            logger.warning(f"{self.name}.__init__: batch_size = {batch_size} not divisible by MPI Size = {self.topo.size}")
+            logger.warning(f"{self.name}.__init__: some data will be skipped in each batch")
 
     def __str__(self):
         myname = f"{__name__}.{self.name}"
@@ -266,7 +268,7 @@ class MPIBatchLoader(BatchLoader):
         return msg
 
     def get_cache_dir(self, batch_idx):
-        return f"{self.name.lower()}-cache/{self.topo.rank}/{batch_idx}"
+        return f"{self.outer_cache_dir}/{self.name.lower()}-cache/{self.topo.rank}/{batch_idx}"
 
     def _next_data(self):
         if self.data_counter < len(self):
@@ -277,13 +279,9 @@ class MPIBatchLoader(BatchLoader):
             if len(batch_dates) > 0:
                 dlist = []
                 for date in batch_dates:
-                    fds = self.open_single_initial_condition(date, cache_dir=cache_dir)
+                    fds = self.dataset.open_single_initial_condition(date, cache_dir=cache_dir)
                     dlist.append(fds)
                 xds = xr.merge(dlist)
-
-                # seems like the most threadsafe place to clear the cache directory
-                if os.path.isdir(self.cache_dir):
-                    shutil.rmtree(self.cache_dir, ignore_errors=True)
                 return xds
 
             else:
