@@ -59,7 +59,6 @@ class MPITopology():
                 os.makedirs(self.log_dir)
         self.comm.Barrier()
         self.logfile = f"{self.log_dir}/log.{self.rank:02d}.{self.size:02d}.out"
-        self.progress_file = f"{self.log_dir}/progress.{self.rank:02d}.{self.size:02d}.out"
 
         logger.setLevel(level=level)
         formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)-7s] %(message)s")
@@ -67,9 +66,6 @@ class MPITopology():
         handler.setLevel(level=level)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
-
-        with open(self.progress_file, "w"):
-            pass
 
     def bcast(self, x):
         return self.comm.bcast(x, root=self.root)

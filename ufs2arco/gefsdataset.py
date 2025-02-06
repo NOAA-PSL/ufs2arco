@@ -1,4 +1,3 @@
-import yaml
 import logging
 import fsspec
 
@@ -11,53 +10,28 @@ logger = logging.getLogger("ufs2arco")
 
 class GEFSDataset():
     """Pull GEFS data from s3://noaa-gefs-pds
-
-    Here are the full options
-
-    dates:
-      start: 2017-01-01T00
-      end: ... basically current date
-
-    fhrs: [0, 6]
-    ... need to fill this out
-
-    TODO:
-        * fhrs as start/end since there are many
-        * figure out the threshold dates where bucket format changes
-        * add a create_container method along with store_path attr
-
     """
 
     static_vars = ("lsm", "orog")
 
     def __init__(
         self,
-        config_filename: str,
+        dates: dict,
+        fhrs: dict,
+        members: dict,
+        chunks: dict,
+        store_path: str,
     ):
 
-        with open(config_filename, "r") as f:
-            contents = yaml.safe_load(f)
-            self.config = contents
-
-
-        self.dates = pd.date_range(**self.config["dates"])
-        self.fhrs = self.config.get("fhrs", (0, 6))
-        self.members = np.arange(
-            self.config["members"].get("start", 0),
-            self.config["members"].get("end", 1)+1,
-        )
-        self.store_path = self.config["store_path"]
-        if "chunks" not in self.config:
-            self.chunks = {
-                "t0": 1,
-                "fhr": 1,
-                "member": 1,
-                "pressure": 1,
-                "latitude": -1,
-                "longitude": -1,
-            }
-        else:
-            self.chunks = self.config["chunks"]
+        self.dates = pd.date_range(**dates)
+        assert len(fhrs) == 2, \
+            "GEFSDataset.__init__: 'fhrs' section can only have 'start' and 'end'"
+        self.fhrs = np.arange(fhrs["start"], fhrs["end"]+1, 6)
+        assert len(members) == 2, \
+            "GEFSDataset.__init__: 'members' section can only have 'start' and 'end'"
+        self.members = np.arange(members["start"], members["end"]+1)
+        self.store_path = store_path
+        self.chunks = chunks
 
         logger.info(str(self))
 

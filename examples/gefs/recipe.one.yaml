@@ -1,19 +1,31 @@
-dates:
-  start: 2017-01-01T00
-  end: 2020-09-23T18
-  freq: 6h
+loader:
+  name: mpibatchloader
+  batch_size: 32
 
-fhrs: [0, 6]
+directories:
+  zarr: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/forecasts.zarr
+  cache: /pscratch/sd/t/timothys/gefs-cache
+  logs: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/logs
 
-members:
-  start: 0
-  end: 20
+dataset:
+  name: gefsdataset
+  dates:
+    start: 2017-01-01T00
+    end: 2020-09-23T18
+    freq: 6h
 
-store_path: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/forecasts.zarr
-chunks:
-  t0: 1
-  fhr: 1
-  member: 1
-  pressure: 1
-  latitude: -1
-  longitude: -1
+  fhrs:
+    start: 0
+    end: 6
+
+  members:
+    start: 0
+    end: 20
+
+  chunks:
+    t0: 1
+    fhr: 1
+    member: 1
+    pressure: 1
+    latitude: -1
+    longitude: -1
