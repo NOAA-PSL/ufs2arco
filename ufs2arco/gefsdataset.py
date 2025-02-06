@@ -16,32 +16,32 @@ class GEFSDataset():
 
     def __init__(
         self,
-        dates: dict,
-        fhrs: dict,
-        members: dict,
+        t0: dict,
+        fhr: dict,
+        member: dict,
         chunks: dict,
         store_path: str,
     ):
 
-        self.dates = pd.date_range(**dates)
-        assert len(fhrs) == 2, \
-            "GEFSDataset.__init__: 'fhrs' section can only have 'start' and 'end'"
-        self.fhrs = np.arange(fhrs["start"], fhrs["end"]+1, 6)
-        assert len(members) == 2, \
-            "GEFSDataset.__init__: 'members' section can only have 'start' and 'end'"
-        self.members = np.arange(members["start"], members["end"]+1)
+        self.t0 = pd.date_range(**t0)
+        assert len(fhr) == 2, \
+            "GEFSDataset.__init__: 'fhr' section can only have 'start' and 'end'"
+        self.fhr = np.arange(fhr["start"], fhr["end"]+1, 6)
+        assert len(member) == 2, \
+            "GEFSDataset.__init__: 'member' section can only have 'start' and 'end'"
+        self.member = np.arange(member["start"], member["end"]+1)
         self.store_path = store_path
         self.chunks = chunks
 
         logger.info(str(self))
 
     def __len__(self) -> int:
-        return len(self.dates)
+        return len(self.t0)
 
     def __str__(self) -> str:
         msg = f"\n{self._name}\n"+\
             "".join(["-" for _ in range(len(self._name))]) + "\n"
-        for key in ["dates", "fhrs", "members", "store_path"]:
+        for key in ["t0", "fhr", "member", "store_path"]:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         chunkstr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.chunks.items()])
         msg += f"chunks\n    {chunkstr}"
@@ -57,15 +57,15 @@ class GEFSDataset():
 
         # open a minimal dataset
         xds = self.open_single_dataset(
-            date=self.dates[0],
-            fhr=self.fhrs[0],
-            member=self.members[0],
+            t0=self.t0[0],
+            fhr=self.fhr[0],
+            member=self.member[0],
             cache_dir=cache_dir,
         )
 
         # now create the t0, fhr, member dimensions
         # note that we need to handle static variables carefully
-        unread_dims = {"t0": self.dates, "fhr": self.fhrs, "member": self.members}
+        unread_dims = {"t0": self.t0, "fhr": self.fhr, "member": self.member}
         extra_coords = ["lead_time", "valid_time"]
 
         # create container
@@ -83,7 +83,7 @@ class GEFSDataset():
 
         # compute the full version of extra_coords
         nds["lead_time"] = xr.DataArray(
-            [pd.Timedelta(hours=x) for x in self.fhrs],
+            [pd.Timedelta(hours=x) for x in self.fhr],
             coords=nds["fhr"].coords,
             attrs=xds["lead_time"].attrs.copy(),
         )
@@ -116,25 +116,6 @@ class GEFSDataset():
         nds.to_zarr(self.store_path, compute=False, **kwargs)
         logger.info(f"{self._name}.create_container: stored container at {self.store_path}")
 
-
-    def find_my_region(self, xds):
-        """Given a dataset, that's assumed to be a subset of the initial dataset,
-        find the logical index values where this should be stored in the final zarr store
-
-        Args:
-            xds (xr.Dataset): with a subset of the data (i.e., a couple of initial conditions)
-
-        Returns:
-            region (dict): indicating the zarr region to store in, based on the initial condition indices
-        """
-        batch_dates = [pd.Timestamp(t0) for t0 in xds["t0"].values]
-        date_indices = [list(self.dates).index(date) for date in batch_dates]
-
-        region = {k: slice(None, None) for k in xds.dims}
-        region["t0"] = slice(date_indices[0], date_indices[-1]+1)
-        return region
-
-
     def open_dataset(self, cache_dir="gefs-cache"):
         """This is the naive version of the code, incorrectly assuming
 
@@ -143,7 +124,7 @@ class GEFSDataset():
         """
 
         dlist = []
-        for date in self.dates:
+        for date in self.t0:
             fds = self.open_single_initial_condition(date, cache_dir)
             dlist.append(fds)
         xds = xr.merge(dlist)
@@ -153,8 +134,8 @@ class GEFSDataset():
         """It is safe to assume we can have this in memory"""
 
         flist = []
-        for fhr in self.fhrs:
-            logger.info(f"Reading {date}, {fhr}h for members {self.members[0]} - {self.members[-1]}")
+        for fhr in self.fhr:
+            logger.info(f"Reading {date}, {fhr}h for members {self.member[0]} - {self.member[-1]}")
             single_time_slice = xr.merge(
                 [
                     self.open_single_dataset(
@@ -163,14 +144,14 @@ class GEFSDataset():
                         member=member,
                         cache_dir=cache_dir,
                     )
-                    for member in self.members
+                    for member in self.member
                 ],
             )
             flist.append(single_time_slice)
         return xr.merge(flist)
 
 
-    def open_single_dataset(self, date, fhr, member, cache_dir):
+    def open_single_dataset(self, t0, fhr, member, cache_dir):
         """Assume for now:
         1. we are reading from both the a and b files
         2. we are caching both of the files locally
@@ -180,7 +161,7 @@ class GEFSDataset():
         cached_files = {}
         for k in ["a", "b"]:
             path = self.build_path(
-                date=date,
+                t0=t0,
                 member=member,
                 fhr=fhr,
                 a_or_b=k,
@@ -195,7 +176,7 @@ class GEFSDataset():
                 local_file = None
                 logger.warning(
                     f"{self._name}: File Not Found: {path}\n\t" +\
-                    f"(date, member, fhr, key) = {date} {member} {fhr} {k}"
+                    f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
                 )
 
             cached_files[k] = local_file
@@ -204,7 +185,7 @@ class GEFSDataset():
         dsdict = {}
         if cached_files["a"] is not None and cached_files["b"] is not None:
 
-            is_static = fhr == 0 and member == 0 and date == self.dates[0]
+            is_static = fhr == 0 and member == 0 and t0 == self.t0[0]
             read_dict = self._ic_variables if is_static else self._fc_variables
             for varname, open_kwargs in read_dict.items():
                 dslist = [
@@ -269,23 +250,23 @@ class GEFSDataset():
 
         return xds[varname]
 
-    def build_path(self, date, member, fhr, a_or_b):
+    def build_path(self, t0, member, fhr, a_or_b):
         c_or_p = "c" if member == 0 else "p"
         bucket = f"s3://noaa-gefs-pds"
-        outer = f"gefs.{date.year:04d}{date.month:02d}{date.day:02d}/{date.hour:02d}"
+        outer = f"gefs.{t0.year:04d}{t0.month:02d}{t0.day:02d}/{t0.hour:02d}"
 
         # Thanks to Herbie for figuring these out
-        if date < pd.Timestamp("2017-07-27"):
+        if t0 < pd.Timestamp("2017-07-27"):
             middle = ""
-            fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}f{fhr:03d}"
+            fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{a_or_b}f{fhr:03d}"
 
-        elif date < pd.Timestamp("2020-09-24"):
+        elif t0 < pd.Timestamp("2020-09-24"):
             middle = f"pgrb2{a_or_b}/"
-            fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}f{fhr:02d}"
+            fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{a_or_b}f{fhr:02d}"
 
         else:
             middle = f"atmos/pgrb2{a_or_b}p5/"
-            fname = f"ge{c_or_p}{member:02d}.t{date.hour:02d}z.pgrb2{a_or_b}.0p50.f{fhr:03d}"
+            fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{a_or_b}.0p50.f{fhr:03d}"
 
         fullpath = f"filecache::{bucket}/{outer}/{middle}{fname}"
         logger.debug(f"GEFSDataset.build_path: reading {fullpath}")

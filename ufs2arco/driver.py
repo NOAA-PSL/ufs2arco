@@ -31,11 +31,11 @@ class Driver():
             raise NotImplementedError(f"Driver.__init__: only 'GEFSDataset' is implemented")
 
         # the loader
-        for key in ["name", "batch_size"]:
+        for key in ["name", "batch_size", "sample_dims"]:
             assert key in self.config["loader"], \
                 f"Driver.__init__: could not find '{key}' in 'loader' section in yaml"
-        assert len(self.config["loader"]) == 2, \
-            f"Driver.__init__: only 'name' and 'batch_size' allowed for now in loader section"
+        assert len(self.config["loader"]) == 3, \
+            f"Driver.__init__: only 'name', 'batch_size', 'sample_dims' allowed for now in loader section"
 
         name = self.config["loader"]["name"].lower()
         if name == "batchloader":
@@ -101,7 +101,7 @@ class Driver():
             has_content = xds is not None and len(xds) > 0
             if has_content:
 
-                region = dataset.find_my_region(xds)
+                region = loader.find_my_region(xds)
                 xds.to_zarr(dataset.store_path, region=region)
                 loader.clear_cache(batch_idx)
 

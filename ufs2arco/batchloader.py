@@ -1,6 +1,7 @@
 from math import ceil
 import numpy as np
 
+import itertools
 import logging
 import threading
 import concurrent
@@ -19,7 +20,6 @@ class BatchLoader():
     """
 
     Note:
-        * Assumes parallelism is over the initial condition dates
         * For now only works with GEFSDataset
         * This ends up being the same as the Naive version, except for the caching behavior,
           since it will for loop over all dates, but it clears the cache after batch_size dates
@@ -35,6 +35,7 @@ class BatchLoader():
         self,
         dataset,
         batch_size,
+        sample_dims,
         num_workers=0,
         max_queue_size=1,
         start=0,
@@ -46,6 +47,17 @@ class BatchLoader():
         self.counter = start
         self.data_counter = start
         self.outer_cache_dir = cache_dir
+
+        # construct the sample indices
+        # e.g. {"t0": [date1, date2], "fhrs": [0, 6], "member": [0, 1, 2]}
+        self.sample_dims = sample_dims
+        all_sample_iterations = {
+            key: getattr(dataset, key)
+            for key in sample_dims
+        }
+        self.sample_indices = list()
+        for combo in itertools.product(*all_sample_iterations.values()):
+            self.sample_indices.append(dict(zip(sample_dims, combo)))
 
         self.num_workers = num_workers
         assert max_queue_size > 0
@@ -66,11 +78,6 @@ class BatchLoader():
         self.restart(idx=start)
 
     @property
-    def dates(self):
-        """Returns dates of all initial conditions"""
-        return self.dataset.dates
-
-    @property
     def name(self):
         return str(type(self).__name__)
 
@@ -78,8 +85,8 @@ class BatchLoader():
         return f"{self.outer_cache_dir}/{self.name.lower()}-cache/{batch_idx}"
 
     def __len__(self) -> int:
-        n_dates = len(self.dates)
-        n_batches = ceil(n_dates / self.batch_size)
+        n_samples = len(self.sample_indices)
+        n_batches = ceil(n_samples / self.batch_size)
         return n_batches
 
     def __iter__(self):
@@ -118,11 +125,12 @@ class BatchLoader():
         if self.data_counter < len(self):
             st = self.data_counter * self.batch_size
             ed = st + self.batch_size
-            batch_dates = self.dates[st:ed]
+            batch_indices = self.sample_indices[st:ed]
             dlist = []
             cache_dir = self.get_cache_dir(self.data_counter)
-            for date in batch_dates:
-                fds = self.dataset.open_single_initial_condition(date, cache_dir=cache_dir)
+            for these_dims in batch_indices:
+                print(st, ed, these_dims)
+                fds = self.dataset.open_single_dataset(cache_dir=cache_dir, **these_dims)
                 dlist.append(fds)
             xds = xr.merge(dlist)
             return xds
@@ -158,7 +166,7 @@ class BatchLoader():
     def clear_cache(self, batch_idx):
         cache_dir = self.get_cache_dir(batch_idx)
         if os.path.isdir(cache_dir):
-            logger.info(f"{self.name}: clearing {cache_dir}")
+            logger.debug(f"{self.name}: clearing {cache_dir}")
             shutil.rmtree(cache_dir, ignore_errors=True)
 
 
@@ -225,6 +233,24 @@ class BatchLoader():
                 # and the BatchLoader is restarted immediately after, we don't get a double shutdown call
                 self.executor = None
 
+    def find_my_region(self, xds):
+        """Given a dataset, that's assumed to be a subset of the initial dataset,
+        find the logical index values where this should be stored in the final zarr store
+
+        Args:
+            xds (xr.Dataset): with a subset of the data (i.e., a couple of initial conditions)
+
+        Returns:
+            region (dict): indicating the zarr region to store in, based on the initial condition indices
+        """
+        region = {k: slice(None, None) for k in xds.dims}
+        for key in self.sample_dims:
+            full_array = getattr(self.dataset, key) # e.g. all of the initial conditions
+            batch_indices = [list(full_array).index(value) for value in xds[key].values]
+            region[key] = slice(batch_indices[0], batch_indices[-1]+1)
+        return region
+
+
 
 class MPIBatchLoader(BatchLoader):
     """Make sure mpi4py and mpi4jax is installed
@@ -233,6 +259,7 @@ class MPIBatchLoader(BatchLoader):
         self,
         dataset,
         batch_size,
+        sample_dims,
         mpi_topo,
         num_workers=0,
         max_queue_size=1,
@@ -247,6 +274,7 @@ class MPIBatchLoader(BatchLoader):
         super().__init__(
             dataset=dataset,
             batch_size=batch_size,
+            sample_dims=sample_dims,
             num_workers=num_workers,
             max_queue_size=max_queue_size,
             start=start,
@@ -258,6 +286,9 @@ class MPIBatchLoader(BatchLoader):
             logger.warning(f"{self.name}.__init__: batch_size = {batch_size} not divisible by MPI Size = {self.topo.size}")
             logger.warning(f"{self.name}.__init__: some data will be skipped in each batch")
 
+        if self.data_per_process > 1:
+            raise NotImplementedError(f"{self.name}: not ready for this after parallelizing over all dims")
+
     def __str__(self):
         myname = f"{__name__}.{self.name}"
         underline = "".join(["-" for _ in range(len(myname))])
@@ -265,6 +296,8 @@ class MPIBatchLoader(BatchLoader):
 
         for key in ["local_batch_index", "data_per_process", "batch_size"]:
             msg += f"{key:<18s}: {getattr(self, key):02d}\n"
+
+        msg += f"{'sample_dims':<18s}: {self.sample_dims}\n"
         return msg
 
     def get_cache_dir(self, batch_idx):
@@ -274,12 +307,13 @@ class MPIBatchLoader(BatchLoader):
         if self.data_counter < len(self):
             st = (self.data_counter * self.batch_size) + self.local_batch_index
             ed = st + self.data_per_process
-            batch_dates = self.dates[st:ed]
+            batch_indices = self.sample_indices[st:ed]
             cache_dir = self.get_cache_dir(self.data_counter)
-            if len(batch_dates) > 0:
+            if len(batch_indices) > 0:
                 dlist = []
-                for date in batch_dates:
-                    fds = self.dataset.open_single_initial_condition(date, cache_dir=cache_dir)
+
+                for these_dims in batch_indices:
+                    fds = self.dataset.open_single_dataset(cache_dir=cache_dir, **these_dims)
                     dlist.append(fds)
                 xds = xr.merge(dlist)
                 return xds

@@ -1,6 +1,10 @@
 loader:
   name: mpibatchloader
-  batch_size: 32
+  batch_size: 64
+  sample_dims:
+    - t0
+    - fhr
+    - member
 
 directories:
   zarr: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/forecasts.zarr
@@ -9,16 +13,16 @@ directories:
 
 dataset:
   name: gefsdataset
-  dates:
+  t0:
     start: 2017-01-01T00
     end: 2020-09-23T18
     freq: 6h
 
-  fhrs:
+  fhr:
     start: 0
     end: 6
 
-  members:
+  member:
     start: 0
     end: 20
 
