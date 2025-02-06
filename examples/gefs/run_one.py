@@ -9,11 +9,11 @@ from ufs2arco.batchloader import BatchLoader, MPIBatchLoader
 if __name__ == "__main__":
 
     topo = MPITopology(log_dir="/global/cfs/cdirs/m4718/timothys/gefs/one-degree/logs")
-    gefs = GEFSDataset("/global/homes/t/timothys/ufs2arco/examples/gefs/recipe.yaml")
+    gefs = GEFSDataset("/global/homes/t/timothys/ufs2arco/examples/gefs/recipe.one.yaml")
 
     loader = MPIBatchLoader(
         dataset=gefs,
-        batch_size=4,
+        batch_size=64,
         num_workers=0,
         max_queue_size=1,
         mpi_topo=topo,
