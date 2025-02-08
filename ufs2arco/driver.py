@@ -34,8 +34,9 @@ class Driver():
         for key in ["name", "batch_size", "sample_dims"]:
             assert key in self.config["loader"], \
                 f"Driver.__init__: could not find '{key}' in 'loader' section in yaml"
-        assert len(self.config["loader"]) == 3, \
-            f"Driver.__init__: only 'name', 'batch_size', 'sample_dims' allowed for now in loader section"
+        for key in ["cache_dir", "num_workers", "max_queue_size"]:
+            assert key not in self.config["loader"], \
+                f"Driver.__init__: '{key}' not allowed in 'loader' section in yaml"
 
         name = self.config["loader"]["name"].lower()
         if name == "batchloader":
@@ -65,9 +66,12 @@ class Driver():
     @property
     def loader_kwargs(self):
         kw = {key: val for key, val in self.config["loader"].items() if key != "name"}
+        # optional
+        if "start" not in kw.keys():
+            kw["start"] = 0
+        # enforced options
         kw["num_workers"] = 0
         kw["max_queue_size"] = 1
-        kw["start"] = 0
         kw["cache_dir"] = self.config["directories"]["cache"]
         return kw
 
@@ -83,14 +87,15 @@ class Driver():
         loader = self.Loader(dataset=dataset, **loader_kwargs)
         logger = logging.getLogger("ufs2arco")
 
-        # create container
-        container_cache = self.config["directories"]["cache"]+"/container"
-        if self.use_mpi:
-            if topo.is_root:
+        # create container, only if loader start is not 0
+        if loader_kwargs["start"] == 0:
+            container_cache = self.config["directories"]["cache"]+"/container"
+            if self.use_mpi:
+                if topo.is_root:
+                    dataset.create_container(cache_dir=container_cache)
+                topo.barrier()
+            else:
                 dataset.create_container(cache_dir=container_cache)
-            topo.barrier()
-        else:
-            dataset.create_container(cache_dir=container_cache)
 
         # loop through batches
         n_batches = len(loader)

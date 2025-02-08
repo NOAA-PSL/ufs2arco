@@ -297,6 +297,8 @@ class MPIBatchLoader(BatchLoader):
         for key in ["local_batch_index", "data_per_process", "batch_size"]:
             msg += f"{key:<18s}: {getattr(self, key):02d}\n"
 
+        msg += f"{'Total Samples':<18s}: {len(self.sample_indices)}\n"
+        msg += f"{'Total Batches':<18s}: {len(self)}\n"
         msg += f"{'sample_dims':<18s}: {self.sample_dims}\n"
         return msg
 

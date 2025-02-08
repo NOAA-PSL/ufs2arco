@@ -3,9 +3,9 @@
 #SBATCH -J gefs-1.00
 #SBATCH -o /global/cfs/cdirs/m4718/timothys/gefs/one-degree/slurm/%j.out
 #SBATCH -e /global/cfs/cdirs/m4718/timothys/gefs/one-degree/slurm/%j.err
-#SBATCH --nodes=1
-#SBATCH --ntasks=64
-#SBATCH --cpus-per-task=4
+#SBATCH --nodes=8
+#SBATCH --ntasks-per-node=128
+#SBATCH --cpus-per-task=2
 #SBATCH --qos=regular
 #SBATCH --account=m4718
 #SBATCH --constraint=cpu

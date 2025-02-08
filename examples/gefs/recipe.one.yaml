@@ -1,6 +1,6 @@
 loader:
   name: mpibatchloader
-  batch_size: 64
+  batch_size: 1024
   sample_dims:
     - t0
     - fhr
