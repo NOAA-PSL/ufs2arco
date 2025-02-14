@@ -58,7 +58,7 @@ class MPITopology():
             if not os.path.isdir(self.log_dir):
                 os.makedirs(self.log_dir)
         self.comm.Barrier()
-        self.logfile = f"{self.log_dir}/log.{self.rank:02d}.{self.size:02d}.out"
+        self.logfile = f"{self.log_dir}/log.{self.rank:04d}.{self.size:04d}.out"
 
         logger.setLevel(level=level)
         formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)-7s] %(message)s")
