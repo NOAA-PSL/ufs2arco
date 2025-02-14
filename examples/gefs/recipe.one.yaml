@@ -1,13 +1,12 @@
 loader:
   name: mpibatchloader
-  batch_size: 1024
   sample_dims:
     - t0
     - fhr
     - member
 
 directories:
-  zarr: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/forecasts.zarr
+  zarr: /pscratch/sd/t/timothys/gefs/one-degree/forecasts.zarr
   cache: /pscratch/sd/t/timothys/gefs-cache
   logs: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/logs
 
@@ -30,6 +29,6 @@ dataset:
     t0: 1
     fhr: 1
     member: 1
-    pressure: 1
+    pressure: -1
     latitude: -1
     longitude: -1
