@@ -129,7 +129,6 @@ class BatchLoader():
             dlist = []
             cache_dir = self.get_cache_dir(self.data_counter)
             for these_dims in batch_indices:
-                print(st, ed, these_dims)
                 fds = self.dataset.open_single_dataset(cache_dir=cache_dir, **these_dims)
                 dlist.append(fds)
             xds = xr.merge(dlist)
@@ -258,7 +257,6 @@ class MPIBatchLoader(BatchLoader):
     def __init__(
         self,
         dataset,
-        batch_size,
         sample_dims,
         mpi_topo,
         num_workers=0,
@@ -269,7 +267,8 @@ class MPIBatchLoader(BatchLoader):
         assert _has_mpi, f"{self.name}.__init__: Unable to import mpi4py, cannot use this class"
 
         self.topo = mpi_topo
-        self.data_per_process = batch_size // self.topo.size
+        batch_size = self.topo.size
+        self.data_per_process = 1
         self.local_batch_index = self.topo.rank*self.data_per_process
         super().__init__(
             dataset=dataset,
@@ -281,13 +280,6 @@ class MPIBatchLoader(BatchLoader):
             cache_dir=cache_dir,
         )
         logger.info(str(self))
-
-        if self.data_per_process*self.topo.size != batch_size:
-            logger.warning(f"{self.name}.__init__: batch_size = {batch_size} not divisible by MPI Size = {self.topo.size}")
-            logger.warning(f"{self.name}.__init__: some data will be skipped in each batch")
-
-        if self.data_per_process > 1:
-            raise NotImplementedError(f"{self.name}: not ready for this after parallelizing over all dims")
 
     def __str__(self):
         myname = f"{__name__}.{self.name}"

@@ -31,7 +31,7 @@ class Driver():
             raise NotImplementedError(f"Driver.__init__: only 'GEFSDataset' is implemented")
 
         # the loader
-        for key in ["name", "batch_size", "sample_dims"]:
+        for key in ["name", "sample_dims"]:
             assert key in self.config["loader"], \
                 f"Driver.__init__: could not find '{key}' in 'loader' section in yaml"
         for key in ["cache_dir", "num_workers", "max_queue_size"]:
@@ -41,7 +41,8 @@ class Driver():
         name = self.config["loader"]["name"].lower()
         if name == "batchloader":
             self.Loader = BatchLoader
-            print("Driver.__init__: unsure what will happen with logs directory using non MPIBatchLoader")
+            logger = logging.getLogger("ufs2arco")
+            logger.warning("Driver.__init__: unsure what will happen with logs directory using non MPIBatchLoader")
         elif name == "mpibatchloader":
             self.Loader = MPIBatchLoader
         else:
@@ -75,7 +76,7 @@ class Driver():
         kw["cache_dir"] = self.config["directories"]["cache"]
         return kw
 
-    def run(self):
+    def run(self, overwrite: bool = False):
 
         # MPI requires some extra setup
         loader_kwargs = self.loader_kwargs.copy()
@@ -89,13 +90,14 @@ class Driver():
 
         # create container, only if loader start is not 0
         if loader_kwargs["start"] == 0:
+            container_kwargs = {"mode": "w"} if overwrite else {}
             container_cache = self.config["directories"]["cache"]+"/container"
             if self.use_mpi:
                 if topo.is_root:
-                    dataset.create_container(cache_dir=container_cache)
+                    dataset.create_container(cache_dir=container_cache, **container_kwargs)
                 topo.barrier()
             else:
-                dataset.create_container(cache_dir=container_cache)
+                dataset.create_container(cache_dir=container_cache, **container_kwargs)
 
         # loop through batches
         n_batches = len(loader)
@@ -106,6 +108,7 @@ class Driver():
             has_content = xds is not None and len(xds) > 0
             if has_content:
 
+                xds = xds.reset_coords(drop=True)
                 region = loader.find_my_region(xds)
                 xds.to_zarr(dataset.store_path, region=region)
                 loader.clear_cache(batch_idx)
