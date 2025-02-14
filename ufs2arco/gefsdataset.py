@@ -114,7 +114,7 @@ class GEFSDataset():
                 nds[varname] = xds[varname].copy()
 
         nds.to_zarr(self.store_path, compute=False, **kwargs)
-        logger.info(f"{self._name}.create_container: stored container at {self.store_path}")
+        logger.info(f"{self._name}.create_container: stored container at {self.store_path}\n{nds}\n")
 
     def open_dataset(self, cache_dir="gefs-cache"):
         """This is the naive version of the code, incorrectly assuming
@@ -178,6 +178,12 @@ class GEFSDataset():
                     f"{self._name}: File Not Found: {path}\n\t" +\
                     f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
                 )
+            except:
+                local_file = None
+                logger.warning(
+                    f"{self._name}: Trouble finding the file: {path}\n\t" +\
+                    f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
+                )
 
             cached_files[k] = local_file
 
@@ -204,8 +210,12 @@ class GEFSDataset():
 
 
     def open_single_variable(self, file, varname, member, filter_by_keys=None):
-        xds = xr.open_dataset(file, engine="cfgrib", filter_by_keys=filter_by_keys)
-        xda = xds[varname]
+        try:
+            xds = xr.open_dataset(file, engine="cfgrib", filter_by_keys=filter_by_keys)
+            xda = xds[varname]
+        except:
+            logging.error(f"{self._name}.open_single_variable: cannot open (variable, member) = ({varname}, {member}) at \n{file}")
+            raise
         if "isobaricInhPa" in xds.coords:
             if len(xda.dims) < 3:
                 vv = xda["isobaricInhPa"].values
@@ -218,7 +228,9 @@ class GEFSDataset():
 
         xds = xda.to_dataset(name=varname)
         if varname in ["lsm", "orog"]:
-            xds = xds.drop_vars(["step", "time", "valid_time"])
+            for key in ["step", "time", "valid_time"]:
+                if key in xds:
+                    xds = xds.drop_vars(key)
 
         else:
             xds = xds.rename(
@@ -246,7 +258,15 @@ class GEFSDataset():
                 },
             )
             xds = xds.swap_dims({"lead_time": "fhr"})
-            xds["valid_time"] = xds["valid_time"].expand_dims(["t0", "fhr"])
+            valid_time = xds["t0"] + xds["lead_time"]
+            if "valid_time" in xds:
+
+                xds["valid_time"] = xds["valid_time"].expand_dims(["t0", "fhr"])
+                assert valid_time.squeeze() == xds.valid_time.squeeze()
+                xds = xds.drop_vars("valid_time")
+
+            xds["valid_time"] = valid_time
+            xds = xds.set_coords("valid_time")
 
         return xds[varname]
 
@@ -256,7 +276,7 @@ class GEFSDataset():
         outer = f"gefs.{t0.year:04d}{t0.month:02d}{t0.day:02d}/{t0.hour:02d}"
 
         # Thanks to Herbie for figuring these out
-        if t0 < pd.Timestamp("2017-07-27"):
+        if t0 < pd.Timestamp("2018-07-27"):
             middle = ""
             fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{a_or_b}f{fhr:03d}"
 
