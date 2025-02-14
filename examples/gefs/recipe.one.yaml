@@ -14,7 +14,7 @@ dataset:
   name: gefsdataset
   t0:
     start: 2017-01-01T00
-    end: 2020-09-23T18
+    end: 2020-09-23T06
     freq: 6h
 
   fhr:

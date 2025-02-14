@@ -286,7 +286,7 @@ class GEFSDataset():
             middle = ""
             fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{a_or_b}f{fhr:03d}"
 
-        elif t0 < pd.Timestamp("2020-09-24"):
+        elif t0 < pd.Timestamp("2020-09-23T12"):
             middle = f"pgrb2{a_or_b}/"
             fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{a_or_b}f{fhr:02d}"
 
