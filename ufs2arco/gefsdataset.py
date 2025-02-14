@@ -194,28 +194,34 @@ class GEFSDataset():
             is_static = fhr == 0 and member == 0 and t0 == self.t0[0]
             read_dict = self._ic_variables if is_static else self._fc_variables
             for varname, open_kwargs in read_dict.items():
-                dslist = [
-                    self.open_single_variable(
-                        file=cached_files[a_or_b],
-                        varname=varname,
-                        member=member,
-                        filter_by_keys=open_kwargs["filter_by_keys"],
-                    )
-                    for a_or_b in open_kwargs["param_list"]
-                ]
-                dsdict[varname] = xr.merge(dslist)[varname]
+                dslist = []
+                for a_or_b in open_kwargs["param_list"]:
+                    try:
+                        thisvar = self.open_single_variable(
+                            file=cached_files[a_or_b],
+                            varname=varname,
+                            member=member,
+                            filter_by_keys=open_kwargs["filter_by_keys"],
+                        )
+                    except:
+                        thisvar = None
+                        logger.warning(
+                            f"{self._name}: Trouble opening {varname}\n\t" +\
+                            f"(t0, member, fhr, key) = {t0} {member} {fhr} {a_or_b}"
+                        )
+                    dslist.append(thisvar)
+                if not any(x is None for x in dslist):
+                    dsdict[varname] = xr.merge(dslist)[varname]
+                else:
+                    dsdict[varname] = xr.Dataset()
 
         xds = xr.Dataset(dsdict)
         return xds
 
 
     def open_single_variable(self, file, varname, member, filter_by_keys=None):
-        try:
-            xds = xr.open_dataset(file, engine="cfgrib", filter_by_keys=filter_by_keys)
-            xda = xds[varname]
-        except:
-            logging.error(f"{self._name}.open_single_variable: cannot open (variable, member) = ({varname}, {member}) at \n{file}")
-            raise
+        xds = xr.open_dataset(file, engine="cfgrib", filter_by_keys=filter_by_keys)
+        xda = xds[varname]
         if "isobaricInhPa" in xds.coords:
             if len(xda.dims) < 3:
                 vv = xda["isobaricInhPa"].values

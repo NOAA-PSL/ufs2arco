@@ -101,7 +101,9 @@ class Driver():
 
         # loop through batches
         n_batches = len(loader)
-        for batch_idx, xds in enumerate(loader):
+        for batch_idx in range(loader_kwargs["start"], len(loader)):
+
+            xds = next(loader)
 
             # xds is None if MPI rank looks for non existent indices (i.e., last batch scenario)
             # len(xds) == 0 if we couldn't find the file we were looking for
