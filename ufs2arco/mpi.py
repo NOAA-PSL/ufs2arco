@@ -1,38 +1,48 @@
 import os
 import logging
 import warnings
+from typing import Optional, Any, List
 
 try:
     from mpi4py import MPI
     _has_mpi = True
-
-except:
+except ImportError:
     _has_mpi = False
-    warnings.warn(f"ufs2arco.mpi: Unable to import mpi4py, cannot use this module")
+    warnings.warn("ufs2arco.mpi: Unable to import mpi4py, cannot use this module")
 
 from .log import SimpleFormatter
+
 logger = logging.getLogger("ufs2arco")
 
-class MPITopology():
+class MPITopology:
+    """
+    Handles MPI-based parallel processing topology.
+    """
 
-    @property
-    def is_root(self):
-        return self.rank == self.root
+    def __init__(
+        self,
+        log_dir: Optional[str] = None,
+        log_level: int = logging.INFO,
+    ) -> None:
+        """
+        Initializes the MPI topology.
 
-    def __init__(self, log_dir=None, log_level=logging.INFO):
+        Args:
+            log_dir (Optional[str]): Directory for storing logs.
+            log_level (int): Logging level.
+        """
+        assert _has_mpi, "MPITopology requires mpi4py to be available."
 
-        assert _has_mpi, f"MPITopology.__init__: Unable to import mpi4py, cannot use this class"
-        self.required_level = MPI.THREAD_MULTIPLE
-        self.provided_level = MPI.Query_thread()
-        self.comm = MPI.COMM_WORLD
-        self.rank = self.comm.Get_rank()
-        self.size = self.comm.Get_size()
-        self.root = 0
-        self.pid = os.getpid()
-        self.friends = tuple(ii for ii in range(self.size) if ii!=self.root)
+        self.comm: MPI.Comm = MPI.COMM_WORLD
+        self.rank: int = self.comm.Get_rank()
+        self.size: int = self.comm.Get_size()
+        self.root: int = 0
 
-        self._init_log(log_dir=log_dir, level=log_level)
-        logger.info(str(self))
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+
+        self.log_dir: Optional[str] = log_dir
+        self.log_level: int = log_level
 
 
     def __str__(self):
@@ -49,6 +59,7 @@ class MPITopology():
             f"{'provided_level':<18s}: {self.provided_level}\n"
         return msg
 
+
     def _init_log(self, log_dir, level=logging.INFO):
         self.log_dir = "./" if log_dir is None else log_dir
         if self.is_root:
@@ -64,5 +75,20 @@ class MPITopology():
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
-    def barrier(self):
-        return self.comm.barrier()
+
+    @property
+    def is_root(self) -> bool:
+        """
+        Checks if the current process is the root process.
+
+        Returns:
+            bool: True if the current process is the root, False otherwise.
+        """
+        return self.rank == self.root
+
+
+    def barrier(self) -> None:
+        """
+        Synchronizes all processes at a barrier.
+        """
+        self.comm.Barrier()

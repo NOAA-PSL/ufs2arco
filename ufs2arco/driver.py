@@ -10,12 +10,32 @@ from ufs2arco.mpi import MPITopology
 from ufs2arco.gefsdataset import GEFSDataset
 from ufs2arco.datamover import DataMover, MPIDataMover
 
-class Driver():
-    """A class to manage all of the data movement
+class Driver:
+    """A class to manage data movement.
+
+    Attributes:
+        config (dict): Configuration dictionary loaded from the YAML file.
+        Dataset (Type[GEFSDataset]): The dataset class (GEFSDataset).
+        Loader (Type[DataMover] | Type[MPIDataMover]): The data mover class (DataMover or MPIDataMover).
+
+    Methods:
+        __init__(config_filename: str): Initializes the Driver object with configuration from the specified YAML file.
+        use_mpi: Returns whether MPI should be used based on the configuration.
+        dataset_kwargs: Returns the arguments for initializing the dataset.
+        mover_kwargs: Returns the arguments for initializing the mover.
+        run(overwrite: bool = False): Runs the data movement process, managing the dataset and mover.
     """
 
     def __init__(self, config_filename: str):
+        """Initializes the Driver object with configuration from the specified YAML file.
 
+        Args:
+            config_filename (str): Path to the YAML configuration file.
+
+        Raises:
+            AssertionError: If required sections or keys are missing in the configuration.
+            NotImplementedError: If a dataset or mover is not recognized.
+        """
         with open(config_filename, "r") as f:
             self.config = yaml.safe_load(f)
 
@@ -55,21 +75,38 @@ class Driver():
                 f"Driver.__init__: could not find '{key}' in 'directories' section in yaml"
 
     @property
-    def use_mpi(self):
+    def use_mpi(self) -> bool:
+        """Determines if MPI is to be used based on the mover configuration.
+
+        Returns:
+            bool: True if MPI is to be used, False otherwise.
+        """
         return self.config["mover"]["name"].lower() == "mpidatamover"
 
     @property
-    def dataset_kwargs(self):
+    def dataset_kwargs(self) -> dict:
+        """Returns the arguments for initializing the dataset.
+
+        Returns:
+            dict: The dataset initialization arguments.
+        """
         kw = {key: val for key, val in self.config["dataset"].items() if key != "name"}
         kw["store_path"] = self.config["directories"]["zarr"]
         return kw
 
     @property
-    def mover_kwargs(self):
+    def mover_kwargs(self) -> dict:
+        """Returns the arguments for initializing the data mover.
+
+        Returns:
+            dict: The mover initialization arguments.
+        """
         kw = {key: val for key, val in self.config["mover"].items() if key != "name"}
+
         # optional
         if "start" not in kw.keys():
             kw["start"] = 0
+
         # enforced options
         kw["num_workers"] = 0
         kw["max_queue_size"] = 1
@@ -77,7 +114,15 @@ class Driver():
         return kw
 
     def run(self, overwrite: bool = False):
+        """Runs the data movement process, managing the dataset and mover.
 
+        This method sets up the dataset, creates the container, and loops through
+        batches to move data to the specified store path (Zarr format).
+
+        Args:
+            overwrite (bool, optional): Whether to overwrite the existing container.
+                Defaults to False.
+        """
         # MPI requires some extra setup
         mover_kwargs = self.mover_kwargs.copy()
         if self.use_mpi:
@@ -91,7 +136,7 @@ class Driver():
         # create container, only if mover start is not 0
         if mover_kwargs["start"] == 0:
             container_kwargs = {"mode": "w"} if overwrite else {}
-            container_cache = self.config["directories"]["cache"]+"/container"
+            container_cache = self.config["directories"]["cache"] + "/container"
             if self.use_mpi:
                 if topo.is_root:
                     dataset.create_container(cache_dir=container_cache, **container_kwargs)
