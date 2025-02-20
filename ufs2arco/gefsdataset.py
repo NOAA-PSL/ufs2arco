@@ -39,8 +39,8 @@ class GEFSDataset():
         return len(self.t0)
 
     def __str__(self) -> str:
-        msg = f"\n{self._name}\n"+\
-            "".join(["-" for _ in range(len(self._name))]) + "\n"
+        msg = f"\n{self.name}\n"+\
+            "".join(["-" for _ in range(len(self.name))]) + "\n"
         for key in ["t0", "fhr", "member", "store_path"]:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         chunkstr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.chunks.items()])
@@ -48,7 +48,7 @@ class GEFSDataset():
         return msg
 
     @property
-    def _name(self):
+    def name(self):
         return f"GEFSDataset"
 
     def create_container(self, cache_dir="container-cache", **kwargs):
@@ -114,7 +114,7 @@ class GEFSDataset():
                 nds[varname] = xds[varname].copy()
 
         nds.to_zarr(self.store_path, compute=False, **kwargs)
-        logger.info(f"{self._name}.create_container: stored container at {self.store_path}\n{nds}\n")
+        logger.info(f"{self.name}.create_container: stored container at {self.store_path}\n{nds}\n")
 
     def open_dataset(self, cache_dir="gefs-cache"):
         """This is the naive version of the code, incorrectly assuming
@@ -175,13 +175,13 @@ class GEFSDataset():
             except FileNotFoundError:
                 local_file = None
                 logger.warning(
-                    f"{self._name}: File Not Found: {path}\n\t" +\
+                    f"{self.name}: File Not Found: {path}\n\t" +\
                     f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
                 )
             except:
                 local_file = None
                 logger.warning(
-                    f"{self._name}: Trouble finding the file: {path}\n\t" +\
+                    f"{self.name}: Trouble finding the file: {path}\n\t" +\
                     f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
                 )
 
@@ -206,7 +206,7 @@ class GEFSDataset():
                     except:
                         thisvar = None
                         logger.warning(
-                            f"{self._name}: Trouble opening {varname}\n\t" +\
+                            f"{self.name}: Trouble opening {varname}\n\t" +\
                             f"(t0, member, fhr, key) = {t0} {member} {fhr} {a_or_b}"
                         )
                     dslist.append(thisvar)
