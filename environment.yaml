@@ -14,7 +14,7 @@ dependencies:
     - h5netcdf
     - bottleneck
     - dask[complete]
-    - zarr
+    - zarr<3
     - cftime
     - cfgrib
 # jupyter etc

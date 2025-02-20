@@ -1,6 +1,6 @@
 [project]
 name = "ufs2arco"
-version = "0.2.1"
+version = "0.3.0"
 description = "Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Cloud Optimized (ARCO) format"
 authors = [
     {name="Timothy Smith", email="tim.smith@noaa.gov"},
@@ -20,18 +20,22 @@ dependencies = [
     "h5netcdf",
     "bottleneck",
     "dask[complete]",
-    "zarr",
+    "zarr<3",
     "cftime",
     "fsspec",
     "s3fs",
     "gcsfs",
     "pytest",
     "coverage",
+    "cfgrib",
 ]
 
 [project.optional-dependencies]
 documentation = [
     "jupyter", "nbsphinx", "sphinx-book-theme",
+]
+mpi = [
+    "mpi4py",
 ]
 
 [project.urls]

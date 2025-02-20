@@ -1,0 +1,34 @@
+mover:
+  name: mpidatamover
+  sample_dims:
+    - t0
+    - fhr
+    - member
+
+directories:
+  zarr: /pscratch/sd/t/timothys/gefs/one-degree/forecasts.zarr
+  cache: /pscratch/sd/t/timothys/gefs-cache
+  logs: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/logs
+
+dataset:
+  name: gefsdataset
+  t0:
+    start: 2017-01-01T00
+    end: 2020-09-23T06
+    freq: 6h
+
+  fhr:
+    start: 0
+    end: 6
+
+  member:
+    start: 0
+    end: 20
+
+  chunks:
+    t0: 1
+    fhr: 1
+    member: 1
+    pressure: -1
+    latitude: -1
+    longitude: -1

@@ -1,0 +1,4 @@
+*.zarr
+*cache
+logs/
+*.log
