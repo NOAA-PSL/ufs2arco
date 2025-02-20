@@ -62,7 +62,7 @@ class DataMover():
         self.sample_dims = sample_dims
         for dim in sample_dims:
             chunksize = self.dataset.chunks[dim]
-            assert chunksize == 1,
+            assert chunksize == 1, \
                 f"{self.name}.__init__: {self.dataset.name}.chunks['{dim}'] = {chunksize}, but should be 1"
         all_sample_iterations = {
             key: getattr(dataset, key)
