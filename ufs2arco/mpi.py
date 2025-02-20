@@ -64,8 +64,5 @@ class MPITopology():
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
-    def bcast(self, x):
-        return self.comm.bcast(x, root=self.root)
-
     def barrier(self):
         return self.comm.barrier()

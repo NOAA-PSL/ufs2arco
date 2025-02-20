@@ -1,5 +1,5 @@
-loader:
-  name: mpibatchloader
+mover:
+  name: mpidatamover
   sample_dims:
     - t0
     - fhr

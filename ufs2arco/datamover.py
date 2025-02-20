@@ -16,13 +16,22 @@ from .mpi import MPITopology, _has_mpi
 
 logger = logging.getLogger("ufs2arco")
 
-class BatchLoader():
-    """
+class DataMover():
+    """Move data, using the concept of a data "sample" to define how much data is stored to zarr at once.
+    A data sample is defined by :attr:`sample_dims`. For example, if a dataset has dimensions
+    ``("t0", "fhr", "member", "pressure", "latitude", "longitude")``
+    then setting ``sample_dims = ("t0", "fhr", "member")``
+    would loop through the data using those indices, where each sample has the full
+    ``("pressure", "latitude", "longitude")`` array for the given values of ``("t0", "fhr", "member")``.
 
     Note:
         * For now only works with GEFSDataset
-        * This ends up being the same as the Naive version, except for the caching behavior,
-          since it will for loop over all dates, but it clears the cache after batch_size dates
+        * This is the same as loop through the data storing one sample at a time,
+          except that it stores ``batch_size`` samples in a hard disk cache.
+          It clears the cache after every batch.
+          Additionally, it is feasible to pull in data and store to zarr simultaneously
+          with multithreading, but this will require ``num_workers`` more cache (disk) space,
+          and hasn't been tested for this application.
     """
     counter = 0
     data_counter = 0
@@ -85,8 +94,6 @@ class BatchLoader():
     def name(self):
         return str(type(self).__name__)
 
-    def get_cache_dir(self, batch_idx):
-        return f"{self.outer_cache_dir}/{self.name.lower()}-cache/{batch_idx}"
 
     def __len__(self) -> int:
         n_samples = len(self.sample_indices)
@@ -104,7 +111,7 @@ class BatchLoader():
             # in the parallel case, we don't want to unnecessarily clear the queue,
             # so we only restart if we've been grabbing data willy nilly
             # and we've exceeded the queue size
-            # Also we restart if the BatchLoader was previously shutdown and needs a kick start
+            # Also we restart if the DataMover was previously shutdown and needs a kick start
             if self.stop_event.is_set() or self.data_counter > self.max_queue_size:
                 self.restart()
         return self
@@ -120,17 +127,22 @@ class BatchLoader():
                 self.counter += 1
             return data
         else:
-            logger.debug(f"BatchLoader.__next__: counter > len(self)")
+            logger.debug(f"{self.name}.__next__: counter > len(self)")
             raise StopIteration
 
-    def get_batch_indices(self, this_batch_index):
-        st = this_batch_index * self.batch_size
+
+    def get_cache_dir(self, batch_idx):
+        return f"{self.outer_cache_dir}/{self.name.lower()}-cache/{batch_idx}"
+
+
+    def get_batch_indices(self, batch_idx):
+        st = batch_idx * self.batch_size
         ed = st + self.batch_size
         return self.sample_indices[st:ed]
 
 
     def _next_data(self):
-        logger.debug(f"BatchLoader._next_data[{self.data_counter}]")
+        logger.debug(f"{self.name}._next_data[{self.data_counter}]")
         if self.data_counter < len(self):
             batch_indices = self.get_batch_indices(self.data_counter)
             cache_dir = self.get_cache_dir(self.data_counter)
@@ -162,7 +174,7 @@ class BatchLoader():
 
     def get_data(self):
         """Pull a batch of data from the queue"""
-        logger.debug(f"BatchLoader.get_data")
+        logger.debug(f"{self.name}.get_data")
         if self.num_workers > 0:
             data = self.data_queue.get()
             self.task_done()
@@ -182,7 +194,7 @@ class BatchLoader():
 
     def task_done(self):
         self.data_queue.task_done()
-        logger.debug(f"BatchLoader: marked task_done")
+        logger.debug(f"{self.name}: marked task_done")
 
     def restart(self, idx=0, cancel=False, **kwargs):
         """Restart the :attr:`data_counter` and ThreadPoolExecutor to get ready for the pass through the data
@@ -190,7 +202,7 @@ class BatchLoader():
         Args:
             cancel (bool): if True, cancel any remaining queue items/tasks with :meth:`.cancel`
         """
-        logger.debug(f"BatchLoader.restart")
+        logger.debug(f"{self.name}.restart")
 
         # start filling the queue
         if self.num_workers > 0:
@@ -221,7 +233,7 @@ class BatchLoader():
         i = 1
         if self.num_workers > 0:
             while not self.data_queue.empty():
-                logger.debug(f"BatchLoader.cancel: Queue not empty. (count, data_count) = ({self.counter}, {self.data_counter})... getting data {i}")
+                logger.debug(f"{self.name}.cancel: Queue not empty. (count, data_count) = ({self.counter}, {self.data_counter})... getting data {i}")
                 self.get_data()
                 i+=1
 
@@ -232,7 +244,7 @@ class BatchLoader():
             cancel (bool): If true, cancel any remaining tasks...
                 Don't do this right after a for loop though, since the for loop may not finish due to a deadlock
         """
-        logger.debug(f"BatchLoader.shutdown")
+        logger.debug(f"{self.name}.shutdown")
         if self.num_workers > 0:
             self.stop_event.set()
             if cancel:
@@ -240,7 +252,7 @@ class BatchLoader():
             with self.executor_lock:
                 self.executor.shutdown(**kwargs)
                 # set executor to None, so that if shutdown is called from within a loop
-                # and the BatchLoader is restarted immediately after, we don't get a double shutdown call
+                # and the DataMover is restarted immediately after, we don't get a double shutdown call
                 self.executor = None
 
     def find_my_region(self, xds):
@@ -262,8 +274,13 @@ class BatchLoader():
 
 
 
-class MPIBatchLoader(BatchLoader):
-    """Make sure mpi4py and mpi4jax is installed
+class MPIDataMover(DataMover):
+    """Use MPI to scale up the data moving. Note that this pulls in one data sample per MPI proces
+    (i.e., :attr:`data_per_process` always = 1), and uses the MPI size (i.e., number of processes)
+    as the :attr:`batch_size`.
+
+    So, this also requires ``num_mpi_processes`` = :attr:`batch_size` * `sample_size_in_bytes` disk space
+    for caching.
     """
     def __init__(
         self,
@@ -308,7 +325,7 @@ class MPIBatchLoader(BatchLoader):
     def get_cache_dir(self, batch_idx):
         return f"{self.outer_cache_dir}/{self.name.lower()}-cache/{self.topo.rank}/{batch_idx}"
 
-    def get_batch_indices(self, this_batch_index):
-        st = (this_batch_index * self.batch_size) + self.local_batch_index
+    def get_batch_indices(self, batch_idx):
+        st = (batch_idx * self.batch_size) + self.local_batch_index
         ed = st + self.data_per_process
         return self.sample_indices[st:ed]
