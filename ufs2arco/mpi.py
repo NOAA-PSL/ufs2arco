@@ -8,7 +8,7 @@ try:
     _has_mpi = True
 except ImportError:
     _has_mpi = False
-    warnings.warn("ufs2arco.mpi: Unable to import mpi4py, cannot use this module")
+    warnings.warn(f"ufs2arco.mpi: Unable to import mpi4py, cannot use this module")
 
 from .log import SimpleFormatter
 
@@ -31,18 +31,20 @@ class MPITopology:
             log_dir (Optional[str]): Directory for storing logs.
             log_level (int): Logging level.
         """
-        assert _has_mpi, "MPITopology requires mpi4py to be available."
 
-        self.comm: MPI.Comm = MPI.COMM_WORLD
-        self.rank: int = self.comm.Get_rank()
-        self.size: int = self.comm.Get_size()
-        self.root: int = 0
+        assert _has_mpi, f"MPITopology.__init__: Unable to import mpi4py, cannot use this class"
 
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
+        self.required_level = MPI.THREAD_MULTIPLE
+        self.provided_level = MPI.Query_thread()
+        self.comm = MPI.COMM_WORLD
+        self.rank = self.comm.Get_rank()
+        self.size = self.comm.Get_size()
+        self.root = 0
+        self.pid = os.getpid()
+        self.friends = tuple(ii for ii in range(self.size) if ii!=self.root)
 
-        self.log_dir: Optional[str] = log_dir
-        self.log_level: int = log_level
+        self._init_log(log_dir=log_dir, level=log_level)
+        logger.info(str(self))
 
 
     def __str__(self):
