@@ -48,7 +48,7 @@ class MPITopology:
 
 
     def __str__(self):
-        msg = f"MPITopology Summary\n" +\
+        msg = f"\nMPITopology Summary\n" +\
             f"-------------------\n" +\
             f"comm: {self.comm.Get_name()}\n"
         for key in ["rank", "size"]:
