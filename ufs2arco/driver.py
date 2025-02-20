@@ -6,9 +6,12 @@ except:
 import logging
 import yaml
 
+from ufs2arco.log import setup_simple_log
 from ufs2arco.mpi import MPITopology
 from ufs2arco.gefsdataset import GEFSDataset
 from ufs2arco.datamover import DataMover, MPIDataMover
+
+logger = logging.getLogger("ufs2arco")
 
 class Driver:
     """A class to manage data movement.
@@ -61,8 +64,6 @@ class Driver:
         name = self.config["mover"]["name"].lower()
         if name == "datamover":
             self.Mover = DataMover
-            logger = logging.getLogger("ufs2arco")
-            logger.warning("Driver.__init__: unsure what will happen with logs directory using non MPIDataMover")
         elif name == "mpidatamover":
             self.Mover = MPIDataMover
         else:
@@ -70,9 +71,12 @@ class Driver:
 
         # directories
         dirs = self.config["directories"]
-        for key in ["zarr", "cache", "logs"]:
+        for key in ["zarr", "cache"]:
             assert key in dirs, \
                 f"Driver.__init__: could not find '{key}' in 'directories' section in yaml"
+
+        if self.config["mover"]["name"] == "datamover" and "logs" in dirs:
+            logger.warning("Driver.__init__: with serial DataMover, logs are streamed to sys.stdout, not files, so logs directory is ignored")
 
     @property
     def use_mpi(self) -> bool:
@@ -129,9 +133,13 @@ class Driver:
             topo = MPITopology(log_dir=self.config["directories"]["logs"])
             mover_kwargs["mpi_topo"] = topo
 
+        else:
+            setup_simple_log()
+
+        # create logger after mpi_topo has (maybe) been created
+
         dataset = self.Dataset(**self.dataset_kwargs)
         mover = self.Mover(dataset=dataset, **mover_kwargs)
-        logger = logging.getLogger("ufs2arco")
 
         # create container, only if mover start is not 0
         if mover_kwargs["start"] == 0:
