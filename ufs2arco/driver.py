@@ -16,7 +16,7 @@ class Driver:
     Attributes:
         config (dict): Configuration dictionary loaded from the YAML file.
         Dataset (Type[GEFSDataset]): The dataset class (GEFSDataset).
-        Loader (Type[DataMover] | Type[MPIDataMover]): The data mover class (DataMover or MPIDataMover).
+        Mover (Type[DataMover] | Type[MPIDataMover]): The data mover class (DataMover or MPIDataMover).
 
     Methods:
         __init__(config_filename: str): Initializes the Driver object with configuration from the specified YAML file.
@@ -60,11 +60,11 @@ class Driver:
 
         name = self.config["mover"]["name"].lower()
         if name == "datamover":
-            self.Loader = DataMover
+            self.Mover = DataMover
             logger = logging.getLogger("ufs2arco")
             logger.warning("Driver.__init__: unsure what will happen with logs directory using non MPIDataMover")
         elif name == "mpidatamover":
-            self.Loader = MPIDataMover
+            self.Mover = MPIDataMover
         else:
             raise NotImplementedError(f"Driver.__init__: don't recognize mover = {name}")
 
@@ -130,7 +130,7 @@ class Driver:
             mover_kwargs["mpi_topo"] = topo
 
         dataset = self.Dataset(**self.dataset_kwargs)
-        mover = self.Loader(dataset=dataset, **mover_kwargs)
+        mover = self.Mover(dataset=dataset, **mover_kwargs)
         logger = logging.getLogger("ufs2arco")
 
         # create container, only if mover start is not 0
