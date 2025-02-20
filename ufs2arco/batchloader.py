@@ -119,23 +119,30 @@ class BatchLoader():
             logger.debug(f"BatchLoader.__next__: counter > len(self)")
             raise StopIteration
 
+    def get_batch_indices(self, this_batch_index):
+        st = this_batch_index * self.batch_size
+        ed = st + self.batch_size
+        return self.sample_indices[st:ed]
+
+
     def _next_data(self):
         logger.debug(f"BatchLoader._next_data[{self.data_counter}]")
-
         if self.data_counter < len(self):
-            st = self.data_counter * self.batch_size
-            ed = st + self.batch_size
-            batch_indices = self.sample_indices[st:ed]
-            dlist = []
+            batch_indices = self.get_batch_indices(self.data_counter)
             cache_dir = self.get_cache_dir(self.data_counter)
-            for these_dims in batch_indices:
-                fds = self.dataset.open_single_dataset(cache_dir=cache_dir, **these_dims)
-                dlist.append(fds)
-            xds = xr.merge(dlist)
-            return xds
+            if len(batch_indices) > 0:
+                dlist = []
 
+                for these_dims in batch_indices:
+                    fds = self.dataset.open_single_dataset(cache_dir=cache_dir, **these_dims)
+                    dlist.append(fds)
+                xds = xr.merge(dlist)
+                return xds
+
+            else:
+                return None
         else:
-            logger.debug(f"BatchLoader._next_data: data_counter > len(self)")
+            logger.debug(f"{self.name}._next_data: data_counter > len(self)")
             raise StopIteration
 
     def generate(self):
@@ -297,22 +304,7 @@ class MPIBatchLoader(BatchLoader):
     def get_cache_dir(self, batch_idx):
         return f"{self.outer_cache_dir}/{self.name.lower()}-cache/{self.topo.rank}/{batch_idx}"
 
-    def _next_data(self):
-        if self.data_counter < len(self):
-            st = (self.data_counter * self.batch_size) + self.local_batch_index
-            ed = st + self.data_per_process
-            batch_indices = self.sample_indices[st:ed]
-            cache_dir = self.get_cache_dir(self.data_counter)
-            if len(batch_indices) > 0:
-                dlist = []
-
-                for these_dims in batch_indices:
-                    fds = self.dataset.open_single_dataset(cache_dir=cache_dir, **these_dims)
-                    dlist.append(fds)
-                xds = xr.merge(dlist)
-                return xds
-
-            else:
-                return None
-        else:
-            raise StopIteration
+    def get_batch_indices(self, this_batch_index):
+        st = (this_batch_index * self.batch_size) + self.local_batch_index
+        ed = st + self.data_per_process
+        return self.sample_indices[st:ed]
