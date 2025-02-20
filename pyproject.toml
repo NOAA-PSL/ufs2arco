@@ -27,11 +27,15 @@ dependencies = [
     "gcsfs",
     "pytest",
     "coverage",
+    "cfgrib",
 ]
 
 [project.optional-dependencies]
 documentation = [
     "jupyter", "nbsphinx", "sphinx-book-theme",
+]
+mpi = [
+    "mpi4py",
 ]
 
 [project.urls]
