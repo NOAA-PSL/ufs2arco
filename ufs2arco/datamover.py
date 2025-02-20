@@ -1,15 +1,11 @@
-from math import ceil
-import numpy as np
-
-import itertools
-import logging
-import threading
-import concurrent
-import queue
-
 import os
 import shutil
+import itertools
+import logging
 
+from math import ceil
+
+import numpy as np
 import xarray as xr
 
 from .mpi import MPITopology, _has_mpi
@@ -29,9 +25,8 @@ class DataMover():
         * This is the same as loop through the data storing one sample at a time,
           except that it stores ``batch_size`` samples in a hard disk cache.
           It clears the cache after every batch.
-          Additionally, it is feasible to pull in data and store to zarr simultaneously
-          with multithreading, but this will require ``num_workers`` more cache (disk) space,
-          and hasn't been tested for this application.
+        * Multithreading for simultaneous reading/writing could be implemented, but hasn't seemed necessary.
+          Also it would double (or more) the cache requirements.
     """
     counter = 0
     data_counter = 0
@@ -45,8 +40,6 @@ class DataMover():
         dataset,
         batch_size,
         sample_dims,
-        num_workers=0,
-        max_queue_size=1,
         start=0,
         cache_dir=".",
     ):
@@ -72,22 +65,6 @@ class DataMover():
         for combo in itertools.product(*all_sample_iterations.values()):
             self.sample_indices.append(dict(zip(sample_dims, combo)))
 
-        self.num_workers = num_workers
-        assert max_queue_size > 0
-        max_queue_size = min(max_queue_size, len(self))
-        self.max_queue_size = max_queue_size
-
-        # create a separate lock for each of the attributes
-        # that get changed, so threads don't bump into each other
-        # It's important to have separate locks so we can lock
-        # the state of each attribute separately
-        self.counter_lock = threading.Lock()
-        self.data_counter_lock = threading.Lock()
-        self.executor_lock = threading.Lock()
-        if self.num_workers > 0:
-            self.data_queue = queue.Queue(maxsize=max_queue_size)
-            self.stop_event = threading.Event()
-
         self.restart(idx=start)
 
     @property
@@ -101,30 +78,14 @@ class DataMover():
         return n_batches
 
     def __iter__(self):
-        with self.counter_lock:
-            self.counter = 0
-
-        # Always restart in the serial case
-        if self.num_workers == 0:
-            self.restart()
-        else:
-            # in the parallel case, we don't want to unnecessarily clear the queue,
-            # so we only restart if we've been grabbing data willy nilly
-            # and we've exceeded the queue size
-            # Also we restart if the DataMover was previously shutdown and needs a kick start
-            if self.stop_event.is_set() or self.data_counter > self.max_queue_size:
-                self.restart()
+        self.counter = 0
+        self.restart()
         return self
 
     def __next__(self):
-        """Note that self.counter is the counter for looping with e.g. enumerate
-        (i.e., how much has been removed from the queue)
-        whereas self.data_counter is keeping track of how many data items have been put in the queue
-        """
         if self.counter < len(self):
             data = self.get_data()
-            with self.counter_lock:
-                self.counter += 1
+            self.counter += 1
             return data
         else:
             logger.debug(f"{self.name}.__next__: counter > len(self)")
@@ -161,29 +122,14 @@ class DataMover():
             logger.debug(f"{self.name}._next_data: data_counter > len(self)")
             raise StopIteration
 
-    def generate(self):
-        while not self.stop_event.is_set():
-            try:
-                data = self._next_data()
-                self.data_queue.put(data)
-                with self.data_counter_lock:
-                    self.data_counter += 1
-                logger.debug(f"done putting")
-            except StopIteration:
-                self.shutdown()
 
     def get_data(self):
         """Pull a batch of data from the queue"""
         logger.debug(f"{self.name}.get_data")
-        if self.num_workers > 0:
-            data = self.data_queue.get()
-            self.task_done()
-            return data
-        else:
-            data = self._next_data()
-            with self.data_counter_lock:
-                self.data_counter += 1
-            return data
+        data = self._next_data()
+        self.data_counter += 1
+        return data
+
 
     def clear_cache(self, batch_idx):
         cache_dir = self.get_cache_dir(batch_idx)
@@ -191,69 +137,15 @@ class DataMover():
             logger.debug(f"{self.name}: clearing {cache_dir}")
             shutil.rmtree(cache_dir, ignore_errors=True)
 
-
-    def task_done(self):
-        self.data_queue.task_done()
-        logger.debug(f"{self.name}: marked task_done")
-
-    def restart(self, idx=0, cancel=False, **kwargs):
-        """Restart the :attr:`data_counter` and ThreadPoolExecutor to get ready for the pass through the data
+    def restart(self, idx=0):
+        """Restart the :attr:`data_counter` to get ready for the pass through the data
 
         Args:
-            cancel (bool): if True, cancel any remaining queue items/tasks with :meth:`.cancel`
+            idx (int, optional): index to restart to
         """
-        logger.debug(f"{self.name}.restart")
+        logger.debug(f"{self.name}.restart: idx = {idx}")
+        self.data_counter = idx
 
-        # start filling the queue
-        if self.num_workers > 0:
-
-            if self.executor is not None:
-                self.shutdown(cancel=cancel, **kwargs)
-                self.stop_event.clear()
-
-            with self.data_counter_lock:
-                self.data_counter = idx
-
-            with self.executor_lock:
-                self.executor = concurrent.futures.ThreadPoolExecutor(
-                    max_workers=self.num_workers,
-                )
-                self.futures = [
-                    self.executor.submit(self.generate) for _ in range(self.num_workers)
-                ]
-        else:
-            self.data_counter = idx
-
-
-    def cancel(self):
-        """Cancel any remaining workers/queue items by calling :meth:`get_data` until they
-        can recognize that the stop_event has been set
-        """
-        # cancel the existing workers/queue to force a startover
-        i = 1
-        if self.num_workers > 0:
-            while not self.data_queue.empty():
-                logger.debug(f"{self.name}.cancel: Queue not empty. (count, data_count) = ({self.counter}, {self.data_counter})... getting data {i}")
-                self.get_data()
-                i+=1
-
-    def shutdown(self, cancel=False, **kwargs):
-        """Shutdown the ThreadPoolExecutor.
-
-        Args:
-            cancel (bool): If true, cancel any remaining tasks...
-                Don't do this right after a for loop though, since the for loop may not finish due to a deadlock
-        """
-        logger.debug(f"{self.name}.shutdown")
-        if self.num_workers > 0:
-            self.stop_event.set()
-            if cancel:
-                self.cancel()
-            with self.executor_lock:
-                self.executor.shutdown(**kwargs)
-                # set executor to None, so that if shutdown is called from within a loop
-                # and the DataMover is restarted immediately after, we don't get a double shutdown call
-                self.executor = None
 
     def find_my_region(self, xds):
         """Given a dataset, that's assumed to be a subset of the initial dataset,
@@ -287,8 +179,6 @@ class MPIDataMover(DataMover):
         dataset,
         sample_dims,
         mpi_topo,
-        num_workers=0,
-        max_queue_size=1,
         start=0,
         cache_dir=".",
     ):
@@ -302,8 +192,6 @@ class MPIDataMover(DataMover):
             dataset=dataset,
             batch_size=batch_size,
             sample_dims=sample_dims,
-            num_workers=num_workers,
-            max_queue_size=max_queue_size,
             start=start,
             cache_dir=cache_dir,
         )

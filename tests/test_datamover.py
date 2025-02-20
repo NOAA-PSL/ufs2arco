@@ -18,12 +18,10 @@ def dataset():
 
 @pytest.fixture
 def data_mover(dataset):
-    return DataMover(dataset, batch_size=2, sample_dims=["t0", "fhr", "member"], num_workers=0, max_queue_size=1, start=0, cache_dir=".")
+    return DataMover(dataset, batch_size=2, sample_dims=["t0", "fhr", "member"], start=0, cache_dir=".")
 
 def test_init(data_mover):
     assert data_mover.batch_size == 2
-    assert data_mover.num_workers == 0
-    assert data_mover.max_queue_size == 1
     assert data_mover.counter == 0
     assert data_mover.data_counter == 0
     assert data_mover.outer_cache_dir == "."

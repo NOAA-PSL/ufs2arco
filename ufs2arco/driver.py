@@ -57,7 +57,7 @@ class Driver:
         for key in ["name", "sample_dims"]:
             assert key in self.config["mover"], \
                 f"Driver.__init__: could not find '{key}' in 'mover' section in yaml"
-        for key in ["cache_dir", "num_workers", "max_queue_size"]:
+        for key in ["cache_dir"]:
             assert key not in self.config["mover"], \
                 f"Driver.__init__: '{key}' not allowed in 'mover' section in yaml"
 
@@ -112,8 +112,6 @@ class Driver:
             kw["start"] = 0
 
         # enforced options
-        kw["num_workers"] = 0
-        kw["max_queue_size"] = 1
         kw["cache_dir"] = self.config["directories"]["cache"]
         return kw
 
