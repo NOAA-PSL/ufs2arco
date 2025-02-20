@@ -27,9 +27,6 @@ class MPITopology():
         self.comm = MPI.COMM_WORLD
         self.rank = self.comm.Get_rank()
         self.size = self.comm.Get_size()
-        #self.local_size = len(jax.local_devices())
-        #self.node = self.rank // self.local_size
-        #self.local_rank = (self.rank - self.node*self.local_size) % self.local_size
         self.root = 0
         self.pid = os.getpid()
         self.friends = tuple(ii for ii in range(self.size) if ii!=self.root)
