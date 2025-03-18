@@ -136,18 +136,20 @@ class GEFSDataset:
             if varname not in self.static_vars:
                 dims = tuple(unread_dims.keys()) + xds[varname].dims
                 shape = tuple(len(nds[d]) for d in unread_dims.keys()) + xds[varname].shape
-                chunks = {list(dims).index(key): self.chunks[key] for key in dims}
-                nds[varname] = xr.DataArray(
-                    data=dask.array.zeros(
-                        shape=shape,
-                        chunks=chunks,
-                        dtype=xds[varname].dtype,
-                    ),
-                    dims=dims,
-                    attrs=xds[varname].attrs.copy(),
-                )
             else:
-                nds[varname] = xds[varname].copy()
+                dims = xds[varname].dims
+                shape = xds[varname].shape
+
+            chunks = {list(dims).index(key): self.chunks[key] for key in dims}
+            nds[varname] = xr.DataArray(
+                data=dask.array.zeros(
+                    shape=shape,
+                    chunks=chunks,
+                    dtype=xds[varname].dtype,
+                ),
+                dims=dims,
+                attrs=xds[varname].attrs.copy(),
+            )
 
         nds.to_zarr(self.store_path, compute=False, **kwargs)
         logger.info(f"{self.name}.create_container: stored container at {self.store_path}\n{nds}\n")
