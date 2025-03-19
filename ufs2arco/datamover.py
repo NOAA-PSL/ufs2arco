@@ -169,7 +169,7 @@ class DataMover():
         # create container
         # start with the dimensions we haven't read yet (sample_dims)
         nds = xr.Dataset()
-        for key in self.target.sample_dims:
+        for key in self.target.renamed_sample_dims:
             array = getattr(self.target, key)
             nds[key] = xr.DataArray(
                 array,
@@ -180,7 +180,7 @@ class DataMover():
 
         # these will be the base_dims, we read these in each sample
         for key in xds.dims:
-            if key not in self.target.sample_dims:
+            if key not in self.target.renamed_sample_dims:
                 nds[key] = xds[key].copy()
 
         # manage coordinates
@@ -221,7 +221,7 @@ class DataMover():
             region (dict): indicating the zarr region to store in, based on the initial condition indices
         """
         region = {k: slice(None, None) for k in xds.dims}
-        for key in self.target.sample_dims:
+        for key in self.target.renamed_sample_dims:
             full_array = getattr(self.target, key) # e.g. all of the initial conditions
             batch_indices = [list(full_array).index(value) for value in xds[key].values]
             region[key] = slice(batch_indices[0], batch_indices[-1]+1)

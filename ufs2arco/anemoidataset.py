@@ -8,7 +8,14 @@ from ufs2arco.targetdataset import TargetDataset
 logger = logging.getLogger("ufs2arco")
 
 class AnemoiDataset(TargetDataset):
-    """Default: store the data in zarr, essentially how it's laid out originally
+    """
+    Store dataset ready for anemoi
+
+    Expected output has dimensions
+        ("time", "variable", "ensemble", "cell"")
+
+    Use the rename argument to modify any of these (and make sure :attr:`chunks` uses those desired names too),
+    but note this might cause problems with anemoi!
     """
 
     sample_dims = ("time", "ensemble")

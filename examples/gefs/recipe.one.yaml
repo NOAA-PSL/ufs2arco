@@ -1,16 +1,12 @@
 mover:
   name: mpidatamover
-  sample_dims:
-    - t0
-    - fhr
-    - member
 
 directories:
   zarr: /pscratch/sd/t/timothys/gefs/one-degree/forecasts.zarr
   cache: /pscratch/sd/t/timothys/gefs-cache
   logs: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/logs
 
-dataset:
+source:
   name: gefsdataset
   t0:
     start: 2017-01-01T00
@@ -20,10 +16,17 @@ dataset:
   fhr:
     start: 0
     end: 6
+    step: 6
 
   member:
     start: 0
     end: 20
+    step: 1
+
+target:
+  name: forecast
+  rename:
+    level: pressure
 
   chunks:
     t0: 1

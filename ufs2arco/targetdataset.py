@@ -32,7 +32,7 @@ class TargetDataset:
         self.store_path = store_path
         self.chunks = chunks
         self.rename = rename if rename is not None else dict()
-        for dim in self.sample_dims:
+        for dim in self.renamed_sample_dims:
             chunksize = self.chunks[dim]
             assert chunksize == 1, \
                 f"{self.name}.__init__: chunks['{dim}'] = {chunksize}, but should be 1"
@@ -57,6 +57,11 @@ class TargetDataset:
     @property
     def name(self) -> str:
         return self.__class__.__name__
+
+    @property
+    def renamed_sample_dims(self) -> tuple:
+        return tuple(self.rename[d] if d in self.rename else d for d in self.sample_dims)
+
 
     def apply_transforms_to_sample(
         self,
