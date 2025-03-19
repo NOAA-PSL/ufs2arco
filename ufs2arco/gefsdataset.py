@@ -16,6 +16,19 @@ class GEFSDataset(SourceDataset):
     base_dims = ("level", "latitude", "longitude")
 
     @property
+    def available_variables(self) -> tuple:
+        return tuple(self._ic_variables.keys())
+
+    @property
+    def available_levels(self) -> tuple:
+        return (
+            10, 20, 30, 50, 70,
+            100, 150, 200, 250, 300, 350, 400, 450,
+            500, 550, 600, 650, 700, 750, 800, 850,
+            900, 925, 950, 975, 1000,
+        )
+
+    @property
     def rename(self) -> dict:
         return {
             "time": "t0",
@@ -65,6 +78,7 @@ class GEFSDataset(SourceDataset):
         dsdict = {}
         if cached_files["a"] is not None and cached_files["b"] is not None:
             read_dict = self._ic_variables if open_static_vars else self._fc_variables
+            read_dict = {k: v for k,v in read_dict.items() if k in self.variables}
             for varname, open_kwargs in read_dict.items():
                 dslist = []
                 for a_or_b in open_kwargs["param_list"]:
@@ -120,13 +134,15 @@ class GEFSDataset(SourceDataset):
         xds = xda.to_dataset(name=varname)
         for key, val in self.rename.items():
             if key in xds:
-                #logger.info(f"{self.name}.open_sample_dataset: renaming {key} -> {val}")
                 xds = xds.rename({key: val})
         if varname in self.static_vars:
             for key in ["lead_time", "t0", "valid_time"]:
                 if key in xds:
                     xds = xds.drop_vars(key)
         else:
+
+            if "level" in xds:
+                xds = xds.sel(level=[l for l in self.levels if l in xds.level.values])
             xds = xds.expand_dims(["t0", "lead_time", "member"])
             xds["fhr"] = xr.DataArray(
                 int(xds["lead_time"].values / 1e9 / 3600),

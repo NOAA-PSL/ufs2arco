@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -15,6 +16,8 @@ class SourceDataset:
     static_vars = tuple()
     sample_dims = tuple()
     base_dims = tuple()
+    available_variables = tuple()
+    available_levels = tuple()
 
     @property
     def rename(self) -> dict:
@@ -28,6 +31,8 @@ class SourceDataset:
         t0: dict,
         fhr: dict,
         member: dict,
+        variables: Optional[list | tuple] = None,
+        levels: Optional[list | tuple] = None,
     ) -> None:
         """
         Initialize the SourceDataset object.
@@ -37,11 +42,40 @@ class SourceDataset:
             fhr (dict): Dictionary with 'start', 'end', and 'step' forecast hours.
             member (dict): Dictionary with 'start', 'end', and 'step' ensemble members.
             chunks (dict): Dictionary with chunk sizes for Dask arrays.
-            store_path (str): Path to store the output data.
+            variables (list, tuple, optional): variables to grab
+            levels (list, tuple, optional): vertical levels to grab
         """
         self.t0 = pd.date_range(**t0)
         self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
         self.member = np.arange(member["start"], member["end"] + 1, member["step"])
+
+        # check variable selection
+        if variables is not None:
+            unrecognized = []
+            for v in variables:
+                if v not in self.available_variables:
+                    unrecognized.append(v)
+
+            if len(unrecognized) > 0:
+                raise NotImplementedError(f"{self.name}.__init__: the following variables are not recognized or not implemented: {unrecognized}")
+            self.variables = variables
+        else:
+            self.variables = self.available_variables
+
+        # check level selection
+        if levels is not None:
+            unrecognized = []
+            for l in levels:
+                if l not in self.available_levels:
+                    unrecognized.append(l)
+
+            if len(unrecognized) > 0:
+                raise NotImplementedError(f"{self.name}.__init__: the following levels are not recognized or not implemented: {unrecognized}")
+            self.levels = levels
+
+        else:
+            self.levels = self.available_levels
+
         logger.info(str(self))
 
 
@@ -55,7 +89,7 @@ class SourceDataset:
         title = f"Source: {self.name}"
         msg = f"\n{title}\n" + \
               "".join(["-" for _ in range(len(title))]) + "\n"
-        for key in ["t0", "fhr", "member"]:
+        for key in ["t0", "fhr", "member", "levels", "variables"]:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         return msg
 
