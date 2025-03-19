@@ -164,8 +164,7 @@ class Driver:
         # create container, only if mover start is not 0
         if mover_kwargs["start"] == 0:
             container_kwargs = {"mode": "w"} if overwrite else {}
-            container_cache = self.config["directories"]["cache"] + "/container"
-            mover.create_container(cache_dir=container_cache, **container_kwargs)
+            mover.create_container(**container_kwargs)
 
         # loop through batches
         n_batches = len(mover)

@@ -144,23 +144,23 @@ class DataMover():
         self.data_counter = idx
 
 
-    def create_container(self, cache_dir: str = "container-cache", **kwargs) -> None:
+    def create_container(self, **kwargs) -> None:
         """
         Create a Zarr container to store the dataset.
 
         Args:
-            cache_dir (str): The directory to cache files locally.
             **kwargs: Additional arguments passed to `xr.Dataset.to_zarr`.
 
         Logs:
             The created container is stored at `self.target.store_path`.
         """
+
         # open a minimal dataset
         xds = self.source.open_sample_dataset(
             t0=self.source.t0[0],
             fhr=self.source.fhr[0],
             member=self.source.member[0],
-            cache_dir=cache_dir,
+            cache_dir=self.get_cache_dir("container"),
         )
 
         # transform it to target space
@@ -208,6 +208,8 @@ class DataMover():
 
         nds.to_zarr(self.target.store_path, compute=False, **kwargs)
         logger.info(f"{self.name}.create_container: stored container at {self.target.store_path}\n{nds}\n")
+
+        self.clear_cache("container")
 
 
     def find_my_region(self, xds):
@@ -281,7 +283,7 @@ class MPIDataMover(DataMover):
         ed = st + self.data_per_process
         return self.sample_indices[st:ed]
 
-    def create_container(self, cache_dir: str = "container-cache", **kwargs) -> None:
+    def create_container(self, **kwargs) -> None:
         if self.topo.is_root:
-            super().create_container(cache_dir=cache_dir, **kwargs)
+            super().create_container(**kwargs)
         self.topo.barrier()
