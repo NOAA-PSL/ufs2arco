@@ -13,6 +13,7 @@ class TargetDataset:
 
     sample_dims = tuple()
     base_dims = tuple()
+    always_open_static_vars = False
 
     def __init__(
         self,

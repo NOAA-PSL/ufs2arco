@@ -29,6 +29,7 @@ class GEFSDataset(SourceDataset):
         fhr: int,
         member: int,
         cache_dir: str,
+        open_static_vars: bool,
     ) -> xr.Dataset:
 
         # 1. cache the grib files for this date, member, fhr
@@ -63,8 +64,7 @@ class GEFSDataset(SourceDataset):
         # 2. read data arrays from those files
         dsdict = {}
         if cached_files["a"] is not None and cached_files["b"] is not None:
-            is_static = fhr == 0 and member == 0 and t0 == self.t0[0]
-            read_dict = self._ic_variables if is_static else self._fc_variables
+            read_dict = self._ic_variables if open_static_vars else self._fc_variables
             for varname, open_kwargs in read_dict.items():
                 dslist = []
                 for a_or_b in open_kwargs["param_list"]:

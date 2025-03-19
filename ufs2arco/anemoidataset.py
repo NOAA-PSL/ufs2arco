@@ -31,6 +31,7 @@ class AnemoiDataset(TargetDataset):
     use_level_index = False
     sample_dims = ("time", "ensemble")
     base_dims = ("variable", "cell")
+    always_open_static_vars = True
 
     @property
     def datetime(self):

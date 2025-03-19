@@ -107,7 +107,11 @@ class DataMover():
                 dlist = []
 
                 for these_dims in batch_indices:
-                    fds = self.source.open_sample_dataset(cache_dir=cache_dir, **these_dims)
+                    fds = self.source.open_sample_dataset(
+                        cache_dir=cache_dir,
+                        open_static_vars=self.target.always_open_static_vars,
+                        **these_dims,
+                    )
                     fds = self.target.apply_transforms_to_sample(fds)
                     dlist.append(fds)
                 xds = xr.merge(dlist)
@@ -161,6 +165,7 @@ class DataMover():
             fhr=self.source.fhr[0],
             member=self.source.member[0],
             cache_dir=self.get_cache_dir("container"),
+            open_static_vars=True,
         )
 
         # transform it to target space
