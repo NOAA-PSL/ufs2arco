@@ -1,9 +1,11 @@
 import logging
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 
+from ufs2arco.sourcedataset import SourceDataset
 from ufs2arco.targetdataset import TargetDataset
 
 logger = logging.getLogger("ufs2arco")
@@ -46,13 +48,38 @@ class AnemoiDataset(TargetDataset):
     def ensemble(self):
         return self.source.member
 
+    def __init__(
+        self,
+        source: SourceDataset,
+        chunks: dict,
+        store_path: str,
+        rename: Optional[dict] = None,
+    ) -> None:
+        super().__init__(
+            source=source,
+            chunks=chunks,
+            store_path=store_path,
+            rename=rename,
+        )
+
+        # additional checks
+        assert len(self.source.fhr) == 1 and self.source.fhr[0] == 0, \
+            f"{self.name}.__init__: Can only use this class with fhr=0, no multiple lead times"
+
+        renamekeys = list(self.rename.keys())
+        protected = ("t0", "member", "latitude", "longitude", "dates", "ensemble", "latitudes", "longitudes")
+        for key in renamekeys:
+            if key in protected or self.rename[key] in protected:
+                logger.info(f"{self.name}.__init__: can't rename {key} -> {self.rename[key]}, either key or val is in a protected list. I'll drop it and forget about it.")
+                self.rename.pop(key)
+
     def apply_transforms_to_sample(
         self,
         xds: xr.Dataset,
     ) -> xr.Dataset:
 
         xds = xds.squeeze("fhr", drop=True)
-        xds = self._rename_defaults(xds)
+        xds = self._rename_dataset(xds)
         # It's assumed that the source always has a member dimension, so this isn't needed at the moment
         #xds = self._check_for_ensemble(xds)
         xds = self._map_datetime_to_index(xds)
@@ -78,7 +105,7 @@ class AnemoiDataset(TargetDataset):
         xds.attrs.update(attrs)
         return xds
 
-    def _rename_defaults(self, xds: xr.Dataset) -> xr.Dataset:
+    def _rename_dataset(self, xds: xr.Dataset) -> xr.Dataset:
         """
         This takes the default source dimensions and renames them to the default anemoi dimensions:
 
@@ -90,7 +117,8 @@ class AnemoiDataset(TargetDataset):
         Returns:
             xds (xr.Dataset): with renaming as above
         """
-        return xds.rename(
+        # first, rename the protected list
+        xds = xds.rename(
             {
                 "t0": "dates",
                 "member": "ensemble",
@@ -98,6 +126,13 @@ class AnemoiDataset(TargetDataset):
                 "longitude": "longitudes",
             }
         )
+
+        # now add any user options
+        for key, val in self.rename.items():
+            if key in xds:
+                xds = xds.rename({key: val})
+        return xds
+
 
     def _map_datetime_to_index(self, xds: xr.Dataset) -> xr.Dataset:
         """
@@ -186,6 +221,7 @@ class AnemoiDataset(TargetDataset):
                     xds[key] = xds[key].expand_dims({d: xds[d]})
 
         return xds
+
     def _stackit(self, xds: xr.Dataset) -> xr.Dataset:
         """
         Stack the multivariate dataset to a single data array with all variables (and vertical levels) stacked together
