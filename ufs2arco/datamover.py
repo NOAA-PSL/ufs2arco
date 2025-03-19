@@ -168,7 +168,7 @@ class DataMover():
 
         # create container
         # start with the dimensions we haven't read yet (sample_dims)
-        nds = xr.Dataset()
+        nds = xr.Dataset(attrs=xds.attrs.copy())
         for key in self.target.renamed_sample_dims:
             array = getattr(self.target, key)
             nds[key] = xr.DataArray(
