@@ -5,8 +5,8 @@ import logging
 
 from math import ceil
 
-import numpy as np
 import xarray as xr
+import dask.array
 
 from .mpi import MPITopology, _has_mpi
 
@@ -37,14 +37,15 @@ class DataMover():
 
     def __init__(
         self,
-        dataset,
+        source,
+        target,
         batch_size,
-        sample_dims,
         start=0,
         cache_dir=".",
     ):
 
-        self.dataset = dataset
+        self.source = source
+        self.target = target
         self.batch_size = batch_size
         self.counter = start
         self.data_counter = start
@@ -52,18 +53,13 @@ class DataMover():
 
         # construct the sample indices
         # e.g. {"t0": [date1, date2], "fhrs": [0, 6], "member": [0, 1, 2]}
-        self.sample_dims = sample_dims
-        for dim in sample_dims:
-            chunksize = self.dataset.chunks[dim]
-            assert chunksize == 1, \
-                f"{self.name}.__init__: {self.dataset.name}.chunks['{dim}'] = {chunksize}, but should be 1"
         all_sample_iterations = {
-            key: getattr(dataset, key)
-            for key in sample_dims
+            key: getattr(source, key)
+            for key in self.source.sample_dims
         }
         self.sample_indices = list()
         for combo in itertools.product(*all_sample_iterations.values()):
-            self.sample_indices.append(dict(zip(sample_dims, combo)))
+            self.sample_indices.append(dict(zip(self.source.sample_dims, combo)))
 
         self.restart(idx=start)
 
@@ -111,7 +107,8 @@ class DataMover():
                 dlist = []
 
                 for these_dims in batch_indices:
-                    fds = self.dataset.open_single_dataset(cache_dir=cache_dir, **these_dims)
+                    fds = self.source.open_sample_dataset(cache_dir=cache_dir, **these_dims)
+                    fds = self.target.apply_transforms_to_sample(fds)
                     dlist.append(fds)
                 xds = xr.merge(dlist)
                 return xds
@@ -147,6 +144,72 @@ class DataMover():
         self.data_counter = idx
 
 
+    def create_container(self, cache_dir: str = "container-cache", **kwargs) -> None:
+        """
+        Create a Zarr container to store the dataset.
+
+        Args:
+            cache_dir (str): The directory to cache files locally.
+            **kwargs: Additional arguments passed to `xr.Dataset.to_zarr`.
+
+        Logs:
+            The created container is stored at `self.target.store_path`.
+        """
+        # open a minimal dataset
+        xds = self.source.open_sample_dataset(
+            t0=self.source.t0[0],
+            fhr=self.source.fhr[0],
+            member=self.source.member[0],
+            cache_dir=cache_dir,
+        )
+
+        # transform it to target space
+        xds = self.target.apply_transforms_to_sample(xds)
+
+        # create container
+        # start with the dimensions we haven't read yet (sample_dims)
+        nds = xr.Dataset()
+        for key in self.target.sample_dims:
+            array = getattr(self.target, key)
+            nds[key] = xr.DataArray(
+                array,
+                coords={key: array},
+                dims=key,
+                attrs=xds[key].attrs.copy(),
+            )
+
+        # these will be the base_dims, we read these in each sample
+        for key in xds.dims:
+            if key not in self.target.sample_dims:
+                nds[key] = xds[key].copy()
+
+        # manage coordinates
+        # first we have to pass all existing coordinates,
+        # then let target manage them
+        for key in xds.coords:
+            if key not in nds:
+                nds = nds.assign_coords({key: xds[key].copy()})
+        nds = self.target.manage_coords(nds)
+
+        # create empty data arrays
+        for varname in xds.data_vars:
+            dims = xds[varname].dims
+            shape = tuple(len(nds[key]) for key in dims)
+            chunks = {list(dims).index(key): self.target.chunks[key] for key in dims}
+            nds[varname] = xr.DataArray(
+                data=dask.array.zeros(
+                    shape=shape,
+                    chunks=chunks,
+                    dtype=xds[varname].dtype,
+                ),
+                dims=dims,
+                attrs=xds[varname].attrs.copy(),
+            )
+
+        nds.to_zarr(self.target.store_path, compute=False, **kwargs)
+        logger.info(f"{self.name}.create_container: stored container at {self.target.store_path}\n{nds}\n")
+
+
     def find_my_region(self, xds):
         """Given a dataset, that's assumed to be a subset of the initial dataset,
         find the logical index values where this should be stored in the final zarr store
@@ -158,8 +221,8 @@ class DataMover():
             region (dict): indicating the zarr region to store in, based on the initial condition indices
         """
         region = {k: slice(None, None) for k in xds.dims}
-        for key in self.sample_dims:
-            full_array = getattr(self.dataset, key) # e.g. all of the initial conditions
+        for key in self.target.sample_dims:
+            full_array = getattr(self.target, key) # e.g. all of the initial conditions
             batch_indices = [list(full_array).index(value) for value in xds[key].values]
             region[key] = slice(batch_indices[0], batch_indices[-1]+1)
         return region
@@ -176,8 +239,8 @@ class MPIDataMover(DataMover):
     """
     def __init__(
         self,
-        dataset,
-        sample_dims,
+        source,
+        target,
         mpi_topo,
         start=0,
         cache_dir=".",
@@ -189,25 +252,25 @@ class MPIDataMover(DataMover):
         self.data_per_process = 1
         self.local_batch_index = self.topo.rank*self.data_per_process
         super().__init__(
-            dataset=dataset,
+            source=source,
+            target=target,
             batch_size=batch_size,
-            sample_dims=sample_dims,
             start=start,
             cache_dir=cache_dir,
         )
         logger.info(str(self))
 
     def __str__(self):
-        myname = f"{__name__}.{self.name}"
-        underline = "".join(["-" for _ in range(len(myname))])
-        msg = f"\n{myname}\n{underline}\n"
+        title = f"Mover: {self.name}"
+        underline = "".join(["-" for _ in range(len(title))])
+        msg = f"\n{title}\n{underline}\n"
 
         for key in ["local_batch_index", "data_per_process", "batch_size"]:
             msg += f"{key:<18s}: {getattr(self, key):02d}\n"
 
         msg += f"{'Total Samples':<18s}: {len(self.sample_indices)}\n"
         msg += f"{'Total Batches':<18s}: {len(self)}\n"
-        msg += f"{'sample_dims':<18s}: {self.sample_dims}\n"
+        msg += f"{'sample_dims':<18s}: {self.source.sample_dims}\n"
         return msg
 
     def get_cache_dir(self, batch_idx):
@@ -217,3 +280,8 @@ class MPIDataMover(DataMover):
         st = (batch_idx * self.batch_size) + self.local_batch_index
         ed = st + self.data_per_process
         return self.sample_indices[st:ed]
+
+    def create_container(self, cache_dir: str = "container-cache", **kwargs) -> None:
+        if self.topo.is_root:
+            super().create_container(cache_dir=cache_dir, **kwargs)
+        self.topo.barrier()

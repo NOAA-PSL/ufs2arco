@@ -1,225 +1,40 @@
 import logging
 import fsspec
 
-import numpy as np
 import pandas as pd
 import xarray as xr
-import dask.array
+
+from ufs2arco.sourcedataset import SourceDataset
 
 logger = logging.getLogger("ufs2arco")
 
-class GEFSDataset:
+class GEFSDataset(SourceDataset):
     """Access NOAA's forecast archive from the Global Ensemble Forecast System (GEFS) at s3://noaa-gefs-pds."""
 
     static_vars = ("lsm", "orog")
-
-    def __init__(
-        self,
-        t0: dict,
-        fhr: dict,
-        member: dict,
-        chunks: dict,
-        store_path: str,
-    ) -> None:
-        """
-        Initialize the GEFSDataset object.
-
-        Args:
-            t0 (dict): Dictionary with start and end times for initial conditions, and e.g. "freq=6h". All options get passed to ``pandas.date_range``.
-            fhr (dict): Dictionary with 'start' and 'end' forecast hours.
-            member (dict): Dictionary with 'start' and 'end' ensemble members.
-            chunks (dict): Dictionary with chunk sizes for Dask arrays.
-            store_path (str): Path to store the output data.
-
-        Raises:
-            AssertionError: If 'fhr' or 'member' have anything more than 2 values ('start' and 'end').
-        """
-        self.t0 = pd.date_range(**t0)
-        assert len(fhr) == 2, \
-            "GEFSDataset.__init__: 'fhr' section can only have 'start' and 'end'"
-        self.fhr = np.arange(fhr["start"], fhr["end"] + 1, 6)
-        assert len(member) == 2, \
-            "GEFSDataset.__init__: 'member' section can only have 'start' and 'end'"
-        self.member = np.arange(member["start"], member["end"] + 1)
-        self.store_path = store_path
-        self.chunks = chunks
-        logger.info(str(self))
-
-    def __len__(self) -> int:
-        """
-        Get the number of initial conditions (t0 values).
-
-        Returns:
-            int: The length of the `t0` array.
-        """
-        return len(self.t0)
-
-    def __str__(self) -> str:
-        """
-        Return a string representation of the GEFSDataset object.
-
-        Returns:
-            str: The string representation of the dataset.
-        """
-        msg = f"\n{self.name}\n" + \
-              "".join(["-" for _ in range(len(self.name))]) + "\n"
-        for key in ["t0", "fhr", "member", "store_path"]:
-            msg += f"{key:<18s}: {getattr(self, key)}\n"
-        chunkstr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.chunks.items()])
-        msg += f"chunks\n    {chunkstr}"
-        return msg
+    sample_dims = ("t0", "fhr", "member")
+    base_dims = ("level", "latitude", "longitude")
 
     @property
-    def name(self) -> str:
-        """
-        Get the name of the dataset.
+    def rename(self) -> dict:
+        return {
+            "time": "t0",
+            "step": "lead_time",
+            "isobaricInhPa": "level",
+        }
 
-        Returns:
-            str: The name of the dataset ("GEFSDataset").
-        """
-        return f"GEFSDataset"
+    def open_sample_dataset(
+        self,
+        t0: pd.Timestamp,
+        fhr: int,
+        member: int,
+        cache_dir: str,
+    ) -> xr.Dataset:
 
-    def create_container(self, cache_dir: str = "container-cache", **kwargs) -> None:
-        """
-        Create a Zarr container to store the dataset.
-
-        Args:
-            cache_dir (str): The directory to cache files locally.
-            **kwargs: Additional arguments passed to `xr.Dataset.to_zarr`.
-
-        Logs:
-            The created container is stored at `self.store_path`.
-        """
-        # open a minimal dataset
-        xds = self.open_single_dataset(
-            t0=self.t0[0],
-            fhr=self.fhr[0],
-            member=self.member[0],
-            cache_dir=cache_dir,
-        )
-
-        # now create the t0, fhr, member dimensions
-        # note that we need to handle static variables carefully
-        unread_dims = {"t0": self.t0, "fhr": self.fhr, "member": self.member}
-        extra_coords = ["lead_time", "valid_time"]
-
-        # create container
-        nds = xr.Dataset()
-        for key, array in unread_dims.items():
-            nds[key] = xr.DataArray(
-                array,
-                coords={key: array},
-                dims=key,
-                attrs=xds[key].attrs.copy(),
-            )
-
-        for key in xds.dims:
-            if key not in unread_dims.keys():
-                nds[key] = xds[key].copy()
-
-        # compute the full version of extra_coords
-        nds["lead_time"] = xr.DataArray(
-            [pd.Timedelta(hours=x) for x in self.fhr],
-            coords=nds["fhr"].coords,
-            attrs=xds["lead_time"].attrs.copy(),
-        )
-
-        nds["valid_time"] = nds["t0"] + nds["lead_time"]
-        nds["valid_time"].attrs = xds["valid_time"].attrs.copy()
-        nds = nds.set_coords(extra_coords)
-
-        # squeeze what we've read
-        xds = xds.squeeze().drop_vars(list(unread_dims.keys()) + extra_coords)
-
-        # create container arrays
-        for varname in xds.data_vars:
-            if varname not in self.static_vars:
-                dims = tuple(unread_dims.keys()) + xds[varname].dims
-                shape = tuple(len(nds[d]) for d in unread_dims.keys()) + xds[varname].shape
-            else:
-                dims = xds[varname].dims
-                shape = xds[varname].shape
-
-            chunks = {list(dims).index(key): self.chunks[key] for key in dims}
-            nds[varname] = xr.DataArray(
-                data=dask.array.zeros(
-                    shape=shape,
-                    chunks=chunks,
-                    dtype=xds[varname].dtype,
-                ),
-                dims=dims,
-                attrs=xds[varname].attrs.copy(),
-            )
-
-        nds.to_zarr(self.store_path, compute=False, **kwargs)
-        logger.info(f"{self.name}.create_container: stored container at {self.store_path}\n{nds}\n")
-
-    def open_dataset(self, cache_dir: str = "gefs-cache") -> xr.Dataset:
-        """
-        Open the entire dataset by iterating through each initial condition.
-        This is the naive version of creating the dataset, incorrectly assuming:
-
-        1. We can keep the whole dataset in memory
-        2. We can just loop through every single t0 slice
-
-        Args:
-            cache_dir (str): Directory to cache files locally.
-
-        Returns:
-            xr.Dataset: The merged dataset containing all time slices.
-        """
-        dlist = []
-        for date in self.t0:
-            fds = self.open_single_initial_condition(date, cache_dir)
-            dlist.append(fds)
-        xds = xr.merge(dlist)
-        return xds
-
-    def open_single_initial_condition(self, date: pd.Timestamp, cache_dir: str) -> xr.Dataset:
-        """
-        Open a single initial condition for the given date and forecast hours.
-
-        Args:
-            date (pd.Timestamp): The initial condition date.
-            cache_dir (str): Directory to cache files locally.
-
-        Returns:
-            xr.Dataset: The dataset containing all forecast hours for the date.
-        """
-        flist = []
-        for fhr in self.fhr:
-            logger.info(f"Reading {date}, {fhr}h for members {self.member[0]} - {self.member[-1]}")
-            single_time_slice = xr.merge(
-                [
-                    self.open_single_dataset(
-                        date=date,
-                        fhr=fhr,
-                        member=member,
-                        cache_dir=cache_dir,
-                    )
-                    for member in self.member
-                ],
-            )
-            flist.append(single_time_slice)
-        return xr.merge(flist)
-
-    def open_single_dataset(self, t0: pd.Timestamp, fhr: int, member: int, cache_dir: str) -> xr.Dataset:
-        """
-        Open a single dataset for the given initial condition, forecast hour, and member.
-
-        Args:
-            t0 (pd.Timestamp): The initial condition timestamp.
-            fhr (int): The forecast hour.
-            member (int): The ensemble member ID.
-            cache_dir (str): Directory to cache files locally.
-
-        Returns:
-            xr.Dataset: The dataset containing the specified data.
-        """
         # 1. cache the grib files for this date, member, fhr
         cached_files = {}
         for k in ["a", "b"]:
-            path = self.build_path(
+            path = self._build_path(
                 t0=t0,
                 member=member,
                 fhr=fhr,
@@ -254,7 +69,7 @@ class GEFSDataset:
                 dslist = []
                 for a_or_b in open_kwargs["param_list"]:
                     try:
-                        thisvar = self.open_single_variable(
+                        thisvar = self._open_single_variable(
                             file=cached_files[a_or_b],
                             varname=varname,
                             member=member,
@@ -274,7 +89,7 @@ class GEFSDataset:
         xds = xr.Dataset(dsdict)
         return xds
 
-    def open_single_variable(
+    def _open_single_variable(
         self, file: fsspec.spec.AbstractFileSystem, varname: str, member: int, filter_by_keys: dict
     ) -> xr.DataArray:
         """
@@ -296,24 +111,22 @@ class GEFSDataset:
             if len(xda.dims) < 3:
                 vv = xda["isobaricInhPa"].values
                 xda = xda.expand_dims({"isobaricInhPa": [vv]})
-            xda = xda.rename({"isobaricInhPa": "pressure"})
 
         for v in ["heightAboveGround", "number", "surface"]:
             if v in xda.coords:
                 xda = xda.drop_vars(v)
 
+
         xds = xda.to_dataset(name=varname)
+        for key, val in self.rename.items():
+            if key in xds:
+                #logger.info(f"{self.name}.open_sample_dataset: renaming {key} -> {val}")
+                xds = xds.rename({key: val})
         if varname in self.static_vars:
-            for key in ["step", "time", "valid_time"]:
+            for key in ["lead_time", "t0", "valid_time"]:
                 if key in xds:
                     xds = xds.drop_vars(key)
         else:
-            xds = xds.rename(
-                {
-                    "time": "t0",
-                    "step": "lead_time",
-                },
-            )
             xds = xds.expand_dims(["t0", "lead_time", "member"])
             xds["fhr"] = xr.DataArray(
                 int(xds["lead_time"].values / 1e9 / 3600),
@@ -345,7 +158,8 @@ class GEFSDataset:
             xds = xds.set_coords("valid_time")
         return xds[varname]
 
-    def build_path(self, t0: pd.Timestamp, member: int, fhr: int, a_or_b: str) -> str:
+
+    def _build_path(self, t0: pd.Timestamp, member: int, fhr: int, a_or_b: str) -> str:
         """
         Build the file path to a GRIB file based on the provided parameters.
 
@@ -372,7 +186,7 @@ class GEFSDataset:
             middle = f"atmos/pgrb2{a_or_b}p5/"
             fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{a_or_b}.0p50.f{fhr:03d}"
         fullpath = f"filecache::{bucket}/{outer}/{middle}{fname}"
-        logger.debug(f"GEFSDataset.build_path: reading {fullpath}")
+        logger.debug(f"{self.name}._build_path: reading {fullpath}")
         return fullpath
 
     @property
