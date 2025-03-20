@@ -60,12 +60,14 @@ class AnemoiDataset(TargetDataset):
         chunks: dict,
         store_path: str,
         rename: Optional[dict] = None,
+        slices: Optional[dict] = None,
     ) -> None:
         super().__init__(
             source=source,
             chunks=chunks,
             store_path=store_path,
             rename=rename,
+            slices=slices,
         )
 
         # additional checks

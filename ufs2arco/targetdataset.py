@@ -21,6 +21,7 @@ class TargetDataset:
         chunks: dict,
         store_path: str,
         rename: Optional[dict] = None,
+        slices: Optional[dict] = None,
     ) -> None:
         """
         Initialize the GEFSDataset object.
@@ -30,6 +31,7 @@ class TargetDataset:
             chunks (dict): Dictionary with chunk sizes for Dask arrays.
             store_path (str): Path to store the output data.
             rename (dict, optional): rename variables
+            slices (dict, optional): either "sel" or "isel", with slice, passed to xarray
         """
         self.source = source
         self.store_path = store_path
@@ -39,6 +41,13 @@ class TargetDataset:
             chunksize = self.chunks[dim]
             assert chunksize == 1, \
                 f"{self.name}.__init__: chunks['{dim}'] = {chunksize}, but should be 1"
+
+        # check for slicing
+        recognized = ("sel", "isel")
+        for key in slices.keys():
+            if key not in recognized:
+                raise NotImplementedError(f"{self.name}.__init__: can't use {key} slice, only {recognized} are recognized so far...")
+        self.slices = slices if slices is not None else dict()
 
         logger.info(str(self))
 
@@ -52,7 +61,7 @@ class TargetDataset:
         title = f"Target: {self.name}"
         msg = f"\n{title}\n" + \
               "".join(["-" for _ in range(len(title))]) + "\n"
-        for key in ["store_path"]:
+        for key in ["store_path", "slices"]:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         chunkstr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.chunks.items()])
         msg += f"chunks\n    {chunkstr}\n"
@@ -81,6 +90,7 @@ class TargetDataset:
         Returns:
             xr.Dataset: The dataset after any transformations
         """
+        xds = self.apply_slices(xds)
         xds = self.rename_dataset(xds)
         return xds
 
@@ -98,6 +108,30 @@ class TargetDataset:
         for key, val in self.rename.items():
             if key in xds:
                 xds = xds.rename({key: val})
+        return xds
+
+
+    def apply_slices(self, xds: xr.Dataset) -> xr.Dataset:
+        """Apply any slices, for now just data selection via "sel" or "isel"
+        Note that this is the first transformation, so slicing options relate to
+        the standard dimensions:
+
+            (t0, fhr, member, level, latitude, longitude)
+
+        Args:
+            xds (xr.Dataset): The sample dataset
+
+        Returns:
+            xr.Dataset: The dataset after slices applied
+        """
+
+        if "sel" in self.slices.keys():
+            for key, val in self.slices["sel"].items():
+                xds = xds.sel({key: slice(*val)})
+
+        if "isel" in self.slices.keys():
+            for key, val in self.slices["isel"].items():
+                xds = xds.isel({key: slice(*val)})
         return xds
 
 
