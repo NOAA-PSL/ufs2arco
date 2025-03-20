@@ -6,19 +6,28 @@ import pandas as pd
 from ufs2arco.datamover import DataMover
 
 @pytest.fixture
-def dataset():
-    dataset = MagicMock()
-    dataset.chunks = {"t0": 1, "fhr": 1, "member": 1}
-    dataset.open_single_dataset = MagicMock(return_value=xr.Dataset())
-    dataset.name = "MockDataset"
-    dataset.t0 = pd.date_range(start="2022-01-01T00", end="2022-01-01T18", freq="6h")
-    dataset.fhr = [0, 6]
-    dataset.member = [0, 1]
-    return dataset
+def source():
+    source = MagicMock()
+    source.open_sample_dataset = MagicMock(return_value=xr.Dataset())
+    source.name = "MockDataset"
+    source.t0 = pd.date_range(start="2022-01-01T00", end="2022-01-01T18", freq="6h")
+    source.fhr = [0, 6]
+    source.member = [0, 1]
+    source.sample_dims = ("t0", "fhr", "member")
+    return source
 
 @pytest.fixture
-def data_mover(dataset):
-    return DataMover(dataset, batch_size=2, sample_dims=["t0", "fhr", "member"], start=0, cache_dir=".")
+def target():
+    target = MagicMock()
+    target.chunks = {"t0": 1, "fhr": 1, "member": 1}
+    target.store_path = "/tmp/store/gefsdataset.zarr"
+    source.apply_transforms_to_sample = MagicMock(return_value=xr.Dataset())
+    return target
+
+
+@pytest.fixture
+def data_mover(source, target):
+    return DataMover(source, target, batch_size=2, start=0, cache_dir=".")
 
 def test_init(data_mover):
     assert data_mover.batch_size == 2
@@ -44,11 +53,15 @@ def test__next_data(mock_merge, data_mover):
     assert isinstance(result, xr.Dataset)
     mock_merge.assert_called_once()
 
-def test_get_data(data_mover):
+@patch("ufs2arco.datamover.xr.merge")
+def test_get_data(mock_merge, data_mover):
+    mock_merge.return_value = xr.Dataset()
     result = data_mover.get_data()
     assert isinstance(result, xr.Dataset)
 
-def test_clear_cache(data_mover):
+@patch("ufs2arco.datamover.xr.merge")
+def test_clear_cache(mock_merge, data_mover):
+    mock_merge.return_value = xr.Dataset()
     next(data_mover)
     data_mover.clear_cache(0)
     assert not os.path.isdir("./datamover-cache/0")
