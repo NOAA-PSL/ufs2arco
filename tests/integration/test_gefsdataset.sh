@@ -1,7 +1,8 @@
 #!/bin/bash
 
+mkdir -p ./logs
 
-python -c "from ufs2arco.driver import Driver; Driver('gefsdataset.serial.yaml').run(overwrite=True)" > gefsdataset.serial.log 2>&1
+python -c "from ufs2arco.driver import Driver; Driver('gefsdataset.serial.yaml').run(overwrite=True)" > logs/serial.log 2>&1
 
 echo " *** Serial GEFSDataset ran successfully ***"
 
