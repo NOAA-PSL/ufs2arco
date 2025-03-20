@@ -5,8 +5,10 @@ except:
 
 import logging
 import yaml
+from datetime import datetime
 
 import xarray as xr
+import zarr
 
 from ufs2arco.log import setup_simple_log
 from ufs2arco.mpi import MPITopology
@@ -191,4 +193,20 @@ class Driver:
         if topo.is_root:
             target.aggregate_stats()
         topo.barrier()
-        logger.info(f"Done aggregating statistics")
+        logger.info(f"Done aggregating statistics\n")
+
+        logger.info(f"Storing the recipe and anything from the 'attrs' section in zarr store attributes")
+        if topo.is_root:
+            zds = zarr.open(target.store_path, mode="a")
+            zds.attrs["recipe"] = self.config
+            if "attrs" in self.config.keys():
+                for key, val in self.config["attrs"].items():
+                    zds.attrs[key] = val
+
+            zds.attrs["latest_write_timestamp"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            # just in case
+            zarr.consolidate_metadata(target.store_path)
+        topo.barrier()
+        logger.info(f"Done storing global attributes\n")
+
+        logger.info(f"🚀🚀🚀 Done creating {target.store_path}")
