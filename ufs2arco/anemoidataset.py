@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -104,9 +105,15 @@ class AnemoiDataset(TargetDataset):
 
     def manage_coords(self, xds: xr.Dataset) -> xr.Dataset:
         attrs = {
+            "allow_nans": self.allow_nans,
             "ensemble_dimension": len(self.ensemble),
             "flatten_grid": self.do_flatten_grid,
             "resolution": str(self.resolution),
+            "start_date": str(self.datetime[0]).replace(" ", "T"),
+            "end_date": str(self.datetime[-1]).replace(" ", "T"),
+            "frequency": self.datetime.freqstr,
+            "statistics_start_date": str(self.datetime[0]).replace(" ", "T"),
+            "statistics_end_date": str(self.datetime[-1]).replace(" ", "T"),
         }
         xds.attrs.update(attrs)
         return xds
@@ -177,8 +184,21 @@ class AnemoiDataset(TargetDataset):
         """
 
         nds = xr.Dataset()
+        nds.attrs["variables_metadata"] = dict()
 
         for name in xds.data_vars:
+            meta = {
+                "mars": {
+                    "date": str(self.datetime[xds.time.values[0]]).replace("-","")[:8],
+                    "param": name,
+                    "step": 0, # this is the fhr=0 assumption
+                    "time": str(self.datetime[xds.time.values[0]]).replace("-","").replace(" ", "").replace(":","")[8:12], # no idea what this should be actually
+                    "valid_datetime": str(self.datetime[xds.time.values[0]]).replace(" ", "T"),
+                    "variable": name,
+                },
+            }
+            if len(self.ensemble) > 1:
+                meta["mars"]["number"] = list(self.ensemble)
             if "level" in xds[name].dims:
                 for level in xds[name].level.values:
                     idx = self._get_level_index(xds, level)
@@ -194,8 +214,17 @@ class AnemoiDataset(TargetDataset):
                             "level_index": idx,
                         },
                     )
+                    nds.attrs["variables_metadata"][suffix_name] = deepcopy(meta)
+                    nds.attrs["variables_metadata"][suffix_name]["mars"]["level"] = ilevel if not self.use_level_index else idx
+
+                if "remapping" not in nds.attrs:
+                    nds.attrs["remapping"] = {"param_level": "{param}_{levelist}"}
+                else:
+                    if "param_level" not in nds.attrs["remapping"].keys():
+                        nds.attrs["remapping"]["param_level"] = "{param}_{levelist}"
             else:
                 nds[name] = xds[name]
+                nds.attrs["variables_metadata"][name] = deepcopy(meta)
                 # Is this a hack? Add the "field_shape" here
                 # so that it's in the order of the data arrays, not in the dataset order
                 # (they could be different)
@@ -246,7 +275,9 @@ class AnemoiDataset(TargetDataset):
             dims="variable",
         )
 
-        # leaving this code to make this a DataArray out
+        # this might be nice, but it doesn't exist in anemoi
+        # and it causes problems with the container / fill workflow
+        # it should just be added as a coordinate... but again it's not in anemoi
         #channel_names = xr.DataArray(
         #    varlist,
         #    coords=channel.coords,
