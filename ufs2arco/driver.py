@@ -6,6 +6,8 @@ except:
 import logging
 import yaml
 
+import xarray as xr
+
 from ufs2arco.log import setup_simple_log
 from ufs2arco.mpi import MPITopology
 from ufs2arco.gefsdataset import GEFSDataset
@@ -183,3 +185,11 @@ class Driver:
                 mover.clear_cache(batch_idx)
 
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
+
+        topo.barrier()
+        logger.info(f"Done moving the data\n")
+        logger.info(f"Aggregating statistics (if any specified for target)")
+        if topo.is_root:
+            target.aggregate_stats()
+        topo.barrier()
+        logger.info(f"Done aggregating statistics")

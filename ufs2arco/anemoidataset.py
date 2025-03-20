@@ -4,6 +4,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import xarray as xr
+import zarr
 
 from ufs2arco.sourcedataset import SourceDataset
 from ufs2arco.targetdataset import TargetDataset
@@ -28,9 +29,13 @@ class AnemoiDataset(TargetDataset):
         * unclear if having cell2d (the multi-index for latitude/longitude) will be a problem, so have an attribute for it
     """
 
+    # these should probably be options
     do_flatten_grid = True
     resolution = None
     use_level_index = False
+    allow_nans = True
+
+    # these are basically properties
     sample_dims = ("time", "ensemble")
     base_dims = ("variable", "cell")
     always_open_static_vars = True
@@ -86,6 +91,7 @@ class AnemoiDataset(TargetDataset):
         xds = self._map_levels_to_suffixes(xds)
         xds  = self._map_static_to_expanded(xds)
         xds = self._stackit(xds)
+        xds = self._calc_sample_stats(xds)
         if self.do_flatten_grid:
             xds = self._flatten_grid(xds)
             xds = xds.transpose("time", "variable", "ensemble", "cell")
@@ -255,6 +261,7 @@ class AnemoiDataset(TargetDataset):
                 for this_channel, name in zip(channel, varlist)
             ],
             dim="variable",
+            combine_attrs="drop",
         )
         nds = data_vars.to_dataset(name="data")
         nds.attrs = xds.attrs.copy()
@@ -289,3 +296,70 @@ class AnemoiDataset(TargetDataset):
         # it's not needed in Anemoi, so no need to keep it anyway.
         nds = nds.drop_vars("cell2d")
         return nds
+
+    def _calc_sample_stats(self, xds: xr.Dataset) -> xr.Dataset:
+        """
+        Compute statistics for this data sample, which will be aggregated later
+
+        Args:
+            xds (xr.Dataset): with just the data and coordinates
+
+        Returns:
+            xds (xr.Dataset): with the following statistics, each with an "_array" suffix,
+                in order to indicate that the result will still have "time" and "ensemble" dimensions
+                that will need to get aggregated
+                ["count", "has_nans", "maximum", "minimum", "squares", "sums"]
+        """
+
+        dims = ["latitudes", "longitudes"]
+        xds["count_array"] = (~np.isnan(xds["data"])).sum(dims, skipna=self.allow_nans).astype(np.int64)
+        xds["has_nans_array"] = np.isnan(xds["data"]).any(dims)
+        xds["maximum_array"] = xds["data"].max(dims, skipna=self.allow_nans).astype(np.float64)
+        xds["minimum_array"] = xds["data"].min(dims, skipna=self.allow_nans).astype(np.float64)
+        xds["squares_array"] = (xds["data"]**2).sum(dims, skipna=self.allow_nans).astype(np.float64)
+        xds["sums_array"] = xds["data"].sum(dims, skipna=self.allow_nans).astype(np.float64)
+        return xds
+
+    def aggregate_stats(self) -> None:
+        """Aggregate statistics over "time" and "ensemble" dimension...
+        I'm assuming that this is relatively inexpensive without the spatial dimension
+
+        This will store an array with the statistics
+
+            ["count", "has_nans", "maximum", "mean", "minimum", "squares", "stdev", "sums"]
+
+        and it will get rid of the "_array" versions of the statistics
+        """
+
+        xds = xr.open_zarr(self.store_path)
+
+        # the easy ones
+        xds["count"] = xds["count_array"].sum(["time", "ensemble"])
+        xds["has_nans"] = xds["has_nans_array"].any(["time", "ensemble"])
+        xds["maximum"] = xds["maximum_array"].max(["time", "ensemble"])
+        xds["minimum"] = xds["minimum_array"].min(["time", "ensemble"])
+        xds["squares"] = xds["squares_array"].sum(["time", "ensemble"])
+        xds["sums"] = xds["sums_array"].sum(["time", "ensemble"])
+
+        # now add mean & stdev
+        xds["mean"] = xds["sums"] / xds["count"]
+        variance = xds["squares"] / xds["count"] - xds["mean"]**2
+        xds["stdev"] = xr.where(variance >= 0, np.sqrt(variance), 0.)
+
+        # store it
+        xds.to_zarr(self.store_path, mode="a")
+
+        # now remove the temp versions
+        zds = zarr.open(self.store_path, mode="a")
+        for key in [
+            "count_array",
+            "has_nans_array",
+            "maximum_array",
+            "minimum_array",
+            "squares_array",
+            "sums_array",
+        ]:
+            logger.info(f"{self.name}.aggregate_statistics: Removing temporary version {key}")
+            del zds[key]
+        zarr.consolidate_metadata(self.store_path)
+        return

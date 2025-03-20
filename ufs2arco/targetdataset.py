@@ -90,3 +90,9 @@ class TargetDataset:
             xds (xr.Dataset): with added / managed coordinates
         """
         pass
+
+    def aggregate_stats(self) -> None:
+        """Aggregate statistics over "time" and "ensemble" dimension...
+        This should read in the zarr store, aggregate stats, and delete any temporary arrays from the zarr store
+        """
+        pass
