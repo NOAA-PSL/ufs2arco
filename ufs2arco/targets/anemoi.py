@@ -7,12 +7,12 @@ import pandas as pd
 import xarray as xr
 import zarr
 
-from ufs2arco.sourcedataset import SourceDataset
-from ufs2arco.targetdataset import TargetDataset
+from ufs2arco.sources import Source
+from ufs2arco.targets import Target
 
 logger = logging.getLogger("ufs2arco")
 
-class AnemoiDataset(TargetDataset):
+class Anemoi(Target):
     """
     Store dataset ready for anemoi
 
@@ -56,7 +56,7 @@ class AnemoiDataset(TargetDataset):
 
     def __init__(
         self,
-        source: SourceDataset,
+        source: Source,
         chunks: dict,
         store_path: str,
         rename: Optional[dict] = None,

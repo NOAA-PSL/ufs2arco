@@ -3,11 +3,11 @@ import logging
 import pandas as pd
 import xarray as xr
 
-from ufs2arco.targetdataset import TargetDataset
+from ufs2arco.targets import Target
 
 logger = logging.getLogger("ufs2arco")
 
-class ForecastDataset(TargetDataset):
+class Forecast(Target):
     """
     Sort of a default target format.
     Store the data in zarr, essentially how it's laid out originally
@@ -18,7 +18,6 @@ class ForecastDataset(TargetDataset):
     Use the rename argument to modify any of these (and make sure :attr:`chunks` uses those desired names too)
     """
 
-    # THIS IS BAD, because rename is an argument, but these are hard coded attributes
     sample_dims = ("t0", "fhr", "member")
     base_dims = ("level", "latitude", "longitude")
 

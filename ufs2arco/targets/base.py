@@ -3,11 +3,11 @@ from typing import Optional
 
 import xarray as xr
 
-from ufs2arco.sourcedataset import SourceDataset
+from ufs2arco.sources import Source
 
 logger = logging.getLogger("ufs2arco")
 
-class TargetDataset:
+class Target:
     """Base class for the target dataset to be stored
     """
 
@@ -17,7 +17,7 @@ class TargetDataset:
 
     def __init__(
         self,
-        source: SourceDataset,
+        source: Source,
         chunks: dict,
         store_path: str,
         rename: Optional[dict] = None,
@@ -27,7 +27,7 @@ class TargetDataset:
         Initialize the GEFSDataset object.
 
         Args:
-            source (SourceDataset): object specifying data source
+            source (Source): object specifying data source
             chunks (dict): Dictionary with chunk sizes for Dask arrays.
             store_path (str): Path to store the output data.
             rename (dict, optional): rename variables

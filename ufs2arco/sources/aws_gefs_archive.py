@@ -4,11 +4,11 @@ import fsspec
 import pandas as pd
 import xarray as xr
 
-from ufs2arco.sourcedataset import SourceDataset
+from ufs2arco.sources.base import Source
 
 logger = logging.getLogger("ufs2arco")
 
-class GEFSDataset(SourceDataset):
+class AWSGEFSArchive(Source):
     """Access NOAA's forecast archive from the Global Ensemble Forecast System (GEFS) at s3://noaa-gefs-pds."""
 
     static_vars = ("lsm", "orog")

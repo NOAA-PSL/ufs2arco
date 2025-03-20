@@ -6,7 +6,7 @@ import xarray as xr
 
 logger = logging.getLogger("ufs2arco")
 
-class SourceDataset:
+class Source:
     """Base class for all forecast-like datasets
 
     Note: it's kind of weird for all subclasses to take t0, fhr, and member as init inputs, but then require
@@ -35,7 +35,7 @@ class SourceDataset:
         levels: Optional[list | tuple] = None,
     ) -> None:
         """
-        Initialize the SourceDataset object.
+        Initialize the Source object.
 
         Args:
             t0 (dict): Dictionary with start and end times for initial conditions, and e.g. "freq=6h". All options get passed to ``pandas.date_range``.
@@ -82,7 +82,7 @@ class SourceDataset:
 
     def __str__(self) -> str:
         """
-        Return a string representation of the SourceDataset object.
+        Return a string representation of the Source object.
 
         Returns:
             str: The string representation of the dataset.
@@ -93,6 +93,7 @@ class SourceDataset:
         for key in ["t0", "fhr", "member", "variables", "levels"]:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         return msg
+
 
     @property
     def name(self) -> str:
@@ -125,6 +126,3 @@ class SourceDataset:
             xr.Dataset: The dataset containing the specified data.
         """
         pass
-
-
-

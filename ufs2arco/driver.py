@@ -10,9 +10,8 @@ import xarray as xr
 
 from ufs2arco.log import setup_simple_log
 from ufs2arco.mpi import MPITopology
-from ufs2arco.gefsdataset import GEFSDataset
-from ufs2arco.forecastdataset import ForecastDataset
-from ufs2arco.anemoidataset import AnemoiDataset
+from ufs2arco import sources
+from ufs2arco import targets
 from ufs2arco.datamover import DataMover, MPIDataMover
 
 logger = logging.getLogger("ufs2arco")
@@ -22,7 +21,7 @@ class Driver:
 
     Attributes:
         config (dict): Configuration dictionary loaded from the YAML file.
-        SourceDataset (Type[GEFSDataset]): The dataset class (GEFSDataset).
+        Source, Target
         Mover (Type[DataMover] | Type[MPIDataMover]): The data mover class (DataMover or MPIDataMover).
 
     Methods:
@@ -53,17 +52,17 @@ class Driver:
 
         # the source dataset
         name = self.config["source"]["name"].lower()
-        if name == "gefsdataset":
-            self.SourceDataset = GEFSDataset
+        if name == "aws_gefs_archive":
+            self.SourceDataset = sources.AWSGEFSArchive
         else:
-            raise NotImplementedError(f"Driver.__init__: only 'GEFSDataset' is implemented")
+            raise NotImplementedError(f"Driver.__init__: only 'aws_gefs_archive' is implemented")
 
         # the target
         name = self.config["target"]["name"].lower()
         if name == "forecast":
-            self.TargetDataset = ForecastDataset
+            self.TargetDataset = targets.Forecast
         elif name == "anemoi":
-            self.TargetDataset = AnemoiDataset
+            self.TargetDataset = targets.Anemoi
         else:
             raise NotImplementedError(f"Driver.__init__: only 'forecast' and 'anemoi' are implemented")
 
