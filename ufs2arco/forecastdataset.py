@@ -36,17 +36,6 @@ class ForecastDataset(TargetDataset):
     def member(self):
         return self.source.member
 
-
-    def apply_transforms_to_sample(
-        self,
-        xds: xr.Dataset,
-    ) -> xr.Dataset:
-
-        for key, val in self.rename.items():
-            if key in xds:
-                xds = xds.rename({key: val})
-        return xds
-
     def manage_coords(self, xds: xr.Dataset) -> xr.Dataset:
 
         # compute the full version of these extra coords

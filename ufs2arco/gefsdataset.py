@@ -101,6 +101,7 @@ class GEFSDataset(SourceDataset):
                 else:
                     dsdict[varname] = xr.Dataset()
         xds = xr.Dataset(dsdict)
+        xds = self.apply_slices(xds)
         return xds
 
     def _open_single_variable(

@@ -84,7 +84,7 @@ class AnemoiDataset(TargetDataset):
     ) -> xr.Dataset:
 
         xds = xds.squeeze("fhr", drop=True)
-        xds = self._rename_dataset(xds)
+        xds = super().apply_transforms_to_sample(xds) # just rename for now
         # It's assumed that the source always has a member dimension, so this isn't needed at the moment
         #xds = self._check_for_ensemble(xds)
         xds = self._map_datetime_to_index(xds)
@@ -111,8 +111,10 @@ class AnemoiDataset(TargetDataset):
         xds.attrs.update(attrs)
         return xds
 
-    def _rename_dataset(self, xds: xr.Dataset) -> xr.Dataset:
+
+    def rename_dataset(self, xds: xr.Dataset) -> xr.Dataset:
         """
+        In addition to any user specified renamings...
         This takes the default source dimensions and renames them to the default anemoi dimensions:
 
         (t0, member, level, latitude, longitude) -> (dates, ensemble, level, latitudes, longitudes)
@@ -132,11 +134,7 @@ class AnemoiDataset(TargetDataset):
                 "longitude": "longitudes",
             }
         )
-
-        # now add any user options
-        for key, val in self.rename.items():
-            if key in xds:
-                xds = xds.rename({key: val})
+        xds = super().rename_dataset(xds)
         return xds
 
 

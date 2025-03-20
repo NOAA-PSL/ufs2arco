@@ -33,6 +33,7 @@ class SourceDataset:
         member: dict,
         variables: Optional[list | tuple] = None,
         levels: Optional[list | tuple] = None,
+        slices: Optional[dict] = None,
     ) -> None:
         """
         Initialize the SourceDataset object.
@@ -76,6 +77,13 @@ class SourceDataset:
         else:
             self.levels = self.available_levels
 
+        # check for slicing
+        recognized = ("sel", "isel")
+        for key in slices.keys():
+            if key not in recognized:
+                raise NotImplementedError(f"{self.name}.__init__: can't use {key} slice, only {recognized} are recognized so far...")
+        self.slices = slices if slices is not None else dict()
+
         logger.info(str(self))
 
 
@@ -89,7 +97,7 @@ class SourceDataset:
         title = f"Source: {self.name}"
         msg = f"\n{title}\n" + \
               "".join(["-" for _ in range(len(title))]) + "\n"
-        for key in ["t0", "fhr", "member", "levels", "variables"]:
+        for key in ["t0", "fhr", "member", "variables", "levels", "slices"]:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         return msg
 
@@ -124,3 +132,23 @@ class SourceDataset:
             xr.Dataset: The dataset containing the specified data.
         """
         pass
+
+
+    def apply_slices(self, xds: xr.Dataset) -> xr.Dataset:
+        """Apply any slices, for now just data selection via "sel" or "isel"
+
+        Args:
+            xds (xr.Dataset): The sample dataset
+
+        Returns:
+            xr.Dataset: The dataset after slices applied
+        """
+
+        if "sel" in self.slices.keys():
+            for key, val in self.slices["sel"].items():
+                xds = xds.sel({key: slice(*val)})
+
+        if "isel" in self.slices.keys():
+            for key, val in self.slices["isel"].items():
+                xds = xds.isel({key: slice(*val)})
+        return xds
