@@ -4,6 +4,7 @@ from typing import Optional
 import xarray as xr
 
 from ufs2arco.sources import Source
+from ufs2arco.targets import forcings as fmod # funky name because 'forcings' seems like the more natural user specified option
 
 logger = logging.getLogger("ufs2arco")
 
@@ -22,6 +23,7 @@ class Target:
         store_path: str,
         rename: Optional[dict] = None,
         slices: Optional[dict] = None,
+        forcings: Optional[list | tuple] = None,
     ) -> None:
         """
         Initialize the GEFSDataset object.
@@ -44,10 +46,26 @@ class Target:
 
         # check for slicing
         recognized = ("sel", "isel")
-        for key in slices.keys():
-            if key not in recognized:
-                raise NotImplementedError(f"{self.name}.__init__: can't use {key} slice, only {recognized} are recognized so far...")
-        self.slices = slices if slices is not None else dict()
+        if slices is not None:
+            for key in slices.keys():
+                if key not in recognized:
+                    raise NotImplementedError(f"{self.name}.__init__: can't use {key} slice, only {recognized} are recognized so far...")
+            self.slices = slices
+        else:
+            self.slices = dict()
+
+        # check for forcings
+        recognized = tuple(fmod.get_mappings().keys())
+        if forcings is not None:
+            unrecognized = []
+            for key in forcings:
+                if key not in recognized:
+                    unrecognized.append(key)
+            if len(unrecognized) > 0:
+                raise NotImplementedError(f"{self.name}.__init__: requested forcing variable(s) {unrecognized} are not implemented. Implemented options are {recognized}")
+            self.forcings = forcings
+        else:
+            self.forcings = tuple()
 
         logger.info(str(self))
 
@@ -61,7 +79,7 @@ class Target:
         title = f"Target: {self.name}"
         msg = f"\n{title}\n" + \
               "".join(["-" for _ in range(len(title))]) + "\n"
-        for key in ["store_path", "slices"]:
+        for key in ["store_path", "slices", "forcings"]:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         chunkstr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.chunks.items()])
         msg += f"chunks\n    {chunkstr}\n"
@@ -91,6 +109,7 @@ class Target:
             xr.Dataset: The dataset after any transformations
         """
         xds = self.apply_slices(xds)
+        xds = self.compute_forcings(xds)
         xds = self.rename_dataset(xds)
         return xds
 
@@ -108,6 +127,11 @@ class Target:
         for key, val in self.rename.items():
             if key in xds:
                 xds = xds.rename({key: val})
+        for key in self.forcings:
+            dummy_name = f"computed_forcing_{key}"
+            assert key not in xds, \
+                f"{self.name}.rename_dataset: {key} already in dataset, remove this from forcings list"
+            xds = xds.rename({dummy_name: key})
         return xds
 
 
@@ -132,6 +156,20 @@ class Target:
         if "isel" in self.slices.keys():
             for key, val in self.slices["isel"].items():
                 xds = xds.isel({key: slice(*val)})
+        return xds
+
+    def compute_forcings(self, xds: xr.Dataset) -> xr.Dataset:
+
+        mappings = fmod.get_mappings()
+        for key in self.forcings:
+
+            # make sure this dummy name is not in the dataset
+            # seems ridiculous but ... who knows
+            dummy_name = f"computed_forcing_{key}"
+            assert dummy_name not in xds, \
+                f"{self.name}.compute_forcings: {dummy_name} in dataset, but this name is needed to store forcings ... "
+            func = mappings[key]
+            xds[dummy_name] = func(xds)
         return xds
 
 

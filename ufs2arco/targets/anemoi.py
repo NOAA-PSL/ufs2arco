@@ -24,7 +24,7 @@ class Anemoi(Target):
 
     Assumptions:
         * t0 from the source gets renamed to time, and fhr is silently dropped
-        * flatten_grid = true
+        * do_flatten_grid = true
         * resolution = None, I have no idea where this gets set in anemoi-datasets
         * just setting use_level_index = False for now, but use this flag to switch between how vertical level suffixes are labeled
         * unclear if having cell2d (the multi-index for latitude/longitude) will be a problem, so have an attribute for it
@@ -54,6 +54,19 @@ class Anemoi(Target):
     def ensemble(self):
         return self.source.member
 
+    @property
+    def expanded_dim_order(self):
+        """this is used in :meth:`map_static_to_expanded`"""
+        return ("time", "ensemble", "latitudes", "longitudes")
+
+    @property
+    def dim_order(self):
+        if self.do_flatten_grid:
+            return ("time", "variable", "ensemble", "cell")
+        else:
+            return ("time", "variable", "ensemble", "latitudes", "longitudes")
+
+
     def __init__(
         self,
         source: Source,
@@ -61,6 +74,7 @@ class Anemoi(Target):
         store_path: str,
         rename: Optional[dict] = None,
         slices: Optional[dict] = None,
+        forcings: Optional[tuple | list] = None,
     ) -> None:
         super().__init__(
             source=source,
@@ -68,6 +82,7 @@ class Anemoi(Target):
             store_path=store_path,
             rename=rename,
             slices=slices,
+            forcings=forcings,
         )
 
         # additional checks
@@ -87,19 +102,16 @@ class Anemoi(Target):
     ) -> xr.Dataset:
 
         xds = xds.squeeze("fhr", drop=True)
-        xds = super().apply_transforms_to_sample(xds) # just rename for now
-        # It's assumed that the source always has a member dimension, so this isn't needed at the moment
-        #xds = self._check_for_ensemble(xds)
+        xds = super().apply_transforms_to_sample(xds)
         xds = self._map_datetime_to_index(xds)
         xds = self._map_levels_to_suffixes(xds)
-        xds  = self._map_static_to_expanded(xds)
+        xds = self._map_static_to_expanded(xds)
+        xds = xds.transpose(*self.expanded_dim_order)
         xds = self._stackit(xds)
         xds = self._calc_sample_stats(xds)
         if self.do_flatten_grid:
             xds = self._flatten_grid(xds)
-            xds = xds.transpose("time", "variable", "ensemble", "cell")
-        else:
-            xds = xds.transpose("time", "variable", "ensemble", "latitudes", "longitudes")
+        xds = xds.transpose(*self.dim_order)
         xds = xds.reset_coords()
         xds = xds[sorted(xds.data_vars)]
         return xds
@@ -231,7 +243,9 @@ class Anemoi(Target):
                 # so that it's in the order of the data arrays, not in the dataset order
                 # (they could be different)
                 if "field_shape" not in nds.attrs:
-                    nds.attrs["field_shape"] = list(len(xds[d]) for d in xds.dims if d in ("latitudes", "longitudes"))
+                    nds.attrs["stack_order"] = list(d for d in xds[name].dims if d in ("latitudes", "longitudes"))
+                    nds.attrs["field_shape"] = list(len(xds[d]) for d in nds.attrs["stack_order"])
+
         return nds
 
     @staticmethod
@@ -312,7 +326,7 @@ class Anemoi(Target):
         Returns:
             xds (xr.Dataset): with grid flattened to "cell"
         """
-        nds = xds.stack(cell2d=("latitudes", "longitudes"))
+        nds = xds.stack(cell2d=xds.attrs["stack_order"])
         nds["cell"] = xr.DataArray(
             np.arange(len(nds["cell2d"])),
             coords=nds["cell2d"].coords,
