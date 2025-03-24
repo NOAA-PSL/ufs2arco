@@ -1,5 +1,5 @@
-
 import logging
+from typing import Optional
 
 import pandas as pd
 import xarray as xr
@@ -83,8 +83,8 @@ class GCSERA5OneDegree(AnalysisSource):
     def open_sample_dataset(
         self,
         time: pd.Timestamp,
-        cache_dir: str,
         open_static_vars: bool,
+        cache_dir: Optional[str] = None,
     ) -> xr.Dataset:
 
         if not self._is_open:

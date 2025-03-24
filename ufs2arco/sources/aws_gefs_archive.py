@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 import fsspec
 
 import pandas as pd
@@ -41,8 +42,8 @@ class AWSGEFSArchive(EnsembleForecastSource):
         t0: pd.Timestamp,
         fhr: int,
         member: int,
-        cache_dir: str,
         open_static_vars: bool,
+        cache_dir: Optional[str] = None,
     ) -> xr.Dataset:
 
         # 1. cache the grib files for this date, member, fhr
@@ -54,25 +55,28 @@ class AWSGEFSArchive(EnsembleForecastSource):
                 fhr=fhr,
                 a_or_b=k,
             )
-            try:
-                local_file = fsspec.open_local(
-                    path,
-                    s3={"anon": True},
-                    filecache={"cache_storage": cache_dir},
-                )
-            except FileNotFoundError:
-                local_file = None
-                logger.warning(
-                    f"{self.name}: File Not Found: {path}\n\t" +
-                    f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
-                )
-            except:
-                local_file = None
-                logger.warning(
-                    f"{self.name}: Trouble finding the file: {path}\n\t" +
-                    f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
-                )
-            cached_files[k] = local_file
+            if cache_dir is not None:
+                try:
+                    local_file = fsspec.open_local(
+                        path,
+                        s3={"anon": True},
+                        filecache={"cache_storage": cache_dir},
+                    )
+                except FileNotFoundError:
+                    local_file = None
+                    logger.warning(
+                        f"{self.name}: File Not Found: {path}\n\t" +
+                        f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
+                    )
+                except:
+                    local_file = None
+                    logger.warning(
+                        f"{self.name}: Trouble finding the file: {path}\n\t" +
+                        f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
+                    )
+                cached_files[k] = local_file
+            else:
+                cached_files[k] = path
 
         # 2. read data arrays from those files
         dsdict = {}
@@ -104,7 +108,11 @@ class AWSGEFSArchive(EnsembleForecastSource):
         return xds
 
     def _open_single_variable(
-        self, file: fsspec.spec.AbstractFileSystem, varname: str, member: int, filter_by_keys: dict
+        self,
+        file: fsspec.spec.AbstractFileSystem,
+        varname: str,
+        member: int,
+        filter_by_keys: dict,
     ) -> xr.DataArray:
         """
         Open a single variable from a GRIB file.

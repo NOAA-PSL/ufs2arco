@@ -68,8 +68,8 @@ class AnalysisSource(Source):
     def open_sample_dataset(
         self,
         time: pd.Timestamp,
+        open_static_vars: bool,
         cache_dir: Optional[str]=None,
-        open_static_vars: Optional[bool]=True
     ) -> xr.Dataset:
         """
         Open a single dataset for the timestamp.
@@ -82,8 +82,8 @@ class AnalysisSource(Source):
 
         Args:
             time (pd.Timestamp): The timestamp.
+            open_static_vars (bool): if True, read static_vars, otherwise don't
             cache_dir (str, optional): Directory to cache files locally.
-            open_static_vars (bool, optional): If True, return dataset with non-time-varying variables, otherwise don't include them
 
         Returns:
             xr.Dataset: The dataset containing the specified data.

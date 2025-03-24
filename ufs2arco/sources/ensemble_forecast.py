@@ -70,8 +70,8 @@ class EnsembleForecastSource(Source):
         t0: pd.Timestamp,
         fhr: int,
         member: int,
+        open_static_vars: bool,
         cache_dir: Optional[str]=None,
-        open_static_vars: Optional[bool]=True,
     ) -> xr.Dataset:
         """
         Open a single dataset for the given initial condition, forecast hour, and member.
@@ -86,7 +86,8 @@ class EnsembleForecastSource(Source):
             t0 (pd.Timestamp): The initial condition timestamp.
             fhr (int): The forecast hour.
             member (int): The ensemble member ID.
-            cache_dir (str): Directory to cache files locally.
+            open_static_vars (bool): if True, read static_vars, otherwise don't
+            cache_dir (str, optional): Directory to cache files locally.
 
         Returns:
             xr.Dataset: The dataset containing the specified data.
