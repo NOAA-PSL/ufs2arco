@@ -83,6 +83,8 @@ class Target:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         chunkstr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.chunks.items()])
         msg += f"chunks\n    {chunkstr}\n"
+        renamestr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.rename.items()])
+        msg += f"rename\n    {renamestr}\n"
         return msg
 
     @property
@@ -182,7 +184,7 @@ class Target:
         Returns:
             xds (xr.Dataset): with added / managed coordinates
         """
-        pass
+        return xds
 
     def aggregate_stats(self) -> None:
         """Aggregate statistics over "time" and "ensemble" dimension...

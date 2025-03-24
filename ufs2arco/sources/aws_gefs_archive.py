@@ -4,16 +4,16 @@ import fsspec
 import pandas as pd
 import xarray as xr
 
-from ufs2arco.sources.base import Source
+from ufs2arco.sources import EnsembleForecastSource
 
 logger = logging.getLogger("ufs2arco")
 
-class AWSGEFSArchive(Source):
+class AWSGEFSArchive(EnsembleForecastSource):
     """Access NOAA's forecast archive from the Global Ensemble Forecast System (GEFS) at s3://noaa-gefs-pds."""
 
     static_vars = ("lsm", "orog")
     sample_dims = ("t0", "fhr", "member")
-    base_dims = ("level", "latitude", "longitude")
+    base_dims = ("latitude", "longitude")
 
     @property
     def available_variables(self) -> tuple:

@@ -1,18 +1,19 @@
 
+import logging
 
-class GCSERA5OneDegree(Source):
+import pandas as pd
+import xarray as xr
+
+from ufs2arco.sources import AnalysisSource
+
+logger = logging.getLogger("ufs2arco")
+
+
+class GCSERA5OneDegree(AnalysisSource):
 
     static_vars = ("land_sea_mask", "geopotential_at_surface")
-    sample_dims = ("t0", "fhr", "member")
-    base_dims = ("level", "latitude", "longitude")
 
     _is_open = False
-
-    @property
-    def rename(self) -> dict:
-        return {
-            "time": "t0",
-        }
 
     @property
     def available_variables(self) -> tuple:
@@ -52,14 +53,14 @@ class GCSERA5OneDegree(Source):
 
     @property
     def available_levels(self) -> tuple:
-    return (
-        1, 2, 3, 5, 7, 10, 20, 30, 50, 70,
-        100, 125, 150, 175, 200, 225, 250,
-        300, 350, 400, 450, 500, 550,
-        600, 650, 700, 750, 775,
-        800, 825, 850, 875,
-        900, 925, 950, 975, 1000,
-    )
+        return (
+            1, 2, 3, 5, 7, 10, 20, 30, 50, 70,
+            100, 125, 150, 175, 200, 225, 250,
+            300, 350, 400, 450, 500, 550,
+            600, 650, 700, 750, 775,
+            800, 825, 850, 875,
+            900, 925, 950, 975, 1000,
+        )
 
     def _open_dataset(self):
         """May as well just do all of this once
@@ -71,11 +72,6 @@ class GCSERA5OneDegree(Source):
             storage_options={"token": "anon"},
         )
 
-        # rename
-        for key, val in self.rename.items():
-            if key in xds:
-                xds = xds.rename({key: val})
-
         # select
         xds = xds[self.variables]
         xds = xds.sel(level=self.levels)
@@ -86,9 +82,7 @@ class GCSERA5OneDegree(Source):
 
     def open_sample_dataset(
         self,
-        t0: pd.Timestamp,
-        fhr: int,
-        member: int,
+        time: pd.Timestamp,
         cache_dir: str,
         open_static_vars: bool,
     ) -> xr.Dataset:
@@ -96,10 +90,6 @@ class GCSERA5OneDegree(Source):
         if not self._is_open:
             self._open_dataset()
 
-        xds = self._xds.sel(t0=[t0])
-
-        # do this stuff to play nicely with the rest of the repo
-        xds = xds.expand_dims({"fhr": [0], "member": [0]})
-
+        xds = self._xds.sel(time=[time])
         selection = list(self.variables) if open_static_vars else list(self.dynamic_vars)
         return xds[selection]

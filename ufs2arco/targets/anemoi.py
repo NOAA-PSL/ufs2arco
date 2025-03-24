@@ -239,7 +239,7 @@ class Anemoi(Target):
             else:
                 nds[name] = xds[name]
                 nds.attrs["variables_metadata"][name] = deepcopy(meta)
-                # Is this a hack? Add the "field_shape" here
+                # Is attributes here a hack? Add the "field_shape" here
                 # so that it's in the order of the data arrays, not in the dataset order
                 # (they could be different)
                 if "field_shape" not in nds.attrs:

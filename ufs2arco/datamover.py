@@ -160,10 +160,12 @@ class DataMover():
         """
 
         # open a minimal dataset
+        sample_dim_args = {
+            key: getattr(self.source, key)[0]
+            for key in self.source.sample_dims
+        }
         xds = self.source.open_sample_dataset(
-            t0=self.source.t0[0],
-            fhr=self.source.fhr[0],
-            member=self.source.member[0],
+            **sample_dim_args,
             cache_dir=self.get_cache_dir("container"),
             open_static_vars=True,
         )
