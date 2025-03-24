@@ -273,7 +273,14 @@ class Anemoi(Target):
                         nds.attrs["remapping"]["param_level"] = "{param}_{levelist}"
             else:
                 nds[name] = xds[name]
-                nds.attrs["variables_metadata"][name] = deepcopy(meta)
+
+                if "computed_forcing" in xds[name].attrs and "constant_in_time" in xds[name].attrs:
+                    nds.attrs["variables_metadata"][name] = {
+                        "computed_forcing": xds[name].attrs["computed_forcing"],
+                        "constant_in_time": xds[name].attrs["constant_in_time"],
+                    }
+                else:
+                    nds.attrs["variables_metadata"][name] = deepcopy(meta)
                 # Is attributes here a hack? Add the "field_shape" here
                 # so that it's in the order of the data arrays, not in the dataset order
                 # (they could be different)

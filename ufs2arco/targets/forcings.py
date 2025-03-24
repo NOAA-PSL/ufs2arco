@@ -24,40 +24,71 @@ def get_mappings(time="time") -> dict:
     }
 
 def _latitude(xds: xr.Dataset):
-    return xds["latitude"]
+    lat = xds["latitude"]
+    lat.attrs["computed_forcing"] = True
+    lat.attrs["constant_in_time"] = True
+    return lat
 
 def _cos_latitude(xds: xr.Dataset):
-    return np.cos(xds["latitude"]/180*np.pi)
+    clat = np.cos(xds["latitude"]/180*np.pi)
+    clat.attrs["computed_forcing"] = True
+    clat.attrs["constant_in_time"] = True
+    return clat
 
 def _sin_latitude(xds: xr.Dataset):
-    return np.sin(xds["latitude"]/180*np.pi)
+    slat = np.sin(xds["latitude"]/180*np.pi)
+    slat.attrs["computed_forcing"] = True
+    slat.attrs["constant_in_time"] = True
+    return slat
 
 def _longitude(xds: xr.Dataset):
-    return xds["longitude"]
+    lon = xds["longitude"]
+    lon.attrs["computed_forcing"] = True
+    lon.attrs["constant_in_time"] = True
+    return lon
 
 def _cos_longitude(xds: xr.Dataset):
-    return np.cos(xds["longitude"]/180*np.pi)
+    clon = np.cos(xds["longitude"]/180*np.pi)
+    clon.attrs["computed_forcing"] = True
+    clon.attrs["constant_in_time"] = True
+    return clon
 
 def _sin_longitude(xds: xr.Dataset):
-    return np.sin(xds["longitude"]/180*np.pi)
+    slon = np.sin(xds["longitude"]/180*np.pi)
+    slon.attrs["computed_forcing"] = True
+    slon.attrs["constant_in_time"] = True
+    return slon
 
 def _julian_day(xds: xr.Dataset, time="time"):
     ptime = pd.to_datetime(xds[time])
     pyears = pd.to_datetime(xds[time].dt.year.astype(str))
     delta = ptime - pyears
     jday = delta.days + delta.seconds / 86400
-    return xr.DataArray(jday, coords=xds[time].coords, attrs={"description": "julian day relative to start of year"})
+    jday = xr.DataArray(
+        jday,
+        coords=xds[time].coords,
+        attrs={
+            "description": "julian day relative to start of year",
+            "computed_forcing": True,
+            "constant_in_time": False,
+        },
+    )
+    return jday
 
 def _cos_julian_day(xds: xr.Dataset, time="time"):
     jd = _julian_day(xds, time=time)
     cjd = np.cos(jd/365.25*2*np.pi)
     cjd.attrs["description"] = f"cosine of {jd.attrs['description']}"
+    cjd.attrs["computed_forcing"] = True
+    cjd.attrs["constant_in_time"] = False
     return cjd
 
 def _sin_julian_day(xds: xr.Dataset, time="time"):
     jd = _julian_day(xds, time=time)
     sjd = np.sin(jd/365.25*2*np.pi)
     sjd.attrs["description"] = f"sine of {jd.attrs['description']}"
+    sjd.attrs["computed_forcing"] = True
+    sjd.attrs["constant_in_time"] = False
     return sjd
 
 def _local_time(xds: xr.Dataset, time="time"):
@@ -67,20 +98,25 @@ def _local_time(xds: xr.Dataset, time="time"):
     hours = xr.DataArray(hours, coords=xds[time].coords)
     local_time = (xds["longitude"] / 360 * 24 + hours) % 24
     local_time.attrs["description"] = "relative local time in hours, from time in UTC & longitude"
+    local_time.attrs["computed_forcing"] = True
+    local_time.attrs["constant_in_time"] = False
     return local_time
 
 def _cos_local_time(xds: xr.Dataset, time="time"):
     lt = _local_time(xds, time=time)
     clt = np.cos(lt/24*2*np.pi)
     clt.attrs["description"] = f"cosine of {lt.attrs['description']}"
+    clt.attrs["computed_forcing"] = True
+    clt.attrs["constant_in_time"] = False
     return clt
 
 def _sin_local_time(xds: xr.Dataset, time="time"):
     lt = _local_time(xds, time=time)
     slt = np.sin(lt/24*2*np.pi)
     slt.attrs["description"] = f"sin of {lt.attrs['description']}"
+    slt.attrs["computed_forcing"] = True
+    slt.attrs["constant_in_time"] = False
     return slt
-
 
 def _solar_declination_angle(xds: xr.Dataset, time="time"):
     """Note: this was copied from github.com/ecmwf/earthkit-meteo
@@ -129,4 +165,6 @@ def _cos_solar_zenith_angle(xds: xr.Dataset, time="time"):
     zenith_angle = zenith_angle.where(zenith_angle > 0., 0.)
     zenith_angle.attrs["description"] = "cosine of solar zenith angle"
     zenith_angle.attrs["attribution"] = "this is computed exactly as in github.com/ecmwf/earthkit-meteo (see src/earthkit/meteo/solar/array/solar.py)"
+    zenith_angle.attrs["computed_forcing"] = True
+    zenith_angle.attrs["constant_in_time"] = False
     return zenith_angle
