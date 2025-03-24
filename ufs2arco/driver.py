@@ -213,4 +213,4 @@ class Driver:
         topo.barrier()
         logger.info(f"Done storing global attributes\n")
 
-        logger.info(f"🚀🚀🚀 Done creating {target.store_path}")
+        logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {target.store_path}")
