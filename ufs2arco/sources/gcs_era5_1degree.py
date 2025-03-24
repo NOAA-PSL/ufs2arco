@@ -92,4 +92,5 @@ class GCSERA5OneDegree(AnalysisSource):
 
         xds = self._xds.sel(time=[time])
         selection = list(self.variables) if open_static_vars else list(self.dynamic_vars)
-        return xds[selection]
+        xds = xds[selection].copy().load()
+        return xds

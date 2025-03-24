@@ -6,7 +6,7 @@ import pandas as pd
 
 logger = logging.getLogger("ufs2arco")
 
-def get_mappings() -> dict:
+def get_mappings(time="time") -> dict:
     return {
         "latitude": _latitude,
         "cos_latitude": _cos_latitude,
@@ -14,13 +14,13 @@ def get_mappings() -> dict:
         "longitude": _longitude,
         "cos_longitude": _cos_longitude,
         "sin_longitude": _sin_longitude,
-        "julian_day": _julian_day,
-        "cos_julian_day": _cos_julian_day,
-        "sin_julian_day": _sin_julian_day,
-        "cos_local_time": _cos_local_time,
-        "sin_local_time": _sin_local_time,
-        "cos_solar_zenith_angle": _cos_solar_zenith_angle,
-        "insolation": _cos_solar_zenith_angle,
+        "julian_day": lambda xds: _julian_day(xds, time=time),
+        "cos_julian_day": lambda xds: _cos_julian_day(xds, time=time),
+        "sin_julian_day": lambda xds: _sin_julian_day(xds, time=time),
+        "cos_local_time": lambda xds: _cos_local_time(xds, time=time),
+        "sin_local_time": lambda xds: _sin_local_time(xds, time=time),
+        "cos_solar_zenith_angle": lambda xds: _cos_solar_zenith_angle(xds, time=time),
+        "insolation": lambda xds: _cos_solar_zenith_angle(xds, time=time),
     }
 
 def _latitude(xds: xr.Dataset):
@@ -41,48 +41,48 @@ def _cos_longitude(xds: xr.Dataset):
 def _sin_longitude(xds: xr.Dataset):
     return np.sin(xds["longitude"]/180*np.pi)
 
-def _julian_day(xds: xr.Dataset):
-    ptime = pd.to_datetime(xds["t0"])
-    pyears = pd.to_datetime(xds["t0"].dt.year.astype(str))
+def _julian_day(xds: xr.Dataset, time="time"):
+    ptime = pd.to_datetime(xds[time])
+    pyears = pd.to_datetime(xds[time].dt.year.astype(str))
     delta = ptime - pyears
     jday = delta.days + delta.seconds / 86400
-    return xr.DataArray(jday, coords=xds["t0"].coords, attrs={"description": "julian day relative to start of year"})
+    return xr.DataArray(jday, coords=xds[time].coords, attrs={"description": "julian day relative to start of year"})
 
-def _cos_julian_day(xds: xr.Dataset):
-    jd = _julian_day(xds)
+def _cos_julian_day(xds: xr.Dataset, time="time"):
+    jd = _julian_day(xds, time=time)
     cjd = np.cos(jd/365.25*2*np.pi)
     cjd.attrs["description"] = f"cosine of {jd.attrs['description']}"
     return cjd
 
-def _sin_julian_day(xds: xr.Dataset):
-    jd = _julian_day(xds)
+def _sin_julian_day(xds: xr.Dataset, time="time"):
+    jd = _julian_day(xds, time=time)
     sjd = np.sin(jd/365.25*2*np.pi)
     sjd.attrs["description"] = f"sine of {jd.attrs['description']}"
     return sjd
 
-def _local_time(xds: xr.Dataset):
-    pd_time = pd.to_datetime(xds["t0"].values)
+def _local_time(xds: xr.Dataset, time="time"):
+    pd_time = pd.to_datetime(xds[time].values)
     delta = pd_time - pd_time.normalize() # gets the delta in hours
     hours = delta.seconds / 86400 * 24 # now this is e.g. 12 at 12z
-    hours = xr.DataArray(hours, coords=xds["t0"].coords)
+    hours = xr.DataArray(hours, coords=xds[time].coords)
     local_time = (xds["longitude"] / 360 * 24 + hours) % 24
     local_time.attrs["description"] = "relative local time in hours, from time in UTC & longitude"
     return local_time
 
-def _cos_local_time(xds: xr.Dataset):
-    lt = _local_time(xds)
+def _cos_local_time(xds: xr.Dataset, time="time"):
+    lt = _local_time(xds, time=time)
     clt = np.cos(lt/24*2*np.pi)
     clt.attrs["description"] = f"cosine of {lt.attrs['description']}"
     return clt
 
-def _sin_local_time(xds: xr.Dataset):
-    lt = _local_time(xds)
+def _sin_local_time(xds: xr.Dataset, time="time"):
+    lt = _local_time(xds, time=time)
     slt = np.sin(lt/24*2*np.pi)
     slt.attrs["description"] = f"sin of {lt.attrs['description']}"
     return slt
 
 
-def _solar_declination_angle(xds: xr.Dataset):
+def _solar_declination_angle(xds: xr.Dataset, time="time"):
     """Note: this was copied from github.com/ecmwf/earthkit-meteo
     See: src/earthkit/meteo/solar/array/solar.py "solar_declination_angle"
 
@@ -90,7 +90,7 @@ def _solar_declination_angle(xds: xr.Dataset):
         declination (xr.DataArray): in radians, not in degrees as in earthkit-meteo
         time_correction (xr.DataArray): function of dataset time array
     """
-    angle = _julian_day(xds) / 365.25 * np.pi * 2
+    angle = _julian_day(xds, time=time) / 365.25 * np.pi * 2
     declination = np.deg2rad(
         0.396372
         - 22.91327 * np.cos(angle)
@@ -110,12 +110,12 @@ def _solar_declination_angle(xds: xr.Dataset):
     )
     return declination, time_correction
 
-def _cos_solar_zenith_angle(xds: xr.Dataset):
+def _cos_solar_zenith_angle(xds: xr.Dataset, time="time"):
     """Note: this was copied from github.com/ecmwf/earthkit-meteo
     See: src/earthkit/meteo/solar/array/solar.py "cos_solar_zenith_angle"
     """
 
-    declination, time_correction = _solar_declination_angle(xds)
+    declination, time_correction = _solar_declination_angle(xds, time=time)
     rlat = np.deg2rad(xds["latitude"])
 
     sindec_sinlat = np.sin(declination) * np.sin(rlat)
@@ -123,7 +123,7 @@ def _cos_solar_zenith_angle(xds: xr.Dataset):
 
     # solar hour angle [h.deg]
     solar_angle = np.deg2rad(
-        (xds["t0"].dt.hour - 12) * 15 + xds["longitude"] + time_correction
+        (xds[time].dt.hour - 12) * 15 + xds["longitude"] + time_correction
     )
     zenith_angle = sindec_sinlat + cosdec_coslat * np.cos(solar_angle)
     zenith_angle = zenith_angle.where(zenith_angle > 0., 0.)

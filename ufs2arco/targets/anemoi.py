@@ -7,7 +7,7 @@ import pandas as pd
 import xarray as xr
 import zarr
 
-from ufs2arco.sources import Source
+from ufs2arco.sources import Source, AnalysisSource, EnsembleForecastSource
 from ufs2arco.targets import Target
 
 logger = logging.getLogger("ufs2arco")
@@ -23,7 +23,7 @@ class Anemoi(Target):
     but note this might cause problems with anemoi!
 
     Assumptions:
-        * t0 from the source gets renamed to time, and fhr is silently dropped
+        * t0 from ForecastSource gets renamed to time, and fhr is silently dropped
         * do_flatten_grid = true
         * resolution = None, I have no idea where this gets set in anemoi-datasets
         * just setting use_level_index = False for now, but use this flag to switch between how vertical level suffixes are labeled
@@ -37,27 +37,54 @@ class Anemoi(Target):
     allow_nans = True
 
     # these are basically properties
-    sample_dims = ("time", "ensemble")
     base_dims = ("variable", "cell")
     always_open_static_vars = True
 
     @property
+    def sample_dims(self):
+        if self._has_member:
+            return ("time", "ensemble")
+        else:
+            return ("time",)
+
+    @property
     def datetime(self):
-        #TODO: this is the hack where I assume we're using fhr=0 always
-        return self.source.t0 + pd.Timedelta(hours=self.source.fhr[0])
+        if self._has_fhr:
+            #TODO: this is the hack where I assume we're using fhr=0 always
+            return self.source.t0 + pd.Timedelta(hours=self.source.fhr[0])
+        else:
+            return self.source.time
 
     @property
     def time(self):
-        return np.arange(len(self.source.t0))
+
+        if self._has_fhr:
+            return np.arange(len(self.source.t0))
+        else:
+            return np.arange(len(self.source.time))
 
     @property
     def ensemble(self):
-        return self.source.member
+        if self._has_member:
+            return self.source.member
+        else:
+            return [0]
 
     @property
-    def expanded_dim_order(self):
-        """this is used in :meth:`map_static_to_expanded`"""
-        return ("time", "ensemble", "latitudes", "longitudes")
+    def protected_rename(self) -> dict:
+        protected_rename = {
+            "latitude": "latitudes",
+            "longitude": "longitudes",
+        }
+        if self._has_fhr:
+            protected_rename["t0"] = "dates"
+        else:
+            protected_rename["time"] = "dates"
+
+        if self._has_member:
+            protected_rename["member"] = "ensemble"
+        return protected_rename
+
 
     @property
     def dim_order(self):
@@ -76,6 +103,7 @@ class Anemoi(Target):
         slices: Optional[dict] = None,
         forcings: Optional[tuple | list] = None,
     ) -> None:
+
         super().__init__(
             source=source,
             chunks=chunks,
@@ -85,28 +113,40 @@ class Anemoi(Target):
             forcings=forcings,
         )
 
+
         # additional checks
-        assert len(self.source.fhr) == 1 and self.source.fhr[0] == 0, \
-            f"{self.name}.__init__: Can only use this class with fhr=0, no multiple lead times"
+        if self._has_fhr:
+            assert len(self.source.fhr) == 1 and self.source.fhr[0] == 0, \
+                f"{self.name}.__init__: Can only use this class with fhr=0, no multiple lead times"
 
         renamekeys = list(self.rename.keys())
-        protected = ("t0", "member", "latitude", "longitude", "dates", "ensemble", "latitudes", "longitudes")
+        protected = list(self.protected_rename.keys()) + list(self.protected_rename.values())
         for key in renamekeys:
             if key in protected or self.rename[key] in protected:
                 logger.info(f"{self.name}.__init__: can't rename {key} -> {self.rename[key]}, either key or val is in a protected list. I'll drop it and forget about it.")
                 self.rename.pop(key)
+
+    def get_expanded_dim_order(self, xds):
+        """this is used in :meth:`map_static_to_expanded`"""
+        return ("time", "ensemble") + tuple(xds.attrs["stack_order"])
+
 
     def apply_transforms_to_sample(
         self,
         xds: xr.Dataset,
     ) -> xr.Dataset:
 
-        xds = xds.squeeze("fhr", drop=True)
+        if self._has_fhr:
+            xds = xds.squeeze("fhr", drop=True)
+
+        if not self._has_member:
+            xds = xds.expand_dims({"ensemble": self.ensemble})
+
         xds = super().apply_transforms_to_sample(xds)
         xds = self._map_datetime_to_index(xds)
         xds = self._map_levels_to_suffixes(xds)
         xds = self._map_static_to_expanded(xds)
-        xds = xds.transpose(*self.expanded_dim_order)
+        xds = xds.transpose(*self.get_expanded_dim_order(xds))
         xds = self._stackit(xds)
         xds = self._calc_sample_stats(xds)
         if self.do_flatten_grid:
@@ -139,6 +179,8 @@ class Anemoi(Target):
         This takes the default source dimensions and renames them to the default anemoi dimensions:
 
         (t0, member, level, latitude, longitude) -> (dates, ensemble, level, latitudes, longitudes)
+        or
+        (time, level, latitude, longitude) -> (dates, ensemble, level, latitudes, longitudes)
 
         Args:
             xds (xr.Dataset): a dataset directly from the source
@@ -147,14 +189,7 @@ class Anemoi(Target):
             xds (xr.Dataset): with renaming as above
         """
         # first, rename the protected list
-        xds = xds.rename(
-            {
-                "t0": "dates",
-                "member": "ensemble",
-                "latitude": "latitudes",
-                "longitude": "longitudes",
-            }
-        )
+        xds = xds.rename(self.protected_rename)
         xds = super().rename_dataset(xds)
         return xds
 
@@ -407,4 +442,3 @@ class Anemoi(Target):
             logger.info(f"{self.name}.aggregate_statistics: Removing temporary version {key}")
             del zds[key]
         zarr.consolidate_metadata(self.store_path)
-        return

@@ -39,6 +39,12 @@ class Target:
         self.store_path = store_path
         self.chunks = chunks
         self.rename = rename if rename is not None else dict()
+
+        # set these for different source handling
+        self._has_fhr = getattr(self.source, "fhr", None) is not None
+        self._has_member = getattr(self.source, "member", None) is not None
+
+        # check chunks
         for dim in self.renamed_sample_dims:
             chunksize = self.chunks[dim]
             assert chunksize == 1, \
@@ -162,7 +168,8 @@ class Target:
 
     def compute_forcings(self, xds: xr.Dataset) -> xr.Dataset:
 
-        mappings = fmod.get_mappings()
+        time = "t0" if self._has_fhr else "time"
+        mappings = fmod.get_mappings(time=time)
         for key in self.forcings:
 
             # make sure this dummy name is not in the dataset
