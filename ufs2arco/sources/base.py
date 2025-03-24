@@ -26,6 +26,10 @@ class Source:
         """
         return dict()
 
+    @property
+    def dynamic_vars(self) -> tuple:
+        return tuple(x for x in self.variables if x not in self.static_vars)
+
     def __init__(
         self,
         t0: dict,
