@@ -62,15 +62,14 @@ class Driver:
             raise NotImplementedError(f"Driver.__init__: only 'aws_gefs_archive', 'gcs_era5_1degree' is implemented")
 
         # the target
-        name = self.config["target"]["name"].lower()
-        if name == "forecast":
-            self.TargetDataset = targets.Forecast
-        elif name == "analysis":
-            self.TargetDataset = targets.Analysis
+        name = self.config["target"].get("name", "base")
+        name = name.lower()
+        if name in ("forecast", "analysis", "base"):
+            self.TargetDataset = targets.Target
         elif name == "anemoi":
             self.TargetDataset = targets.Anemoi
         else:
-            raise NotImplementedError(f"Driver.__init__: only 'analysis', 'forecast', and 'anemoi' are implemented")
+            raise NotImplementedError(f"Driver.__init__: only 'base' and 'anemoi' are implemented")
 
         for key in ["chunks"]:
             assert key in self.config["target"], \

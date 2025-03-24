@@ -76,3 +76,10 @@ class Source:
             self.levels = self.available_levels
 
         logger.info(str(self))
+
+    def add_full_extra_coords(self, xds: xr.Dataset) -> xr.Dataset:
+        """
+        An optional routine that builds extra coordinates if needed, see example in ensemble_forecast.py.
+        This gets used for passive targets
+        """
+        return xds

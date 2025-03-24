@@ -9,12 +9,51 @@ from ufs2arco.targets import forcings as fmod # funky name because 'forcings' se
 logger = logging.getLogger("ufs2arco")
 
 class Target:
-    """Base class for the target dataset to be stored
+    """
+    Base class for the target dataset to be stored.
+
+    This is used in the case that the target data looks "the same" as the input (i.e., the zarr form equivalent).
     """
 
     sample_dims = tuple()
     base_dims = tuple()
     always_open_static_vars = False
+
+    @property
+    def sample_dims(self) -> tuple:
+        return self.source.sample_dims
+
+    @property
+    def base_dims(self) -> tuple:
+        return self.source.base_dims
+
+    @property
+    def time(self):
+        if self._has_fhr:
+            return None
+        else:
+            return self.source.time
+
+    @property
+    def t0(self):
+        if self._has_fhr:
+            return self.source.t0
+        else:
+            return None
+
+    @property
+    def fhr(self):
+        if self._has_fhr:
+            return self.source.fhr
+        else:
+            return None
+
+    @property
+    def member(self):
+        if self._has_member:
+            return self.source.member
+        else:
+            return None
 
     def __init__(
         self,
@@ -191,6 +230,7 @@ class Target:
         Returns:
             xds (xr.Dataset): with added / managed coordinates
         """
+
         return xds
 
     def aggregate_stats(self) -> None:

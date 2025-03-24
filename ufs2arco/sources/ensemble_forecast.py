@@ -92,3 +92,17 @@ class EnsembleForecastSource(Source):
             xr.Dataset: The dataset containing the specified data.
         """
         pass
+
+
+    def add_full_extra_coords(self, xds: xr.Dataset) -> xr.Dataset:
+        # compute the full version of these extra coords
+        xds["lead_time"] = xr.DataArray(
+            [pd.Timedelta(hours=x) for x in self.fhr],
+            coords=xds["fhr"].coords,
+            attrs=xds["lead_time"].attrs.copy(),
+        )
+
+        xds["valid_time"] = xds["t0"] + xds["lead_time"]
+        xds["valid_time"].attrs = xds["valid_time"].attrs.copy()
+        xds = xds.set_coords(["lead_time", "valid_time"])
+        return xds
