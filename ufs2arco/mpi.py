@@ -94,3 +94,55 @@ class MPITopology:
         Synchronizes all processes at a barrier.
         """
         self.comm.Barrier()
+
+class SerialTopology:
+    """
+    Looks and acts like the MPITopology, but works in cases when mpi is not importable.
+
+    So... basically it's a logger
+    """
+    def __init__(
+        self,
+        log_dir: Optional[str] = None,
+        log_level: int = logging.INFO,
+    ) -> None:
+        """
+        Args:
+            log_dir (Optional[str]): Directory for storing logs.
+            log_level (int): Logging level.
+        """
+
+        self.root = 0
+        self.pid = os.getpid()
+
+        self._init_log(log_dir=log_dir, level=log_level)
+        logger.info(str(self))
+
+    def __str__(self):
+        msg = f"\nSerialTopology Summary\n" +\
+            f"---------------------\n"
+        msg += f"{'pid':<18s}: {self.pid}\n"
+        msg += f"{'log_dir':<18s}: {self.log_dir}\n"
+        msg += f"{'logfile':<18s}: {self.logfile}\n"
+        return msg
+
+
+    def _init_log(self, log_dir, level=logging.INFO):
+        self.log_dir = "./" if log_dir is None else log_dir
+        if not os.path.isdir(self.log_dir):
+            os.makedirs(self.log_dir)
+        self.logfile = f"{self.log_dir}/log.serial.out"
+
+        logger.setLevel(level=level)
+        formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)-7s] %(message)s")
+        handler = logging.FileHandler(self.logfile, mode="w+")
+        handler.setLevel(level=level)
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+
+    @property
+    def is_root(self) -> bool:
+        return True
+
+    def barrier(self) -> None:
+        pass

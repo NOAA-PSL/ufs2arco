@@ -2,15 +2,15 @@ mover:
   name: mpidatamover
 
 directories:
-  zarr: /pscratch/sd/t/timothys/gefs/one-degree/forecasts.zarr
-  cache: /pscratch/sd/t/timothys/gefs-cache
-  logs: /global/cfs/cdirs/m4718/timothys/gefs/one-degree/logs
+  zarr: ./mpi.forecasts.zarr
+  cache: ./mpi.gefs-cache
+  logs: ./logs/mpi
 
 source:
-  name: gefsdataset
+  name: aws_gefs_archive
   t0:
     start: 2017-01-01T00
-    end: 2020-09-23T06
+    end: 2017-01-02T18
     freq: 6h
 
   fhr:
@@ -20,13 +20,30 @@ source:
 
   member:
     start: 0
-    end: 20
+    end: 1
     step: 1
 
+  variables:
+    - lsm
+    - orog
+    - sp
+    - t2m
+    - t
+    - gh
+
+  levels:
+    - 100
+    - 500
+    - 1000
+
 target:
-  name: forecast
+  name: base
   rename:
     level: pressure
+
+  slices:
+    sel:
+      latitude: [89.5, -89.5]
 
   chunks:
     t0: 1

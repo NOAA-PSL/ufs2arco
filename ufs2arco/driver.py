@@ -5,10 +5,15 @@ except:
 
 import logging
 import yaml
+from datetime import datetime
+
+import xarray as xr
+import zarr
 
 from ufs2arco.log import setup_simple_log
-from ufs2arco.mpi import MPITopology
-from ufs2arco.gefsdataset import GEFSDataset
+from ufs2arco.mpi import MPITopology, SerialTopology
+from ufs2arco import sources
+from ufs2arco import targets
 from ufs2arco.datamover import DataMover, MPIDataMover
 
 logger = logging.getLogger("ufs2arco")
@@ -18,15 +23,16 @@ class Driver:
 
     Attributes:
         config (dict): Configuration dictionary loaded from the YAML file.
-        Dataset (Type[GEFSDataset]): The dataset class (GEFSDataset).
+        Source, Target
         Mover (Type[DataMover] | Type[MPIDataMover]): The data mover class (DataMover or MPIDataMover).
 
     Methods:
         __init__(config_filename: str): Initializes the Driver object with configuration from the specified YAML file.
         use_mpi: Returns whether MPI should be used based on the configuration.
-        dataset_kwargs: Returns the arguments for initializing the dataset.
+        source_kwargs: Returns the arguments for initializing the source dataset.
+        target_kwargs: Returns the arguments for initializing the target dataset.
         mover_kwargs: Returns the arguments for initializing the mover.
-        run(overwrite: bool = False): Runs the data movement process, managing the dataset and mover.
+        run(overwrite: bool = False): Runs the data movement process, managing the source, target transformations, and mover.
     """
 
     def __init__(self, config_filename: str):
@@ -37,30 +43,39 @@ class Driver:
 
         Raises:
             AssertionError: If required sections or keys are missing in the configuration.
-            NotImplementedError: If a dataset or mover is not recognized.
+            NotImplementedError: If a source, target, or mover is not recognized.
         """
         with open(config_filename, "r") as f:
             self.config = yaml.safe_load(f)
 
-        for key in ["dataset", "mover", "directories"]:
+        for key in ["mover", "directories", "source", "target"]:
             assert key in self.config, \
                 f"Driver.__init__: could not find '{key}' section in yaml"
 
-        # the dataset
-        name = self.config["dataset"]["name"].lower()
-        if name == "gefsdataset":
-            self.Dataset = GEFSDataset
+        # the source dataset
+        name = self.config["source"]["name"].lower()
+        if name == "aws_gefs_archive":
+            self.SourceDataset = sources.AWSGEFSArchive
+        elif name == "gcs_era5_1degree":
+            self.SourceDataset = sources.GCSERA5OneDegree
         else:
-            raise NotImplementedError(f"Driver.__init__: only 'GEFSDataset' is implemented")
+            raise NotImplementedError(f"Driver.__init__: only 'aws_gefs_archive', 'gcs_era5_1degree' is implemented")
+
+        # the target
+        name = self.config["target"].get("name", "base")
+        name = name.lower()
+        if name in ("forecast", "analysis", "base"):
+            self.TargetDataset = targets.Target
+        elif name == "anemoi":
+            self.TargetDataset = targets.Anemoi
+        else:
+            raise NotImplementedError(f"Driver.__init__: only 'base' and 'anemoi' are implemented")
+
+        for key in ["chunks"]:
+            assert key in self.config["target"], \
+                f"Driver.__init__: could not find '{key}' in 'target' section of yaml"
 
         # the mover
-        for key in ["name", "sample_dims"]:
-            assert key in self.config["mover"], \
-                f"Driver.__init__: could not find '{key}' in 'mover' section in yaml"
-        for key in ["cache_dir"]:
-            assert key not in self.config["mover"], \
-                f"Driver.__init__: '{key}' not allowed in 'mover' section in yaml"
-
         name = self.config["mover"]["name"].lower()
         if name == "datamover":
             self.Mover = DataMover
@@ -69,14 +84,15 @@ class Driver:
         else:
             raise NotImplementedError(f"Driver.__init__: don't recognize mover = {name}")
 
+        for key in ["cache_dir"]:
+            assert key not in self.config["mover"], \
+                f"Driver.__init__: '{key}' not allowed in 'mover' section of yaml"
+
         # directories
         dirs = self.config["directories"]
         for key in ["zarr", "cache"]:
             assert key in dirs, \
                 f"Driver.__init__: could not find '{key}' in 'directories' section in yaml"
-
-        if self.config["mover"]["name"] == "datamover" and "logs" in dirs:
-            logger.warning("Driver.__init__: with serial DataMover, logs are streamed to sys.stdout, not files, so logs directory is ignored")
 
     @property
     def use_mpi(self) -> bool:
@@ -88,13 +104,23 @@ class Driver:
         return self.config["mover"]["name"].lower() == "mpidatamover"
 
     @property
-    def dataset_kwargs(self) -> dict:
-        """Returns the arguments for initializing the dataset.
+    def source_kwargs(self) -> dict:
+        """Returns the arguments for initializing the source dataset.
 
         Returns:
-            dict: The dataset initialization arguments.
+            dict: The source dataset initialization arguments.
         """
-        kw = {key: val for key, val in self.config["dataset"].items() if key != "name"}
+        kw = {key: val for key, val in self.config["source"].items() if key != "name"}
+        return kw
+
+    @property
+    def target_kwargs(self) -> dict:
+        """Returns the arguments for initializing the target dataset.
+
+        Returns:
+            dict: The target dataset initialization arguments.
+        """
+        kw = {key: val for key, val in self.config["target"].items() if key != "name"}
         kw["store_path"] = self.config["directories"]["zarr"]
         return kw
 
@@ -116,9 +142,9 @@ class Driver:
         return kw
 
     def run(self, overwrite: bool = False):
-        """Runs the data movement process, managing the dataset and mover.
+        """Runs the data movement process, managing the datasets and mover.
 
-        This method sets up the dataset, creates the container, and loops through
+        This method sets up the datasets, creates the container, and loops through
         batches to move data to the specified store path (Zarr format).
 
         Args:
@@ -132,23 +158,16 @@ class Driver:
             mover_kwargs["mpi_topo"] = topo
 
         else:
-            setup_simple_log()
+            topo = SerialTopology(log_dir=self.config["directories"]["logs"])
 
-        # create logger after mpi_topo has (maybe) been created
-
-        dataset = self.Dataset(**self.dataset_kwargs)
-        mover = self.Mover(dataset=dataset, **mover_kwargs)
+        source = self.SourceDataset(**self.source_kwargs)
+        target = self.TargetDataset(source=source, **self.target_kwargs)
+        mover = self.Mover(source=source, target=target, **mover_kwargs)
 
         # create container, only if mover start is not 0
         if mover_kwargs["start"] == 0:
             container_kwargs = {"mode": "w"} if overwrite else {}
-            container_cache = self.config["directories"]["cache"] + "/container"
-            if self.use_mpi:
-                if topo.is_root:
-                    dataset.create_container(cache_dir=container_cache, **container_kwargs)
-                topo.barrier()
-            else:
-                dataset.create_container(cache_dir=container_cache, **container_kwargs)
+            mover.create_container(**container_kwargs)
 
         # loop through batches
         n_batches = len(mover)
@@ -163,7 +182,31 @@ class Driver:
 
                 xds = xds.reset_coords(drop=True)
                 region = mover.find_my_region(xds)
-                xds.to_zarr(dataset.store_path, region=region)
+                xds.to_zarr(target.store_path, region=region)
                 mover.clear_cache(batch_idx)
 
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
+
+        topo.barrier()
+        logger.info(f"Done moving the data\n")
+        logger.info(f"Aggregating statistics (if any specified for target)")
+        if topo.is_root:
+            target.aggregate_stats()
+        topo.barrier()
+        logger.info(f"Done aggregating statistics\n")
+
+        logger.info(f"Storing the recipe and anything from the 'attrs' section in zarr store attributes")
+        if topo.is_root:
+            zds = zarr.open(target.store_path, mode="a")
+            zds.attrs["recipe"] = self.config
+            if "attrs" in self.config.keys():
+                for key, val in self.config["attrs"].items():
+                    zds.attrs[key] = val
+
+            zds.attrs["latest_write_timestamp"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+            # just in case
+            zarr.consolidate_metadata(target.store_path)
+        topo.barrier()
+        logger.info(f"Done storing global attributes\n")
+
+        logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {target.store_path}")
