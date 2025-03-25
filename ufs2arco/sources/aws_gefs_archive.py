@@ -103,7 +103,7 @@ class AWSGEFSArchive(EnsembleForecastSource):
                 if not any(x is None for x in dslist):
                     dsdict[varname] = xr.merge(dslist)[varname]
                 else:
-                    dsdict[varname] = xr.Dataset()
+                    dsdict[varname] = xr.DataArray(name=varname)
         xds = xr.Dataset(dsdict)
         return xds
 
@@ -150,7 +150,11 @@ class AWSGEFSArchive(EnsembleForecastSource):
         else:
 
             if "level" in xds:
-                xds = xds.sel(level=[l for l in self.levels if l in xds.level.values])
+                level_selection = [l for l in self.levels if l in xds.level.values]
+                if len(level_selection) == 0:
+                    return xr.DataArray(name=varname)
+                xds = xds.sel(level=level_selection)
+
             xds = xds.expand_dims(["t0", "lead_time", "member"])
             xds["fhr"] = xr.DataArray(
                 int(xds["lead_time"].values / 1e9 / 3600),
