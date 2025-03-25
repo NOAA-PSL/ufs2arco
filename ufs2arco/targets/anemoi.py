@@ -420,6 +420,19 @@ class Anemoi(Target):
 
         xds = xr.open_zarr(self.store_path)
 
+        # first load up the arrays
+        for key in [
+            "count_array",
+            "has_nans_array",
+            "maximum_array",
+            "minimum_array",
+            "squares_array",
+            "sums_array",
+        ]:
+            xds[key] = xds[key].load()
+
+        logger.info(f"{self.name}.aggregate_stats: Loaded temporary stats arrays")
+
         # the easy ones
         xds["count"] = xds["count_array"].sum(["time", "ensemble"])
         xds["has_nans"] = xds["has_nans_array"].any(["time", "ensemble"])
@@ -435,6 +448,7 @@ class Anemoi(Target):
 
         # store it
         xds.to_zarr(self.store_path, mode="a")
+        logger.info(f"{self.name}.aggregate_stats: Stored aggregated stats")
 
         # now remove the temp versions
         zds = zarr.open(self.store_path, mode="a")
@@ -446,6 +460,6 @@ class Anemoi(Target):
             "squares_array",
             "sums_array",
         ]:
-            logger.info(f"{self.name}.aggregate_statistics: Removing temporary version {key}")
+            logger.info(f"{self.name}.aggregate_stats: Removing temporary version {key}")
             del zds[key]
         zarr.consolidate_metadata(self.store_path)
