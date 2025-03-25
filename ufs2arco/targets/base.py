@@ -224,13 +224,15 @@ class Target:
     def manage_coords(self, xds: xr.Dataset) -> xr.Dataset:
         """Manage the coordinates that will get stored in the container
 
+        In the base (passive) case, create coords via the source dataset
+
         Args:
             xds (xr.Dataset): with all dimensions as they will be in the final dataset
 
         Returns:
             xds (xr.Dataset): with added / managed coordinates
         """
-
+        xds = self.source.add_full_extra_coords(xds)
         return xds
 
     def aggregate_stats(self) -> None:
