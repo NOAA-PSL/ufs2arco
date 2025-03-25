@@ -11,7 +11,7 @@ import xarray as xr
 import zarr
 
 from ufs2arco.log import setup_simple_log
-from ufs2arco.mpi import MPITopology
+from ufs2arco.mpi import MPITopology, SerialTopology
 from ufs2arco import sources
 from ufs2arco import targets
 from ufs2arco.datamover import DataMover, MPIDataMover
@@ -94,9 +94,6 @@ class Driver:
             assert key in dirs, \
                 f"Driver.__init__: could not find '{key}' in 'directories' section in yaml"
 
-        if self.config["mover"]["name"] == "datamover" and "logs" in dirs:
-            logger.warning("Driver.__init__: with serial DataMover, logs are streamed to sys.stdout, not files, so logs directory is ignored")
-
     @property
     def use_mpi(self) -> bool:
         """Determines if MPI is to be used based on the mover configuration.
@@ -161,7 +158,7 @@ class Driver:
             mover_kwargs["mpi_topo"] = topo
 
         else:
-            setup_simple_log()
+            topo = SerialTopology(log_dir=self.config["directories"]["logs"])
 
         source = self.SourceDataset(**self.source_kwargs)
         target = self.TargetDataset(source=source, **self.target_kwargs)
