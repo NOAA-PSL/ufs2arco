@@ -1,16 +1,17 @@
 mover:
-  name: mpidatamover
+  name: datamover
+  batch_size: 2
 
 directories:
-  zarr: ./mpi.forecasts.zarr
-  cache: ./mpi.gefs-cache
+  zarr: ./serial.forecasts.zarr
+  cache: ./serial.gefs-cache
   logs: ./logs
 
 source:
   name: aws_gefs_archive
   t0:
     start: 2017-01-01T00
-    end: 2017-01-2T18
+    end: 2017-01-02T18
     freq: 6h
 
   fhr:
@@ -33,11 +34,7 @@ source:
 
   levels:
     - 100
-    - 150
-    - 200
-    - 300
     - 500
-    - 850
     - 1000
 
 target:
