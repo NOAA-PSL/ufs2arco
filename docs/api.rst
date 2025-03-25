@@ -31,6 +31,8 @@ Data Sources
    :toctree: generated/
 
    ufs2arco.sources.Source
+   ufs2arco.sources.AnalysisSource
+   ufs2arco.sources.EnsembleForecastSource
    ufs2arco.sources.AWSGEFSArchive
 
 Data Targets
@@ -40,5 +42,4 @@ Data Targets
    :toctree: generated/
 
    ufs2arco.targets.Target
-   ufs2arco.targets.Forecast
    ufs2arco.targets.Anemoi

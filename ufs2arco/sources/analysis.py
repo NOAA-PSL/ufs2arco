@@ -10,7 +10,10 @@ logger = logging.getLogger("ufs2arco")
 
 class AnalysisSource(Source):
     """
-    Base class for all deterministic analysis or reanalysis-like datasets
+    Base class for all deterministic analysis or reanalysis-like datasets.
+
+    Child classes must map dimension names to:
+        ``("time", "level", "latitude", "longitude")``
     """
 
     sample_dims = ("time",)

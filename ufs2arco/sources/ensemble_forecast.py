@@ -10,7 +10,10 @@ logger = logging.getLogger("ufs2arco")
 
 class EnsembleForecastSource(Source):
     """
-    Base class for all ensemble forecast-like datasets
+    Base class for all ensemble forecast-like datasets.
+
+    Child classes must map dimension names to:
+        ``("time", "member", "level", "latitude", "longitude")``
     """
 
     sample_dims = ("t0", "fhr", "member")

@@ -17,17 +17,17 @@ class Anemoi(Target):
     Store dataset ready for anemoi
 
     Expected output has dimensions
-        ("time", "variable", "ensemble", "cell"")
+        ``("time", "variable", "ensemble", "cell")``
 
-    Use the rename argument to modify any of these (and make sure :attr:`chunks` uses those desired names too),
-    but note this might cause problems with anemoi!
+    Use the rename argument to modify any of these before they get packed in the anemoi dataset.
+    This might be useful if you want to train a model with the same variables, but from different datasets,
+    so they have different names originally.
 
     Assumptions:
-        * t0 from ForecastSource gets renamed to time, and fhr is silently dropped
-        * do_flatten_grid = true
+        * For :class:`EnsembleForecastSource` and :class:`ForecastSource` datasets t0 from ForecastSource gets renamed to time, and fhr is silently dropped
+        * :attr:`do_flatten_grid` = ``True``
         * resolution = None, I have no idea where this gets set in anemoi-datasets
-        * just setting use_level_index = False for now, but use this flag to switch between how vertical level suffixes are labeled
-        * unclear if having cell2d (the multi-index for latitude/longitude) will be a problem, so have an attribute for it
+        * just setting use_level_index = False for now, but eventually it would be nice to use this flag to switch between how vertical level suffixes are labeled
     """
 
     # these should probably be options
