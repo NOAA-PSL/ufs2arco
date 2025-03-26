@@ -70,15 +70,18 @@ def fv_vertical_regrid(
     # do the regridding
     vars3d = [x for x in xds.data_vars if "level" in xds[x].dims and x != weight_var]
     for key in vars3d:
-        with xr.set_options(keep_attrs=True):
-            xds[key] = layer_thickness_inverse * (
-                (
-                    xds[key]*xds[weight_var]
-                ).groupby_bins(
-                    "level",
-                    bins=xds["interface"],
-                ).sum()
-            )
+        attrs = xds[key].attrs.copy()
+        xds[key] = layer_thickness_inverse * (
+            (
+                xds[key]*xds[weight_var]
+            ).groupby_bins(
+                "level",
+                bins=xds["interface"],
+            ).sum()
+        )
+        xds[key].attrs = attrs
+        long_name = attrs.get("long_name", key)
+        xds[key].attrs["long_name"] = f"vertically regridded {long_name}"
 
     # handle the bins and add attrs
     xds["level_bins"] = xds["level_bins"].swap_dims({"level_bins": "level"})
