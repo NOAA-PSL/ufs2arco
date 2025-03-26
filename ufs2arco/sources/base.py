@@ -59,7 +59,7 @@ class Source:
                 raise NotImplementedError(f"{self.name}.__init__: the following variables are not recognized or not implemented: {unrecognized}")
             self.variables = variables
         else:
-            self.variables = self.available_variables
+            self.variables = list(self.available_variables)
 
         # check level selection
         if levels is not None:
@@ -73,7 +73,7 @@ class Source:
             self.levels = levels
 
         else:
-            self.levels = self.available_levels
+            self.levels = list(self.available_levels)
 
         logger.info(str(self))
 
