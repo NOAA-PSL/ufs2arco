@@ -63,6 +63,9 @@ class GCSReplayAtmosphere(AnalysisSource):
         self._xds = self._xds[self.variables]
         self._xds = self._xds.sel(level=self.levels)
 
+        # drop these because cftime gives trouble no matter what
+        self._xds = self._xds.drop_vars(["cftime", "ftime"])
+
     def open_sample_dataset(
         self,
         time: pd.Timestamp,
@@ -74,6 +77,3 @@ class GCSReplayAtmosphere(AnalysisSource):
         selection = list(self.variables) if open_static_vars else list(self.dynamic_vars)
         xds = xds[selection].copy().load()
         return xds
-
-    def add_full_extra_coords(self, xds: xr.Dataset) -> xr.Dataset:
-        return xds.drop_vars(["cftime", "ftime"])
