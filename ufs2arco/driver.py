@@ -13,6 +13,7 @@ import zarr
 from ufs2arco.log import setup_simple_log
 from ufs2arco.mpi import MPITopology, SerialTopology
 from ufs2arco import sources
+from ufs2arco.transforms import Transformer
 from ufs2arco import targets
 from ufs2arco.datamover import DataMover, MPIDataMover
 
@@ -23,7 +24,7 @@ class Driver:
 
     Attributes:
         config (dict): Configuration dictionary loaded from the YAML file.
-        Source, Target
+        Source, Transformer, Target
         Mover (Type[DataMover] | Type[MPIDataMover]): The data mover class (DataMover or MPIDataMover).
 
     Methods:
@@ -62,6 +63,12 @@ class Driver:
             self.SourceDataset = sources.GCSERA5OneDegree
         else:
             raise NotImplementedError(f"Driver.__init__: only 'aws_gefs_archive', 'gcs_era5_1degree' is implemented")
+
+        # create the transformer
+        if "transform" in self.config.keys():
+            self.transformer = Transformer(options=self.config["transform"])
+        else:
+            self.transformer = None
 
         # the target
         name = self.config["target"].get("name", "base")
@@ -164,7 +171,7 @@ class Driver:
 
         source = self.SourceDataset(**self.source_kwargs)
         target = self.TargetDataset(source=source, **self.target_kwargs)
-        mover = self.Mover(source=source, target=target, **mover_kwargs)
+        mover = self.Mover(source=source, target=target, transformer=self.transformer, **mover_kwargs)
 
         # create container, only if mover start is not 0
         if mover_kwargs["start"] == 0:
