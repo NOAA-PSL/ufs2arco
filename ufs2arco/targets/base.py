@@ -15,8 +15,6 @@ class Target:
     This is used in the case that the target data looks "the same" as the input (i.e., the zarr form equivalent).
     """
 
-    sample_dims = tuple()
-    base_dims = tuple()
     always_open_static_vars = False
 
     @property
