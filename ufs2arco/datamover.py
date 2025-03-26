@@ -40,12 +40,14 @@ class DataMover():
         source,
         target,
         batch_size,
+        transformer=None,
         start=0,
         cache_dir=".",
     ):
 
         self.source = source
         self.target = target
+        self.transformer = transformer if transformer is not None else lambda xds: xds
         self.batch_size = batch_size
         self.counter = start
         self.data_counter = start
@@ -112,6 +114,7 @@ class DataMover():
                         cache_dir=cache_dir,
                         **these_dims,
                     )
+                    fds = self.transformer(fds)
                     fds = self.target.apply_transforms_to_sample(fds)
                     dlist.append(fds)
                 xds = xr.merge(dlist)
@@ -169,6 +172,9 @@ class DataMover():
             open_static_vars=True,
             cache_dir=self.get_cache_dir("container"),
         )
+
+        # perform any transformations like regridding
+        xds = self.transformer(xds)
 
         # transform it to target space
         xds = self.target.apply_transforms_to_sample(xds)
@@ -251,6 +257,7 @@ class MPIDataMover(DataMover):
         source,
         target,
         mpi_topo,
+        transformer=None,
         start=0,
         cache_dir=".",
     ):
@@ -264,6 +271,7 @@ class MPIDataMover(DataMover):
             source=source,
             target=target,
             batch_size=batch_size,
+            transformer=transformer,
             start=start,
             cache_dir=cache_dir,
         )
