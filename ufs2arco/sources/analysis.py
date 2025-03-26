@@ -37,6 +37,7 @@ class AnalysisSource(Source):
         time: dict,
         variables: Optional[list | tuple] = None,
         levels: Optional[list | tuple] = None,
+        use_nearest_levels: Optional[bool] = False,
     ) -> None:
         """
         Initialize the Source object.
@@ -45,28 +46,15 @@ class AnalysisSource(Source):
             time (dict): Dictionary with start and end times for the time vector, and e.g. "freq=6h". All options get passed to ``pandas.date_range``.
             variables (list, tuple, optional): variables to grab
             levels (list, tuple, optional): vertical levels to grab
+            use_nearest_levels (bool, optional): if True, all level selection with
+                ``xarray.Dataset.sel(level=levels, method="nearest")``
         """
         self.time = pd.date_range(**time)
         super().__init__(
             variables=variables,
             levels=levels,
+            use_nearest_levels=use_nearest_levels,
         )
-
-
-    def __str__(self) -> str:
-        """
-        Return a string representation of the Source object.
-
-        Returns:
-            str: The string representation of the dataset.
-        """
-        title = f"Source: {self.name}"
-        msg = f"\n{title}\n" + \
-              "".join(["-" for _ in range(len(title))]) + "\n"
-        for key in ["time", "variables", "levels"]:
-            msg += f"{key:<18s}: {getattr(self, key)}\n"
-        return msg
-
 
     def open_sample_dataset(
         self,
