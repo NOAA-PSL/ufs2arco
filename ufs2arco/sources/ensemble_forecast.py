@@ -39,6 +39,7 @@ class EnsembleForecastSource(Source):
         member: dict,
         variables: Optional[list | tuple] = None,
         levels: Optional[list | tuple] = None,
+        use_nearest_levels: Optional[bool] = False,
     ) -> None:
         """
         Initialize the Source object.
@@ -49,6 +50,8 @@ class EnsembleForecastSource(Source):
             member (dict): Dictionary with 'start', 'end', and 'step' ensemble members.
             variables (list, tuple, optional): variables to grab
             levels (list, tuple, optional): vertical levels to grab
+            use_nearest_levels (bool, optional): if True, all level selection with
+                ``xarray.Dataset.sel(level=levels, method="nearest")``
         """
         self.t0 = pd.date_range(**t0)
         self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
@@ -56,6 +59,7 @@ class EnsembleForecastSource(Source):
         super().__init__(
             variables=variables,
             levels=levels,
+            use_nearest_levels=use_nearest_levels,
         )
 
 

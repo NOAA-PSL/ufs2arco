@@ -153,7 +153,7 @@ class AWSGEFSArchive(EnsembleForecastSource):
                 level_selection = [l for l in self.levels if l in xds.level.values]
                 if len(level_selection) == 0:
                     return xr.DataArray(name=varname)
-                xds = xds.sel(level=level_selection)
+                xds = xds.sel(level=level_selection, **self._level_sel_kwargs)
 
             xds = xds.expand_dims(["t0", "lead_time", "member"])
             xds["fhr"] = xr.DataArray(

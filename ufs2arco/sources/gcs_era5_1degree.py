@@ -74,7 +74,7 @@ class GCSERA5OneDegree(AnalysisSource):
 
         # select
         xds = xds[self.variables]
-        xds = xds.sel(level=self.levels)
+        xds = xds.sel(level=self.levels, **self._level_sel_kwargs)
 
         # set
         self._xds = xds

@@ -43,6 +43,7 @@ class GCSReplayAtmosphere(AnalysisSource):
         time: dict,
         variables: Optional[list | tuple] = None,
         levels: Optional[list | tuple] = None,
+        use_nearest_levels: Optional[bool] = False,
     ) -> None:
 
         # open and rename
@@ -57,11 +58,12 @@ class GCSReplayAtmosphere(AnalysisSource):
             time=time,
             variables=variables,
             levels=levels,
+            use_nearest_levels=use_nearest_levels,
         )
 
         # now subsample the dataset
         self._xds = self._xds[self.variables]
-        self._xds = self._xds.sel(level=self.levels)
+        self._xds = self._xds.sel(level=self.levels, **self._level_sel_kwargs)
 
         # drop these because cftime gives trouble no matter what
         self._xds = self._xds.drop_vars(["cftime", "ftime"])
