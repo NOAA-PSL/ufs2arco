@@ -63,15 +63,6 @@ class EnsembleForecastSource(Source):
         )
 
 
-    def __str__(self) -> str:
-        title = f"Source: {self.name}"
-        msg = f"\n{title}\n" + \
-              "".join(["-" for _ in range(len(title))]) + "\n"
-        for key in ["t0", "fhr", "member", "variables", "levels"]:
-            msg += f"{key:<18s}: {getattr(self, key)}\n"
-        return msg
-
-
     def open_sample_dataset(
         self,
         t0: pd.Timestamp,

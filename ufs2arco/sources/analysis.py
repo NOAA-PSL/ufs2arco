@@ -56,22 +56,6 @@ class AnalysisSource(Source):
             use_nearest_levels=use_nearest_levels,
         )
 
-
-    def __str__(self) -> str:
-        """
-        Return a string representation of the Source object.
-
-        Returns:
-            str: The string representation of the dataset.
-        """
-        title = f"Source: {self.name}"
-        msg = f"\n{title}\n" + \
-              "".join(["-" for _ in range(len(title))]) + "\n"
-        for key in ["time", "variables", "levels"]:
-            msg += f"{key:<18s}: {getattr(self, key)}\n"
-        return msg
-
-
     def open_sample_dataset(
         self,
         time: pd.Timestamp,

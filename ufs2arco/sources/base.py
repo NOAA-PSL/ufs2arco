@@ -90,6 +90,15 @@ class Source:
 
         logger.info(str(self))
 
+    def __str__(self) -> str:
+        title = f"Source: {self.name}"
+        msg = f"\n{title}\n" + \
+              "".join(["-" for _ in range(len(title))]) + "\n"
+        attrslist = list(self.sample_dims) + ["variables", "levels", "use_nearest_levels"]
+        for key in attrslist:
+            msg += f"{key:<18s}: {getattr(self, key)}\n"
+        return msg
+
     def add_full_extra_coords(self, xds: xr.Dataset) -> xr.Dataset:
         """
         An optional routine that builds extra coordinates if needed, see example in ensemble_forecast.py.
