@@ -221,11 +221,8 @@ class Anemoi(Target):
         # anemoi needs "dates" to be stored as a specific dtype
         # it turns out that this is hard to do consistently with xarray and zarr
         # especially with this "write container" + "fill incrementally" workflow
-        # so... let's just store "dates" at the very end...
-        #xds = xds.drop_vars("dates")
-        xds["dates"].attrs["use_source_encoding"] = True
-        xds["dates"].encoding["dtype"] = "datetime64[s]"
-        xds["dates"].encoding["units"] = f"hours since {str(self.datetime[0])}"
+        # so... let's just store "dates" during aggregate_stats
+        xds = xds.drop_vars("dates")
         return xds
 
     def _map_levels_to_suffixes(self, xds):
@@ -455,6 +452,20 @@ class Anemoi(Target):
         xds["mean"] = xds["sums"] / xds["count"]
         variance = xds["squares"] / xds["count"] - xds["mean"]**2
         xds["stdev"] = xr.where(variance >= 0, np.sqrt(variance), 0.)
+
+        # ...and now we deal with the dates issue
+        # for some reason, it is a challenge to get the datetime64 dtype to open
+        # consistently between zarr and xarray, and
+        # it is much easier to deal with this all at once here
+        # than in the create_container and incrementally fill workflow.
+        xds["dates"] = xr.DataArray(
+            self.datetime,
+            coords=xds.time.coords,
+        )
+        xds["dates"].encoding = {
+            "dtype": "datetime64[s]",
+            "units": "seconds since 1970-01-01",
+        }
 
         # store it
         xds.to_zarr(self.store_path, mode="a")
