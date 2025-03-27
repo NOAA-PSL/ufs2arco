@@ -421,15 +421,16 @@ class Anemoi(Target):
         xds = xr.open_zarr(self.store_path)
 
         # first load up the arrays
-        for key in [
+        stat_vars = [
             "count_array",
             "has_nans_array",
             "maximum_array",
             "minimum_array",
             "squares_array",
             "sums_array",
-        ]:
-            xds[key] = xds[key].load()
+        ]
+        xds = xds[stat_vars]
+        xds = xds.load()
 
         logger.info(f"{self.name}.aggregate_stats: Loaded temporary stats arrays")
 
