@@ -217,6 +217,15 @@ class Anemoi(Target):
             },
         )
         xds = xds.swap_dims({"dates": "time"})
+
+        # anemoi needs "dates" to be stored as a specific dtype
+        # it turns out that this is hard to do consistently with xarray and zarr
+        # especially with this "write container" + "fill incrementally" workflow
+        # so... let's just store "dates" at the very end...
+        #xds = xds.drop_vars("dates")
+        xds["dates"].attrs["use_source_encoding"] = True
+        xds["dates"].encoding["dtype"] = "datetime64[s]"
+        xds["dates"].encoding["units"] = f"hours since {str(self.datetime[0])}"
         return xds
 
     def _map_levels_to_suffixes(self, xds):
@@ -399,7 +408,7 @@ class Anemoi(Target):
         """
 
         dims = ["latitudes", "longitudes"]
-        xds["count_array"] = (~np.isnan(xds["data"])).sum(dims, skipna=self.allow_nans).astype(np.int64)
+        xds["count_array"] = (~np.isnan(xds["data"])).sum(dims, skipna=self.allow_nans).astype(np.float64)
         xds["has_nans_array"] = np.isnan(xds["data"]).any(dims)
         xds["maximum_array"] = xds["data"].max(dims, skipna=self.allow_nans).astype(np.float64)
         xds["minimum_array"] = xds["data"].min(dims, skipna=self.allow_nans).astype(np.float64)
