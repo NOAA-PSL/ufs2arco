@@ -222,10 +222,12 @@ class DataMover():
             # allow these encoding keys to pass to the container creation
             # this basically allows us to control datetime objects, which
             # really is only necessary for anemoi
-            for key in ["dtype", "units"]:
-                if key in xds[varname].encoding and xds[varname].attrs.get("use_source_encoding", False):
-                    nds[varname].encoding[key] = xds[varname].encoding[key]
-                    logger.info(f"{self.name}.create_container: passing '{varname}' encoding['{key}'] to container")
+            if xds[varname].attrs.get("use_source_encoding", False):
+                for key in ["dtype", "units"]:
+                    if key in xds[varname].encoding:
+                        nds[varname].encoding[key] = xds[varname].encoding[key]
+                        logger.info(f"{self.name}.create_container: passing '{varname}' encoding['{key}'] to container")
+                nds[varname].attrs.pop("use_source_encoding")
 
         nds.to_zarr(self.target.store_path, compute=False, **kwargs)
         logger.info(f"{self.name}.create_container: stored container at {self.target.store_path}\n{nds}\n")
