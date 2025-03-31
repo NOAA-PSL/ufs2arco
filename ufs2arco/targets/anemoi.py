@@ -35,6 +35,7 @@ class Anemoi(Target):
     resolution = None
     use_level_index = False
     allow_nans = True
+    data_dtype = np.float32
 
     # these are basically properties
     base_dims = ("variable", "cell")
@@ -217,6 +218,12 @@ class Anemoi(Target):
             },
         )
         xds = xds.swap_dims({"dates": "time"})
+
+        # anemoi needs "dates" to be stored as a specific dtype
+        # it turns out that this is hard to do consistently with xarray and zarr
+        # especially with this "write container" + "fill incrementally" workflow
+        # so... let's just store "dates" during aggregate_stats
+        xds = xds.drop_vars("dates")
         return xds
 
     def _map_levels_to_suffixes(self, xds):
@@ -344,7 +351,11 @@ class Anemoi(Target):
 
         data_vars = xr.concat(
             [
-                xds[name].expand_dims({"variable": [this_channel]})
+                xds[name].expand_dims(
+                    {"variable": [this_channel]},
+                ).astype(
+                    self.data_dtype,
+                )
                 for this_channel, name in zip(channel, varlist)
             ],
             dim="variable",
@@ -399,7 +410,7 @@ class Anemoi(Target):
         """
 
         dims = ["latitudes", "longitudes"]
-        xds["count_array"] = (~np.isnan(xds["data"])).sum(dims, skipna=self.allow_nans).astype(np.int64)
+        xds["count_array"] = (~np.isnan(xds["data"])).sum(dims, skipna=self.allow_nans).astype(np.float64)
         xds["has_nans_array"] = np.isnan(xds["data"]).any(dims)
         xds["maximum_array"] = xds["data"].max(dims, skipna=self.allow_nans).astype(np.float64)
         xds["minimum_array"] = xds["data"].min(dims, skipna=self.allow_nans).astype(np.float64)
@@ -420,6 +431,20 @@ class Anemoi(Target):
 
         xds = xr.open_zarr(self.store_path)
 
+        # first load up the arrays
+        stat_vars = [
+            "count_array",
+            "has_nans_array",
+            "maximum_array",
+            "minimum_array",
+            "squares_array",
+            "sums_array",
+        ]
+        xds = xds[stat_vars]
+        xds = xds.load()
+
+        logger.info(f"{self.name}.aggregate_stats: Loaded temporary stats arrays")
+
         # the easy ones
         xds["count"] = xds["count_array"].sum(["time", "ensemble"])
         xds["has_nans"] = xds["has_nans_array"].any(["time", "ensemble"])
@@ -433,8 +458,23 @@ class Anemoi(Target):
         variance = xds["squares"] / xds["count"] - xds["mean"]**2
         xds["stdev"] = xr.where(variance >= 0, np.sqrt(variance), 0.)
 
+        # ...and now we deal with the dates issue
+        # for some reason, it is a challenge to get the datetime64 dtype to open
+        # consistently between zarr and xarray, and
+        # it is much easier to deal with this all at once here
+        # than in the create_container and incrementally fill workflow.
+        xds["dates"] = xr.DataArray(
+            self.datetime,
+            coords=xds.time.coords,
+        )
+        xds["dates"].encoding = {
+            "dtype": "datetime64[s]",
+            "units": "seconds since 1970-01-01",
+        }
+
         # store it
         xds.to_zarr(self.store_path, mode="a")
+        logger.info(f"{self.name}.aggregate_stats: Stored aggregated stats")
 
         # now remove the temp versions
         zds = zarr.open(self.store_path, mode="a")
@@ -446,6 +486,6 @@ class Anemoi(Target):
             "squares_array",
             "sums_array",
         ]:
-            logger.info(f"{self.name}.aggregate_statistics: Removing temporary version {key}")
+            logger.info(f"{self.name}.aggregate_stats: Removing temporary version {key}")
             del zds[key]
         zarr.consolidate_metadata(self.store_path)
