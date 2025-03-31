@@ -35,6 +35,7 @@ class Anemoi(Target):
     resolution = None
     use_level_index = False
     allow_nans = True
+    data_dtype = np.float32
 
     # these are basically properties
     base_dims = ("variable", "cell")
@@ -350,7 +351,11 @@ class Anemoi(Target):
 
         data_vars = xr.concat(
             [
-                xds[name].expand_dims({"variable": [this_channel]})
+                xds[name].expand_dims(
+                    {"variable": [this_channel]},
+                ).astype(
+                    self.data_dtype,
+                )
                 for this_channel, name in zip(channel, varlist)
             ],
             dim="variable",
