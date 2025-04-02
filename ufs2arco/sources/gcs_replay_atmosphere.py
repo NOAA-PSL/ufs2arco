@@ -80,6 +80,7 @@ class GCSReplayAtmosphere(AnalysisSource):
     ) -> xr.Dataset:
 
         xds = self._xds.sel(time=[time])
-        selection = list(self.variables) if open_static_vars else list(self.dynamic_vars)
+        osv = open_static_vars or self._open_static_vars(time)
+        selection = list(self.variables) if osv else list(self.dynamic_vars)
         xds = xds[selection].copy().load()
         return xds

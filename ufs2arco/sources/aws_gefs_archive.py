@@ -80,9 +80,10 @@ class AWSGEFSArchive(EnsembleForecastSource):
 
         # 2. read data arrays from those files
         dsdict = {}
+        osv = open_static_vars or self._open_static_vars(t0, fhr, member)
+        read_dict = self._ic_variables if osv else self._fc_variables
+        read_dict = {k: v for k,v in read_dict.items() if k in self.variables}
         if cached_files["a"] is not None and cached_files["b"] is not None:
-            read_dict = self._ic_variables if open_static_vars else self._fc_variables
-            read_dict = {k: v for k,v in read_dict.items() if k in self.variables}
             for varname, open_kwargs in read_dict.items():
                 dslist = []
                 for a_or_b in open_kwargs["param_list"]:

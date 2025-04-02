@@ -59,6 +59,12 @@ class AnalysisSource(Source):
             slices=slices,
         )
 
+
+    def _open_static_vars(self, time) -> bool:
+        """Just do this once"""
+        return time == self.time[0]
+
+
     def open_sample_dataset(
         self,
         time: pd.Timestamp,
