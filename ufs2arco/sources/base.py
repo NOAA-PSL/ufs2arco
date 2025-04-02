@@ -47,6 +47,7 @@ class Source:
         variables: Optional[list | tuple] = None,
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
+        slices: Optional[dict] = None,
     ) -> None:
         """
         Initialize the Source object.
@@ -56,6 +57,7 @@ class Source:
             levels (list, tuple, optional): vertical levels to grab
             use_nearest_levels (bool, optional): if True, all level selection with
                 ``xarray.Dataset.sel(level=levels, method="nearest")``
+            slices (dict, optional): either "sel" or "isel", with slice, passed to xarray
         """
 
         # check variable selection
@@ -83,10 +85,20 @@ class Source:
                 msg = f"{self.name}.__init__: the following levels are not recognized or not implemented:\n{unrecognized}"
                 msg += "\nSet option 'use_nearest_levels=True' if you want to use xarray.Dataset.sel(level=levels, method='nearest')"
                 raise ValueError(msg)
-            self.levels = levels
+        self.levels = levels
 
+        # check slicing
+        recognized = ("sel", "isel")
+        if slices is not None:
+            for key in slices.keys():
+                if key not in recognized:
+                    raise NotImplementedError(f"{self.name}.__init__: can't use {key} slice, only {recognized} are recognized so far...")
+            for key, val in slices.items():
+                if "level" in val and levels is not None:
+                    logging.warning(f"{self.name}.__init__: you are using both the discrete 'levels' selection and specifying the slice-based selection xarray.Dataset.{key}({val}). Proceed at your own risk.")
+            self.slices = slices
         else:
-            self.levels = list(self.available_levels)
+            self.slices = dict()
 
         logger.info(str(self))
 
@@ -94,7 +106,7 @@ class Source:
         title = f"Source: {self.name}"
         msg = f"\n{title}\n" + \
               "".join(["-" for _ in range(len(title))]) + "\n"
-        attrslist = list(self.sample_dims) + ["variables", "levels", "use_nearest_levels"]
+        attrslist = list(self.sample_dims) + ["variables", "levels", "use_nearest_levels", "slices"]
         for key in attrslist:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         return msg
@@ -104,4 +116,28 @@ class Source:
         An optional routine that builds extra coordinates if needed, see example in ensemble_forecast.py.
         This gets used for passive targets
         """
+        return xds
+
+
+    def apply_slices(self, xds: xr.Dataset) -> xr.Dataset:
+        """Apply any slices, for now just data selection via "sel" or "isel"
+        Note that this is the first transformation, so slicing options relate to
+        the standard dimensions:
+
+            (t0, fhr, member, level, latitude, longitude)
+
+        Args:
+            xds (xr.Dataset): The sample dataset
+
+        Returns:
+            xr.Dataset: The dataset after slices applied
+        """
+
+        if "sel" in self.slices.keys():
+            for key, val in self.slices["sel"].items():
+                xds = xds.sel({key: slice(*val)})
+
+        if "isel" in self.slices.keys():
+            for key, val in self.slices["isel"].items():
+                xds = xds.isel({key: slice(*val)})
         return xds

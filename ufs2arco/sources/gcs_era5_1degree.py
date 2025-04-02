@@ -74,7 +74,9 @@ class GCSERA5OneDegree(AnalysisSource):
 
         # select
         xds = xds[self.variables]
-        xds = xds.sel(level=self.levels, **self._level_sel_kwargs)
+        if self.levels is not None:
+            xds = xds.sel(level=self.levels, **self._level_sel_kwargs)
+        xds = self.apply_slices(xds)
 
         # set
         self._xds = xds

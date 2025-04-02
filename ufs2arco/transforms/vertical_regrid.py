@@ -83,6 +83,25 @@ def fv_vertical_regrid(
         long_name = attrs.get("long_name", key)
         xds[key].attrs["long_name"] = f"vertically regridded {long_name}"
 
+    # make new coordinates for approximate new level
+    new_level = (xds["interface"].values[:-1] + xds["interface"].values[1:])/2
+    if np.all(new_level == new_level.astype(int)):
+        new_level = new_level.astype(int)
+    xds["new_level"] = xr.DataArray(
+        new_level,
+        coords={"new_level": new_level},
+        dims=("new_level",),
+        attrs={
+            "description": f"approximated vertical grid cell center after regridding",
+            "details": "computed as (interface[:-1] + interface[1:])/2",
+        },
+    )
+    # we need to drop the original weight_var (e.g. delz) b/c it has the OG levels on it
+    # we'll add the regridded version later if desired
+    xds = xds.drop_vars(weight_var)
+    xds = xds.drop_vars("level")
+    xds = xds.rename({"new_level": "level"})
+
     # handle the bins and add attrs
     xds["level_bins"] = xds["level_bins"].swap_dims({"level_bins": "level"})
     for key in vars3d:
@@ -93,24 +112,6 @@ def fv_vertical_regrid(
     if keep_weight_var:
         xds[weight_var] = layer_thickness.swap_dims({"level_bins": "level"})
         xds[weight_var].attrs["vertical_coordinate"] = f"vertically averaged, new coordinate bounds represented by 'interface'"
-    else:
-        xds = xds.drop_vars(weight_var)
-
-    # make new coordinates for approximate new level
-    new_level = (xds["interface"].values[:-1] + xds["interface"].values[1:])/2
-    if np.all(new_level == new_level.astype(int)):
-        new_level = new_level.astype(int)
-    xds["new_level"] = xr.DataArray(
-        new_level,
-        coords=xds["level"].coords,
-        attrs={
-            "description": f"approximated vertical grid cell center after regridding",
-            "details": "computed as (interface[:-1] + interface[1:])/2",
-        },
-    )
-    xds = xds.swap_dims({"level": "new_level"})
-    xds = xds.drop_vars("level")
-    xds = xds.rename({"new_level": "level"})
 
     # unfortunately, cannot store the level_bins due to this issue: https://github.com/pydata/xarray/issues/2847
     xds = xds.drop_vars("level_bins")

@@ -38,6 +38,7 @@ class AnalysisSource(Source):
         variables: Optional[list | tuple] = None,
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
+        slices: Optional[dict] = None,
     ) -> None:
         """
         Initialize the Source object.
@@ -48,12 +49,14 @@ class AnalysisSource(Source):
             levels (list, tuple, optional): vertical levels to grab
             use_nearest_levels (bool, optional): if True, all level selection with
                 ``xarray.Dataset.sel(level=levels, method="nearest")``
+            slices (dict, optional): either "sel" or "isel", with slice, passed to xarray
         """
         self.time = pd.date_range(**time)
         super().__init__(
             variables=variables,
             levels=levels,
             use_nearest_levels=use_nearest_levels,
+            slices=slices,
         )
 
     def open_sample_dataset(
