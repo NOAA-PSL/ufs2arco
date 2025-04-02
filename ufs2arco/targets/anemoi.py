@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 from copy import deepcopy
+import re
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ class Anemoi(Target):
         * :attr:`do_flatten_grid` = ``True``
         * resolution = None, I have no idea where this gets set in anemoi-datasets
         * just setting use_level_index = False for now, but eventually it would be nice to use this flag to switch between how vertical level suffixes are labeled
+        * if :attr:`sort_channels_by_level` is ``True``, then we'll make sure that channels go like variable_<level 0> -> variable_<largest level value>
     """
 
     # these should probably be options
@@ -102,6 +104,7 @@ class Anemoi(Target):
         store_path: str,
         rename: Optional[dict] = None,
         forcings: Optional[tuple | list] = None,
+        sort_channels_by_levels: Optional[bool] = False,
     ) -> None:
 
         super().__init__(
@@ -112,7 +115,7 @@ class Anemoi(Target):
             forcings=forcings,
         )
 
-
+        self.sort_channels_by_levels = sort_channels_by_levels
         # additional checks
         if self._has_fhr:
             assert len(self.source.fhr) == 1 and self.source.fhr[0] == 0, \
@@ -145,6 +148,8 @@ class Anemoi(Target):
         xds = self._map_datetime_to_index(xds)
         xds = self._map_levels_to_suffixes(xds)
         xds = self._map_static_to_expanded(xds)
+        if self.sort_channels_by_levels:
+            xds = self._sort_channels_by_levels(xds)
         xds = xds.transpose(*self.get_expanded_dim_order(xds))
         xds = self._stackit(xds)
         xds = self._calc_sample_stats(xds)
@@ -295,9 +300,42 @@ class Anemoi(Target):
 
         return nds
 
+
     @staticmethod
     def _get_level_index(xds: xr.Dataset, value: int | float) -> int | float:
         return xds["level"].values.tolist().index(value)
+
+
+    def _sort_channels_by_levels(self, xds: xr.Dataset) -> xr.Dataset:
+        """
+        If we have a dataset with e.g. geopotential (gh) at 100, 150, 200, ... 1000 hPa
+        then the :meth:`_map_levels_to_suffixes` method returns them like this:
+
+            ["gh_100", "gh_1000", "gh_150", ...]
+
+        this method will sort them so they are like this:
+
+            ["gh_100", "gh_150", ... "gh_1000"]
+
+        Args:
+            xds (xr.Dataset): with all variables, 3D variables as multiple 2D variables with suffixes
+
+        Returns:
+            xds (xr.Dataset): with "data" DataArray, which has all variables/levels stacked together
+        """
+        def sort_key(item):
+            # Match variable names with an underscore followed by a number
+            match = re.match(r"(.+)_(\d+)$", item)
+            if match:
+                var_name, num = match.groups()
+                return (var_name, int(num))  # Sort by name, then numeric value
+
+            # Ensure variables like 't2m' are grouped correctly
+            return (item, -1)  # Non-numeric suffix variables come before numbered ones
+
+        data_vars = sorted(list(xds.data_vars), key=sort_key)
+        return xds[data_vars]
+
 
     def _map_static_to_expanded(self, xds: xr.Dataset) -> xr.Dataset:
         """
