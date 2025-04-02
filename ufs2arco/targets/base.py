@@ -59,7 +59,6 @@ class Target:
         chunks: dict,
         store_path: str,
         rename: Optional[dict] = None,
-        slices: Optional[dict] = None,
         forcings: Optional[list | tuple] = None,
     ) -> None:
         """
@@ -70,7 +69,6 @@ class Target:
             chunks (dict): Dictionary with chunk sizes for Dask arrays.
             store_path (str): Path to store the output data.
             rename (dict, optional): rename variables
-            slices (dict, optional): either "sel" or "isel", with slice, passed to xarray
         """
         self.source = source
         self.store_path = store_path
@@ -87,16 +85,6 @@ class Target:
             assert chunksize == 1, \
                 f"{self.name}.__init__: chunks['{dim}'] = {chunksize}, but should be 1"
 
-        # check for slicing
-        recognized = ("sel", "isel")
-        if slices is not None:
-            for key in slices.keys():
-                if key not in recognized:
-                    raise NotImplementedError(f"{self.name}.__init__: can't use {key} slice, only {recognized} are recognized so far...")
-            self.slices = slices
-        else:
-            self.slices = dict()
-
         # check for forcings
         recognized = tuple(fmod.get_mappings().keys())
         if forcings is not None:
@@ -112,6 +100,7 @@ class Target:
 
         logger.info(str(self))
 
+
     def __str__(self) -> str:
         """
         Return a string representation of the GEFSDataset object.
@@ -122,7 +111,7 @@ class Target:
         title = f"Target: {self.name}"
         msg = f"\n{title}\n" + \
               "".join(["-" for _ in range(len(title))]) + "\n"
-        for key in ["store_path", "slices", "forcings"]:
+        for key in ["store_path", "forcings"]:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         chunkstr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.chunks.items()])
         msg += f"chunks\n    {chunkstr}\n"
@@ -133,6 +122,7 @@ class Target:
     @property
     def name(self) -> str:
         return self.__class__.__name__
+
 
     @property
     def renamed_sample_dims(self) -> tuple:
@@ -153,7 +143,6 @@ class Target:
         Returns:
             xr.Dataset: The dataset after any transformations
         """
-        xds = self.apply_slices(xds)
         xds = self.compute_forcings(xds)
         xds = self.rename_dataset(xds)
         return xds
@@ -179,29 +168,6 @@ class Target:
             xds = xds.rename({dummy_name: key})
         return xds
 
-
-    def apply_slices(self, xds: xr.Dataset) -> xr.Dataset:
-        """Apply any slices, for now just data selection via "sel" or "isel"
-        Note that this is the first transformation, so slicing options relate to
-        the standard dimensions:
-
-            (t0, fhr, member, level, latitude, longitude)
-
-        Args:
-            xds (xr.Dataset): The sample dataset
-
-        Returns:
-            xr.Dataset: The dataset after slices applied
-        """
-
-        if "sel" in self.slices.keys():
-            for key, val in self.slices["sel"].items():
-                xds = xds.sel({key: slice(*val)})
-
-        if "isel" in self.slices.keys():
-            for key, val in self.slices["isel"].items():
-                xds = xds.isel({key: slice(*val)})
-        return xds
 
     def compute_forcings(self, xds: xr.Dataset) -> xr.Dataset:
 

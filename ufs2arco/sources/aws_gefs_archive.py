@@ -105,6 +105,7 @@ class AWSGEFSArchive(EnsembleForecastSource):
                 else:
                     dsdict[varname] = xr.DataArray(name=varname)
         xds = xr.Dataset(dsdict)
+        xds = self.apply_slices(xds)
         return xds
 
     def _open_single_variable(
@@ -149,7 +150,7 @@ class AWSGEFSArchive(EnsembleForecastSource):
                     xds = xds.drop_vars(key)
         else:
 
-            if "level" in xds:
+            if "level" in xds and self.levels is not None:
                 level_selection = [l for l in self.levels if l in xds.level.values]
                 if len(level_selection) == 0:
                     return xr.DataArray(name=varname)

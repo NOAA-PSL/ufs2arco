@@ -37,14 +37,14 @@ source:
     - 500
     - 1000
 
+  slices:
+    sel:
+      latitude: [89.5, -89.5]
+
 target:
   name: forecast
   rename:
     level: pressure
-
-  slices:
-    sel:
-      latitude: [89.5, -89.5]
 
   chunks:
     t0: 1

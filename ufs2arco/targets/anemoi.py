@@ -101,7 +101,6 @@ class Anemoi(Target):
         chunks: dict,
         store_path: str,
         rename: Optional[dict] = None,
-        slices: Optional[dict] = None,
         forcings: Optional[tuple | list] = None,
     ) -> None:
 
@@ -110,7 +109,6 @@ class Anemoi(Target):
             chunks=chunks,
             store_path=store_path,
             rename=rename,
-            slices=slices,
             forcings=forcings,
         )
 

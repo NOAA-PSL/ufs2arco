@@ -36,12 +36,13 @@ source:
     - 500
     - 1000
 
-target:
-  name: anemoi
-
   slices:
     sel:
       latitude: [89.5, -89.5]
+
+
+target:
+  name: anemoi
 
   forcings:
     - cos_latitude
