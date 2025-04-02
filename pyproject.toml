@@ -30,7 +30,7 @@ dependencies = [
 
 [project.optional-dependencies]
 documentation = [
-    "jupyter", "nbsphinx", "sphinx-book-theme", "matplotlib", "cartopy",
+    "jupyter", "nbsphinx", "sphinx-book-theme", "matplotlib",
 ]
 regrid = [
     "xesmf",
