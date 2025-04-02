@@ -1,4 +1,8 @@
-__version__ = "0.4.3"
+from importlib.metadata import version, PackageNotFoundError
+try:
+    __version__ = version("ufs2arco")
+except PackageNotFoundError:
+    pass
 
 from .cice6dataset import CICE6Dataset
 from .fv3dataset import FV3Dataset
