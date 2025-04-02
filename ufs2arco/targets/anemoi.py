@@ -148,8 +148,6 @@ class Anemoi(Target):
         xds = self._map_datetime_to_index(xds)
         xds = self._map_levels_to_suffixes(xds)
         xds = self._map_static_to_expanded(xds)
-        if self.sort_channels_by_levels:
-            xds = self._sort_channels_by_levels(xds)
         xds = xds.transpose(*self.get_expanded_dim_order(xds))
         xds = self._stackit(xds)
         xds = self._calc_sample_stats(xds)
@@ -306,35 +304,27 @@ class Anemoi(Target):
         return xds["level"].values.tolist().index(value)
 
 
-    def _sort_channels_by_levels(self, xds: xr.Dataset) -> xr.Dataset:
+    def _sort_channels_by_levels(self, item: tuple) -> tuple:
         """
         If we have a dataset with e.g. geopotential (gh) at 100, 150, 200, ... 1000 hPa
         then the :meth:`_map_levels_to_suffixes` method returns them like this:
 
             ["gh_100", "gh_1000", "gh_150", ...]
 
-        this method will sort them so they are like this:
+        this method will sort the list of data_vars so they are like this:
 
             ["gh_100", "gh_150", ... "gh_1000"]
 
-        Args:
-            xds (xr.Dataset): with all variables, 3D variables as multiple 2D variables with suffixes
-
-        Returns:
-            xds (xr.Dataset): with "data" DataArray, which has all variables/levels stacked together
+        This is used internally as a key for the sorted function in :meth:`stackit`
         """
-        def sort_key(item):
-            # Match variable names with an underscore followed by a number
-            match = re.match(r"(.+)_(\d+)$", item)
-            if match:
-                var_name, num = match.groups()
-                return (var_name, int(num))  # Sort by name, then numeric value
+        # Match variable names with an underscore followed by a number
+        match = re.match(r"(.+)_(\d+)$", item)
+        if match:
+            var_name, num = match.groups()
+            return (var_name, int(num))  # Sort by name, then numeric value
 
-            # Ensure variables like 't2m' are grouped correctly
-            return (item, -1)  # Non-numeric suffix variables come before numbered ones
-
-        data_vars = sorted(list(xds.data_vars), key=sort_key)
-        return xds[data_vars]
+        # Ensure variables like 't2m' are grouped correctly
+        return (item, -1)  # Non-numeric suffix variables come before numbered ones
 
 
     def _map_static_to_expanded(self, xds: xr.Dataset) -> xr.Dataset:
@@ -356,6 +346,7 @@ class Anemoi(Target):
 
         return xds
 
+
     def _stackit(self, xds: xr.Dataset) -> xr.Dataset:
         """
         Stack the multivariate dataset to a single data array with all variables (and vertical levels) stacked together
@@ -368,7 +359,10 @@ class Anemoi(Target):
         Returns:
             xds (xr.Dataset): with "data" DataArray, which has all variables/levels stacked together
         """
-        varlist = sorted(list(xds.data_vars))
+        varlist = sorted(
+            list(xds.data_vars),
+            key=self._sort_channels_by_levels if self.sort_channels_by_levels else None,
+        )
         channel = [i for i, _ in enumerate(varlist)]
         channel = xr.DataArray(
             channel,
