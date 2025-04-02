@@ -3,36 +3,33 @@ channels:
     - conda-forge
 dependencies:
     - python=3.11
-# Basics
-    - scipy
+# Base dependencies
     - numpy
-    - matplotlib
-# xarray et al
     - xarray
     - cf_xarray
+    - cftime
     - netCDF4
     - h5netcdf
+    - zarr<3
+    - cfgrib
     - bottleneck
     - dask[complete]
-    - zarr<3
-    - cftime
-    - cfgrib
-# jupyter etc
-    - jupyter
-    - ipython
-    - ipykernel
-# plotting
-    - cartopy
-    - shapely
-# regrid
-    - xesmf
-# Testing
-    - pytest
-    - coverage
-# filesystem
     - fsspec
     - s3fs
     - gcsfs
-# docs
+# jupyter & documentation stuff
+    - jupyter
+    - matplotlib
+    - cartopy
+    - ipython
+    - ipykernel
     - nbsphinx
     - sphinx-book-theme
+# regrid
+    - xesmf
+# developer
+    - setuptools_scm>=8
+    - pytest
+    - coverage
+# mpi, commented out b/c it really depends on the system
+#    - mpi4py

@@ -1,6 +1,6 @@
 [project]
 name = "ufs2arco"
-version = "0.4.2"
+dynamic = ["version"]
 description = "Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Cloud Optimized (ARCO) format"
 authors = [
     {name="Timothy Smith", email="tim.smith@noaa.gov"},
@@ -14,28 +14,32 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "numpy",
-    "matplotlib",
     "xarray",
+    "cf_xarray",
+    "cftime",
     "netCDF4",
     "h5netcdf",
+    "zarr<3",
+    "cfgrib",
     "bottleneck",
     "dask[complete]",
-    "zarr<3",
-    "cftime",
     "fsspec",
     "s3fs",
     "gcsfs",
-    "pytest",
-    "coverage",
-    "cfgrib",
 ]
 
 [project.optional-dependencies]
 documentation = [
-    "jupyter", "nbsphinx", "sphinx-book-theme",
+    "jupyter", "nbsphinx", "sphinx-book-theme", "matplotlib",
+]
+regrid = [
+    "xesmf",
 ]
 mpi = [
     "mpi4py",
+]
+dev = [
+    "setuptools_scm>=8", "pytest", "coverage",
 ]
 
 [project.urls]
@@ -43,8 +47,10 @@ source="https://github.com/NOAA-PSL/ufs2arco"
 documentation="https://ufs2arco.readthedocs.io/en/latest/"
 
 [build-system]
-requires = ["setuptools>=64.0.0", "setuptools-scm"]
+requires = ["setuptools>=64.0.0", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["ufs2arco"]
+
+[tool.setuptools_scm]
