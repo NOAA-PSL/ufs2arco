@@ -2,11 +2,6 @@ name: Manual Integration Tests
 
 on:
   workflow_dispatch:
-    logLevel:
-      options:
-        - info
-        - warning
-        - debug
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
