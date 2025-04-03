@@ -11,6 +11,7 @@ from ufs2arco.driver import Driver
 from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
+_local_path = os.path.dirname(__file__)
 
 def setup_test_log():
     logger.setLevel(logging.INFO)
@@ -32,18 +33,26 @@ def setup_test_log():
 def run_test(source, target):
     logger.info(f"Starting Test: {source} {target}")
 
-    with open(f"{source}.{target}.yaml", "r") as f:
+    fname = os.path.join(
+        _local_path,
+        f"{source}.{target}.yaml",
+    )
+    with open(fname, "r") as f:
         config = yaml.safe_load(f)
 
     # setup directory for this test
-    test_dir = f"./{source}/{target}"
+    test_dir = os.path.join(
+        _local_path,
+        source,
+        target,
+    )
     if not os.path.isdir(test_dir):
         os.makedirs(test_dir)
         logger.info(f"Creating {test_dir}")
 
     for key in config["directories"].keys():
         val = config["directories"][key]
-        config["directories"][key] = f"{test_dir}/{val}"
+        config["directories"][key] = os.path.join(test_dir, val)
 
     # write a specific config
     config_filename = os.path.join(test_dir, "config.yaml")
@@ -55,7 +64,10 @@ def run_test(source, target):
     driver.run(overwrite=True)
 
     # read & print last line of log
-    logfile = config["directories"]["logs"] + "/log.serial.out"
+    logfile = os.path.join(
+        config["directories"]["logs"],
+        "log.serial.out",
+    )
     with open(logfile, "rb") as f:
         f.seek(-2, 2)  # Move to the second-to-last byte of the file
         while f.read(1) != b"\n":  # Move backward until finding a newline
