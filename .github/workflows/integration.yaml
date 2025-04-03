@@ -42,7 +42,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python -V
-    			coverage run --rcfile=coverage.toml -m pytest tests/integration --verbose
+          coverage run --rcfile=coverage.toml -m pytest tests/integration --verbose
       - name: Get coverage report
         shell: bash -l {0}
         run: |
