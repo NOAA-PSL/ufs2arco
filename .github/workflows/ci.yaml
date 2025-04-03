@@ -49,9 +49,9 @@ jobs:
           python -V
           python -c "from importlib.metadata import version; print(version('setuptools'))"
           python -m pip install -e . --no-deps
-          python -c "from importlib.metadata import version; print(version('xarray'))"
-          python -c "from importlib.metadata import version; print(version('zarr'))"
-          python -c "from importlib.metadata import version; print(version('ufs2arco'))"
+          python -c "from importlib.metadata import version; print('xarray ', version('xarray'))"
+          python -c "from importlib.metadata import version; print('zarr', version('zarr'))"
+          python -c "from importlib.metadata import version; print('ufs2arco', version('ufs2arco'))"
       - name: Run Unit Tests
         shell: bash -l {0}
         run: |
