@@ -7,7 +7,7 @@ on:
 
 jobs:
   post_comment:
-    if: github.event_name == 'pull_request' #&& github.event.action == 'opened'
+    if: github.event_name == 'pull_request' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
       - name: Post Comment with Manual Trigger Instructions
