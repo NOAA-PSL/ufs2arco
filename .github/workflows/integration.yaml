@@ -2,11 +2,6 @@ name: Manual Integration Tests
 
 on:
   workflow_dispatch:
-    logLevel:
-      options:
-        - info
-        - warning
-        - debug
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -42,7 +37,7 @@ jobs:
         shell: bash -l {0}
         run: |
           python -V
-    			coverage run --rcfile=coverage.toml -m pytest tests/integration --verbose
+          coverage run --rcfile=coverage.toml -m pytest tests/integration --verbose
       - name: Get coverage report
         shell: bash -l {0}
         run: |
