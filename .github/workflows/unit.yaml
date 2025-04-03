@@ -3,7 +3,7 @@
 #  cache: https://github.com/actions/cache
 #  codecov-action: https://github.com/codecov/codecov-action
 
-name: CI
+name: Unit Tests
 on:
   push:
     branches:
