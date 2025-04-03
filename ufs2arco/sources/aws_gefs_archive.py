@@ -18,7 +18,7 @@ class AWSGEFSArchive(EnsembleForecastSource):
 
     @property
     def available_variables(self) -> tuple:
-        return tuple(self._ic_variables.keys())
+        return tuple(self._filter_by_keys.keys())
 
     @property
     def available_levels(self) -> tuple:
@@ -81,18 +81,17 @@ class AWSGEFSArchive(EnsembleForecastSource):
         # 2. read data arrays from those files
         dsdict = {}
         osv = open_static_vars or self._open_static_vars(t0, fhr, member)
-        read_dict = self._ic_variables if osv else self._fc_variables
-        read_dict = {k: v for k,v in read_dict.items() if k in self.variables}
+        variables = self.variables if osv else self.dynamic_vars
         if cached_files["a"] is not None and cached_files["b"] is not None:
-            for varname, open_kwargs in read_dict.items():
+            for varname in variables:
                 dslist = []
-                for a_or_b in open_kwargs["param_list"]:
+                for a_or_b in self._param_list[varname]:
                     try:
                         thisvar = self._open_single_variable(
                             file=cached_files[a_or_b],
                             varname=varname,
                             member=member,
-                            filter_by_keys=open_kwargs["filter_by_keys"],
+                            filter_by_keys=self._filter_by_keys[varname],
                         )
                     except:
                         thisvar = None
@@ -218,119 +217,3 @@ class AWSGEFSArchive(EnsembleForecastSource):
         fullpath = f"filecache::{bucket}/{outer}/{middle}{fname}"
         logger.debug(f"{self.name}._build_path: reading {fullpath}")
         return fullpath
-
-    @property
-    def _ic_variables(self) -> dict:
-        """
-        Get the dictionary of initial condition variables.
-
-        Returns:
-            dict: The dictionary of variables for initial conditions.
-        """
-        return {
-            "lsm": {
-                "param_list": ["b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "surface",
-                    "paramId": [172],
-                },
-            },
-            "orog": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "surface",
-                    "paramId": [228002],
-                },
-            },
-            "sp": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "surface",
-                    "paramId": [134],
-                },
-            },
-            "u10": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "heightAboveGround",
-                    "paramId": [165],
-                },
-            },
-            "v10": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "heightAboveGround",
-                    "paramId": [166],
-                },
-            },
-            "t2m": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "heightAboveGround",
-                    "paramId": [167],
-                },
-            },
-            "sh2": {
-                "param_list": ["b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "heightAboveGround",
-                    "paramId": [174096],
-                },
-            },
-            "gh": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [156],
-                },
-            },
-            "u": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [131],
-                },
-            },
-            "v": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [132],
-                },
-            },
-            "w": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [135],
-                },
-            },
-            "t": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [130],
-                },
-            },
-            "q": {
-                "param_list": ["b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [133],
-                },
-            },
-        }
-
-    @property
-    def _fc_variables(self):
-        """
-        Get the dictionary of forecast variables, which is notably different from
-        the initial condition files.
-
-        Returns:
-            dict: The dictionary of variables for forecast files/variables
-        """
-        fckw = self._ic_variables.copy()
-        for key in self.static_vars:
-            fckw.pop(key)
-        return fckw
