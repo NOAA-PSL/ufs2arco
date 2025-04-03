@@ -1,18 +1,31 @@
+# Features tested
+# Datamover:
+# - serial
+# Source:
+# - ensemble forecast template
+# - level selection
+# - latitude .sel slicing
+# - static variables
+# Target:
+# - base workflow for ensemble forecast
+# - rename
+# Driver:
+# - pass attrs at end like description
 mover:
   name: datamover
   batch_size: 2
 
 directories:
-  zarr: ./serial.forecasts.zarr
-  cache: ./serial.gefs-cache
-  logs: ./logs
+  zarr: dataset.zarr
+  cache: cache
+  logs: logs
 
 source:
   name: aws_gefs_archive
   t0:
     start: 2017-01-01T00
     end: 2017-01-02T18
-    freq: 6h
+    freq: 12h
 
   fhr:
     start: 0
@@ -53,3 +66,6 @@ target:
     pressure: -1
     latitude: -1
     longitude: -1
+
+attrs:
+  description: "This is a test dataset"

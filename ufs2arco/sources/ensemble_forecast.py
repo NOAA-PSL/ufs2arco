@@ -66,6 +66,11 @@ class EnsembleForecastSource(Source):
         )
 
 
+    def _open_static_vars(self, t0, fhr, member) -> bool:
+        """Just do this once"""
+        return t0 == self.t0[0] and fhr == self.fhr[0] and member == self.member[0]
+
+
     def open_sample_dataset(
         self,
         t0: pd.Timestamp,
