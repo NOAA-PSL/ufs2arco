@@ -3,7 +3,7 @@
 #  cache: https://github.com/actions/cache
 #  codecov-action: https://github.com/codecov/codecov-action
 
-name: CI
+name: Unit Tests
 on:
   push:
     branches:
@@ -33,7 +33,7 @@ jobs:
         os: ["ubuntu-latest", "macos-latest"]
         python-version: ["3.11"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create conda environment
         uses: mamba-org/setup-micromamba@v1
         with:
@@ -43,12 +43,15 @@ jobs:
           environment-file: environment.yaml
           create-args: python=${{ matrix.python-version }}
           init-shell: bash
-      - name: Install ufs2arco
+      - name: Install ufs2arco & Check Versions
         shell: bash -l {0}
         run: |
           python -V
-          python -c "import setuptools; print(setuptools.__version__)"
-          python -m pip install -e . --no-deps
+          python -c "from importlib.metadata import version; print(version('setuptools'))"
+          python -m pip install -e . --no-deps --force-reinstall
+          python -c "from importlib.metadata import version; print('xarray ', version('xarray'))"
+          python -c "from importlib.metadata import version; print('zarr', version('zarr'))"
+          python -c "from importlib.metadata import version; print('ufs2arco', version('ufs2arco'))"
       - name: Run Unit Tests
         shell: bash -l {0}
         run: |
@@ -69,7 +72,7 @@ jobs:
         os: ["windows-latest"]
         python-version: ["3.11"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create conda environment
         uses: mamba-org/setup-micromamba@v1
         with:
