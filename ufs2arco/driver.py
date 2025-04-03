@@ -36,6 +36,22 @@ class Driver:
         run(overwrite: bool = False): Runs the data movement process, managing the source, target transformations, and mover.
     """
 
+    required_sections = (
+        "mover",
+        "directories",
+        "source",
+        "target",
+    )
+
+    recognized_sections = (
+        "mover",
+        "directories",
+        "source",
+        "transforms",
+        "target",
+        "attrs",
+    )
+
     def __init__(self, config_filename: str):
         """Initializes the Driver object with configuration from the specified YAML file.
 
@@ -49,9 +65,17 @@ class Driver:
         with open(config_filename, "r") as f:
             self.config = yaml.safe_load(f)
 
-        for key in ["mover", "directories", "source", "target"]:
+        for key in self.required_sections:
             assert key in self.config, \
                 f"Driver.__init__: could not find '{key}' section in yaml"
+
+        unrecognized = []
+        for key in self.config.keys():
+            if key not in self.recognized_sections:
+                unrecognized.append(key)
+        if len(unrecognized) > 0:
+            raise KeyError(
+                f"Driver.__init__: Unrecognized config sections: {unrecognized}. The following are recognized: {self.recognized_sections}")
 
         # the source dataset
         name = self.config["source"]["name"].lower()
@@ -63,12 +87,6 @@ class Driver:
             self.SourceDataset = sources.GCSERA5OneDegree
         else:
             raise NotImplementedError(f"Driver.__init__: only 'aws_gefs_archive', 'gcs_era5_1degree' is implemented")
-
-        # create the transformer
-        if "transform" in self.config.keys():
-            self.transformer = Transformer(options=self.config["transform"])
-        else:
-            self.transformer = None
 
         # the target
         name = self.config["target"].get("name", "base")
@@ -170,6 +188,11 @@ class Driver:
             topo = SerialTopology(log_dir=self.config["directories"]["logs"])
 
         source = self.SourceDataset(**self.source_kwargs)
+        # create the transformer
+        if "transforms" in self.config.keys():
+            self.transformer = Transformer(options=self.config["transforms"])
+        else:
+            self.transformer = None
         target = self.TargetDataset(source=source, **self.target_kwargs)
         mover = self.Mover(source=source, target=target, transformer=self.transformer, **mover_kwargs)
 

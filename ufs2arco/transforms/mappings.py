@@ -8,6 +8,7 @@ logger = logging.getLogger("ufs2arco")
 def get_available_mappings() -> dict:
     return {
         "log": _log,
+        "round": _round,
     }
 
 def apply_mappings(
@@ -29,13 +30,15 @@ def apply_mappings(
     function_mappings = get_available_mappings()
 
     for mapname, varlist in mappings.items():
+        varlist = [varlist] if isinstance(varlist, str) else varlist
         func = function_mappings[mapname]
         for varname in varlist:
-            new_name = f"{mapname}_{varname}"
-            xds[new_name] = func(xds[varname])
-            long_name = xds[varname].attrs.get("long_name", varname)
-            xds[new_name].attrs["long_name"] = f"{mapname} of {long_name}"
-            xds = xds.drop_vars(varname)
+            if varname in xds:
+                new_name = f"{mapname}_{varname}"
+                xds[new_name] = func(xds[varname])
+                long_name = xds[varname].attrs.get("long_name", varname)
+                xds[new_name].attrs["long_name"] = f"{mapname} of {long_name}"
+                xds = xds.drop_vars(varname)
     return xds
 
 def _log(xda):
@@ -51,4 +54,9 @@ def _log(xda):
     lda.attrs = xda.attrs.copy()
     lda.attrs["units"] = ""
     return lda
+
+def _round(xda):
+    """apply numpy.round"""
+    with xr.set_options(keep_attrs=True):
+        return np.round(xda)
 
