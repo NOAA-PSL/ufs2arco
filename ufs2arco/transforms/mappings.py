@@ -30,6 +30,7 @@ def apply_mappings(
     function_mappings = get_available_mappings()
 
     for mapname, varlist in mappings.items():
+        varlist = [varlist] if isinstance(varlist, str) else varlist
         func = function_mappings[mapname]
         for varname in varlist:
             if varname in xds:

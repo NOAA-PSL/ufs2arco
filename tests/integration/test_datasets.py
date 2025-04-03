@@ -86,11 +86,13 @@ def _test_static_vars(source, target, store):
     lsm = {
         "gefs": "lsm",
         "replay": "land_static",
+        "era5": "round_land_sea_mask",
     }[source]
 
     orog = {
         "gefs": "orog",
         "replay": "hgtsfc_static",
+        "era5": "orography",
     }[source]
 
     # test land sea mask
@@ -113,6 +115,20 @@ def _test_static_vars(source, target, store):
                 0,
                 err_msg=f"Found min != 1 in {source} {target} {varname}",
             )
+        elif varname == orog:
+
+            # orography mean should be like ~300
+            # make sure it's not geopotential at surface, which is 9.81x that val
+            # so taking log should be OK as a test?
+            # this is just to make sure it's meaningful...
+            val = np.floor(np.log10(xda.mean().values))
+            np.testing.assert_equal(
+                val,
+                2,
+                err_msg=f"Found floor( log10( orography.mean() )) = {val} != 2 for {source} {target} {varname}",
+            )
+
+
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_logging():
@@ -124,6 +140,8 @@ def setup_logging():
         ("replay", "anemoi"),
         ("gefs", "base"),
         ("gefs", "anemoi"),
+        ("era5", "base"),
+        ("era5", "anemoi"),
     ],
 )
 def test_this_combo(source, target):

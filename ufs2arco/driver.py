@@ -47,7 +47,7 @@ class Driver:
         "mover",
         "directories",
         "source",
-        "transform",
+        "transforms",
         "target",
         "attrs",
     )
@@ -87,12 +87,6 @@ class Driver:
             self.SourceDataset = sources.GCSERA5OneDegree
         else:
             raise NotImplementedError(f"Driver.__init__: only 'aws_gefs_archive', 'gcs_era5_1degree' is implemented")
-
-        # create the transformer
-        if "transform" in self.config.keys():
-            self.transformer = Transformer(options=self.config["transform"])
-        else:
-            self.transformer = None
 
         # the target
         name = self.config["target"].get("name", "base")
@@ -194,6 +188,11 @@ class Driver:
             topo = SerialTopology(log_dir=self.config["directories"]["logs"])
 
         source = self.SourceDataset(**self.source_kwargs)
+        # create the transformer
+        if "transforms" in self.config.keys():
+            self.transformer = Transformer(options=self.config["transforms"])
+        else:
+            self.transformer = None
         target = self.TargetDataset(source=source, **self.target_kwargs)
         mover = self.Mover(source=source, target=target, transformer=self.transformer, **mover_kwargs)
 

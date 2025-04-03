@@ -9,7 +9,7 @@
 # - fv_vertical_regrid
 #   - from selected levels
 #   - keep_weight_var = True
-# - log mapping
+# - log mapping with variables as list
 # Target:
 # - anemoi workflow for analysis
 mover:
@@ -43,7 +43,7 @@ source:
     sel:
       level: [200, 1000]
 
-transform:
+transforms:
   fv_vertical_regrid:
     weight_var: delz
     interfaces:
@@ -55,7 +55,7 @@ transform:
     use_nearest_interfaces: True
     keep_weight_var: False
 
-  mapping:
+  mappings:
     log:
       - spfh
       - spfh2m

@@ -15,14 +15,14 @@ class Transformer:
             "multiply",
             "divide",
             "fv_vertical_regrid",
-            "mapping",
+            "mappings",
         )
 
     def __init__(self, options):
 
         names = list(options.keys())
 
-        # first check regrid, mapping
+        # first check regrid, mappings, etc
         unrecognized = []
         for name in names:
             if name not in self.implemented:
@@ -33,11 +33,11 @@ class Transformer:
 
         # now check for mappings
         unrecognized = []
-        if "mapping" in names:
+        if "mappings" in names:
             available = list(get_available_mappings().keys())
-            for mapname in options["mapping"]:
+            for mapname in options["mappings"]:
                 if mapname not in available:
-                    unrecognized.append(f"mapping: {mapname}")
+                    unrecognized.append(mapname)
 
             if len(unrecognized) > 0:
                 raise NotImplementedError(f"Transformer.__init__: the following mappings are not recognized or not implemented: {unrecognized}")
@@ -74,8 +74,8 @@ class Transformer:
         if "fv_vertical_regrid" in self.names:
             xds = fv_vertical_regrid(xds, **self.options["fv_vertical_regrid"])
 
-        if "mapping" in self.names:
-            xds = apply_mappings(xds, self.options["mapping"])
+        if "mappings" in self.names:
+            xds = apply_mappings(xds, self.options["mappings"])
 
         return xds
 
