@@ -49,10 +49,7 @@ class Driver:
         "source",
         "transform",
         "target",
-        "attribution",
-        "description",
-        "license",
-        "licence",
+        "attrs",
     )
 
     def __init__(self, config_filename: str):
