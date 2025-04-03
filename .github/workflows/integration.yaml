@@ -1,10 +1,18 @@
 name: Manual Integration Tests
 
 on:
-  workflow_dispatch: ~
+  push:
+    branches:
+      - "*"
   pull_request:
-    types: [opened, synchronize, reopened]
-
+    branches:
+      - "*"
+  workflow_dispatch:
+    logLevel:
+      options:
+        - info
+        - warning
+        - debug
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,7 +20,6 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     name: Build (${{ matrix.python-version }} | ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -33,12 +40,15 @@ jobs:
           init-shell: bash
           ref: ${{ github.event.pull_request.head.ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
-      - name: Install ufs2arco
+      - name: Install ufs2arco & Check Versions
         shell: bash -l {0}
         run: |
           python -V
-          python -c "import setuptools; print(setuptools.__version__)"
-          python -m pip install -e . --no-deps
+          python -c "from importlib.metadata import version; print(version('setuptools'))"
+          python -m pip install -e . --no-deps --force-reinstall
+          python -c "from importlib.metadata import version; print('xarray ', version('xarray'))"
+          python -c "from importlib.metadata import version; print('zarr', version('zarr'))"
+          python -c "from importlib.metadata import version; print('ufs2arco', version('ufs2arco'))"
       - name: Run Integration Tests
         shell: bash -l {0}
         run: |
