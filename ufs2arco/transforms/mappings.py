@@ -8,6 +8,7 @@ logger = logging.getLogger("ufs2arco")
 def get_available_mappings() -> dict:
     return {
         "log": _log,
+        "round": _round,
     }
 
 def apply_mappings(
@@ -51,4 +52,9 @@ def _log(xda):
     lda.attrs = xda.attrs.copy()
     lda.attrs["units"] = ""
     return lda
+
+def _round(xda):
+    """apply numpy.round"""
+    with xr.set_options(keep_attrs=True):
+        return np.round(xda)
 

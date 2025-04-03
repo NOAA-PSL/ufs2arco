@@ -36,6 +36,25 @@ class Driver:
         run(overwrite: bool = False): Runs the data movement process, managing the source, target transformations, and mover.
     """
 
+    required_sections = (
+        "mover",
+        "directories",
+        "source",
+        "target",
+    )
+
+    recognized_sections = (
+        "mover",
+        "directories",
+        "source",
+        "transform",
+        "target",
+        "attribution",
+        "description",
+        "license",
+        "licence",
+    )
+
     def __init__(self, config_filename: str):
         """Initializes the Driver object with configuration from the specified YAML file.
 
@@ -49,9 +68,17 @@ class Driver:
         with open(config_filename, "r") as f:
             self.config = yaml.safe_load(f)
 
-        for key in ["mover", "directories", "source", "target"]:
+        for key in self.required_sections:
             assert key in self.config, \
                 f"Driver.__init__: could not find '{key}' section in yaml"
+
+        unrecognized = []
+        for key in self.config.keys():
+            if key not in self.recognized_sections:
+                unrecognized.append(key)
+        if len(unrecognized) > 0:
+            raise KeyError(
+                f"Driver.__init__: Unrecognized config sections: {unrecognized}. The following are recognized: {self.recognized_sections}")
 
         # the source dataset
         name = self.config["source"]["name"].lower()

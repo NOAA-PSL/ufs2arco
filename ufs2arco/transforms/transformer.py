@@ -22,25 +22,37 @@ class Transformer:
 
         names = list(options.keys())
 
-        unrecognized = []
-
         # first check regrid, mapping
+        unrecognized = []
         for name in names:
             if name not in self.implemented:
                 unrecognized.append(name)
 
+        if len(unrecognized) > 0:
+            raise NotImplementedError(f"Transformer.__init__: the following transformations are not recognized or not implemented: {unrecognized}")
+
         # now check for mappings
+        unrecognized = []
         if "mapping" in names:
             available = list(get_available_mappings().keys())
             for mapname in options["mapping"]:
                 if mapname not in available:
                     unrecognized.append(f"mapping: {mapname}")
 
-        if len(unrecognized) > 0:
-            raise NotImplementedError(f"Transformer.__init__: the following transformations are not recognized or not implemented: {unrecognized}")
+            if len(unrecognized) > 0:
+                raise NotImplementedError(f"Transformer.__init__: the following mappings are not recognized or not implemented: {unrecognized}")
 
         self.names = names
         self.options = options
+        logger.info(str(self))
+
+    def __str__(self) -> str:
+        title = f"Transformations"
+        msg = f"\n{title}\n" + \
+              "".join(["-" for _ in range(len(title))]) + "\n"
+        optstr = "\n    ".join([f"{key:<14s}: {val}" for key, val in self.options.items()])
+        msg += f"options\n    {optstr}\n"
+        return msg
 
     def __call__(self, xds: xr.Dataset):
         """
