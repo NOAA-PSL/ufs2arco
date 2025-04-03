@@ -95,7 +95,8 @@ def multiply(xds, config):
         xds (xr.Dataset): with new dataset
     """
     for varname, scalar in config.items():
-        xds[varname] = xds[varname] * scalar
+        if varname in xds:
+            xds[varname] = xds[varname] * scalar
     return xds
 
 def divide(xds, config):
@@ -114,5 +115,6 @@ def divide(xds, config):
         xds (xr.Dataset): with new dataset
     """
     for varname, scalar in config.items():
-        xds[varname] = xds[varname] / scalar
+        if varname in xds:
+            xds[varname] = xds[varname] / scalar
     return xds
