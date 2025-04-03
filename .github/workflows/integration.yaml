@@ -2,6 +2,9 @@ name: Manual Integration Tests
 
 on:
   workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -9,6 +12,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name == "workflow_dispatch"
     name: Build (${{ matrix.python-version }} | ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
