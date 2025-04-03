@@ -1,0 +1,70 @@
+# Features tested
+# Datamover:
+# - serial
+# Source:
+# - analysis template
+# - level .sel slicing
+# - static variables
+# Transform:
+# - fv_vertical_regrid
+#   - from selected levels
+#   - keep_weight_var = True
+# - log mapping
+# Target:
+# - anemoi workflow for analysis
+mover:
+  name: datamover
+  batch_size: 2
+
+directories:
+  zarr: dataset.zarr
+  cache: cache
+  logs: logs
+
+source:
+  name: gcs_replay_atmosphere
+  uri: gs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree-subsampled/03h-freq/zarr/fv3.zarr
+  time:
+    start: 2017-01-01T00
+    end: 2017-01-02T18
+    freq: 6h
+
+  variables:
+    - delz
+    - land_static
+    - hgtsfc_static
+    - pressfc
+    - tmp2m
+    - tmp
+    - spfh
+    - spfh2m
+
+  slices:
+    sel:
+      level: [200, 1000]
+
+transform:
+  fv_vertical_regrid:
+    weight_var: delz
+    interfaces:
+      - 200
+      - 350
+      - 700
+      - 900
+      - 1000
+    use_nearest_interfaces: True
+    keep_weight_var: False
+
+  mapping:
+    log:
+      - spfh
+      - spfh2m
+
+target:
+  name: base
+
+  chunks:
+    time: 1
+    level: -1
+    latitude: -1
+    longitude: -1
