@@ -5,12 +5,12 @@ import yaml
 
 import numpy as np
 import xarray as xr
+import pytest
 
 from ufs2arco.driver import Driver
 from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
-
 
 def setup_test_log():
     logger.setLevel(logging.INFO)
@@ -29,9 +29,7 @@ def setup_test_log():
     # Ensure the test logger does not propagate messages to the root logger
     logger.propagate = False
 
-
 def run_test(source, target):
-
     logger.info(f"Starting Test: {source} {target}")
 
     with open(f"{source}.{target}.yaml", "r") as f:
@@ -66,13 +64,11 @@ def run_test(source, target):
     logger.info(last_line)
 
     # now run the tests
-    test_static_vars(source, target, config["directories"]["zarr"])
+    _test_static_vars(source, target, config["directories"]["zarr"])
 
     logger.info(f" ... Test Passed")
 
-
-def test_static_vars(source, target, store):
-
+def _test_static_vars(source, target, store):
     ds = xr.open_zarr(store)
 
     lsm = {
@@ -106,10 +102,17 @@ def test_static_vars(source, target, store):
                 err_msg=f"Found min != 1 in {source} {target} {varname}",
             )
 
-
-if __name__ == "__main__":
-
+@pytest.fixture(scope="module", autouse=True)
+def setup_logging():
     setup_test_log()
-    for source in ["replay", "gefs"]:
-        for target in ["base", "anemoi"]:
-            run_test(source, target)
+
+@pytest.mark.parametrize(
+    "source,target", [
+        ("replay", "base"),
+        ("replay", "anemoi"),
+        ("gefs", "base"),
+        ("gefs", "anemoi"),
+    ],
+)
+def test_this_combo(source, target):
+    run_test(source, target)
