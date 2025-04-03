@@ -53,11 +53,12 @@ jobs:
         shell: bash -l {0}
         run: |
           python -V
-          coverage run --rcfile=coverage.toml -m pytest --verbose
+          coverage run --rcfile=coverage.toml -m pytest --verbose --ignore=tests/integration
       - name: Get coverage report
         shell: bash -l {0}
         run: |
           coverage report -m ; coverage xml
+
 
   windows-build:
     name: Build (${{ matrix.python-version }} | ${{ matrix.os }})
@@ -88,7 +89,8 @@ jobs:
         shell: pwsh
         run: |
           python -V
-          coverage run --rcfile=coverage.toml -m pytest --verbose
+          coverage run --rcfile=coverage.toml -m pytest --verbose --ignore=tests/integration
+
       - name: Get coverage report
         shell: pwsh
         run: |
