@@ -21,7 +21,7 @@ jobs:
         os: ["ubuntu-latest"]
         python-version: ["3.11"]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create conda environment
         uses: mamba-org/setup-micromamba@v1
         with:
@@ -31,6 +31,8 @@ jobs:
           environment-file: environment.yaml
           create-args: python=${{ matrix.python-version }}
           init-shell: bash
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
       - name: Install ufs2arco
         shell: bash -l {0}
         run: |
