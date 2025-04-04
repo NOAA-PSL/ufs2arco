@@ -68,7 +68,7 @@ class Source:
         # set the available variables for those datasets
         path = os.path.join(
             os.path.dirname(__file__),
-            "noaa_grib.yaml",
+            "reference_noaa_grib.yaml",
         )
         with open(path, "r") as f:
             gribstuff = yaml.safe_load(f)
