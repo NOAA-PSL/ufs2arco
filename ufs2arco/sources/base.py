@@ -1,7 +1,5 @@
-import os
 import logging
 from typing import Optional
-import yaml
 
 import numpy as np
 import pandas as pd
@@ -11,14 +9,12 @@ logger = logging.getLogger("ufs2arco")
 
 class Source:
     """
-    Base class for all ensemble forecast-like datasets
+    Base class for all datasets
     """
 
-    # these will be set by the different analysis, forecast, ensemble_forecast classes
+    # fill these out per subclass
     sample_dims = tuple()
     base_dims = tuple()
-
-    # fill these out per subclass
     static_vars = tuple()
     available_variables = tuple()
     available_levels = tuple()
@@ -63,22 +59,6 @@ class Source:
             slices (dict, optional): either "sel" or "isel", with slice, passed to xarray
         """
 
-        # set filter_by_keys for NOAA datasets
-        # note this has to be first, since it will
-        # set the available variables for those datasets
-        path = os.path.join(
-            os.path.dirname(__file__),
-            "reference_noaa_grib.yaml",
-        )
-        with open(path, "r") as f:
-            gribstuff = yaml.safe_load(f)
-        self._filter_by_keys = gribstuff["filter_by_keys"]
-        if "gefs" in self.name.lower():
-            self._param_list = gribstuff["param_list"]["gefs"]
-        elif "gfs" in self.name.lower():
-            self._param_list = gribstuff["param_stuff"]["gfs"]
-        else:
-            self._param_list = None
 
         # check variable selection
         if variables is not None:
@@ -130,6 +110,13 @@ class Source:
         for key in attrslist:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         return msg
+
+    def _open_static_vars(self, dims) -> bool:
+        """Just do this once"""
+        cond = True
+        for key, val in dims.items():
+            cond = cond and val == getattr(self, key)[0]
+        return cond
 
     def add_full_extra_coords(self, xds: xr.Dataset) -> xr.Dataset:
         """

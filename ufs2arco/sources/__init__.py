@@ -1,4 +1,5 @@
 from .base import Source
+from .noaa_grib_forecast import NOAAGribForecastData
 from .analysis import AnalysisSource
 from .ensemble_forecast import EnsembleForecastSource
 
