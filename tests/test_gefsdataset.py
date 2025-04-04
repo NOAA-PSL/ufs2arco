@@ -26,5 +26,13 @@ def test_name(gefs_dataset):
     assert gefs_dataset.name == "AWSGEFSArchive"
 
 def test_open_sample_dataset(gefs_dataset):
-    result = gefs_dataset.open_sample_dataset(pd.Timestamp("2017-01-01T00"), 0, 0, "/tmp/cache", True)
+    result = gefs_dataset.open_sample_dataset(
+        dims={
+            "t0": pd.Timestamp("2017-01-01T00"),
+            "fhr": 0,
+            "member": 0,
+        },
+        open_static_vars=True,
+        cache_dir="/tmp/cache",
+    )
     assert isinstance(result, xr.Dataset)

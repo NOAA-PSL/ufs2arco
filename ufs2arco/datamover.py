@@ -110,9 +110,9 @@ class DataMover():
 
                 for these_dims in batch_indices:
                     fds = self.source.open_sample_dataset(
+                        dims=these_dims,
                         open_static_vars=self.target.always_open_static_vars,
                         cache_dir=cache_dir,
-                        **these_dims,
                     )
                     fds = self.transformer(fds)
                     fds = self.target.apply_transforms_to_sample(fds)
@@ -163,12 +163,12 @@ class DataMover():
         """
 
         # open a minimal dataset
-        sample_dim_args = {
+        first_sample_dim_args = {
             key: getattr(self.source, key)[0]
             for key in self.source.sample_dims
         }
         xds = self.source.open_sample_dataset(
-            **sample_dim_args,
+            dims=first_sample_dim_args,
             open_static_vars=True,
             cache_dir=self.get_cache_dir("container"),
         )

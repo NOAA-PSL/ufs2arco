@@ -5,21 +5,19 @@ import yaml
 import pandas as pd
 import xarray as xr
 
-from ufs2arco.sources import AnalysisSource
+from ufs2arco.sources import CloudZarrData, Source
 
 logger = logging.getLogger("ufs2arco")
 
 
-class GCSReplayAtmosphere(AnalysisSource):
+class GCSReplayAtmosphere(CloudZarrData, Source):
     """
     Atmospheric component of replay, already zarr-ified on GCS.
-
-    These zarr stores could very easily be generalized... I'm sure.
     """
 
+    sample_dims = ("time",)
+    base_dims = ("level", "latitude", "longitude")
     static_vars = ("land_static", "hgtsfc_static")
-
-    _is_selected = False
 
     @property
     def rename(self) -> dict:
@@ -29,58 +27,24 @@ class GCSReplayAtmosphere(AnalysisSource):
             "grid_xt": "longitude",
         }
 
-    @property
-    def available_variables(self) -> tuple:
-        return tuple(self._xds.data_vars)
-
-    @property
-    def available_levels(self) -> tuple:
-        return tuple(self._xds["level"].values)
-
     def __init__(
         self,
-        uri: str,
         time: dict,
+        uri: str,
         variables: Optional[list | tuple] = None,
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
     ) -> None:
 
-        # open and rename
-        xds = xr.open_zarr(
-            uri,
-            storage_options={"token": "anon"},
-        )
-        self._xds = xds.rename(self.rename)
+        self.time = pd.date_range(**time)
 
-        # parent class checks if variables and levels are legit
         super().__init__(
-            time=time,
+            uri=uri,
             variables=variables,
             levels=levels,
             use_nearest_levels=use_nearest_levels,
             slices=slices,
         )
-
-        # now subsample the dataset
-        self._xds = self._xds[self.variables]
-        if self.levels is not None:
-            self._xds = self._xds.sel(level=self.levels, **self._level_sel_kwargs)
-        self._xds = self.apply_slices(self._xds)
-
         # drop these because cftime gives trouble no matter what
         self._xds = self._xds.drop_vars(["cftime", "ftime"])
-
-    def open_sample_dataset(
-        self,
-        time: pd.Timestamp,
-        open_static_vars: bool,
-        cache_dir: Optional[str] = None,
-    ) -> xr.Dataset:
-
-        xds = self._xds.sel(time=[time])
-        osv = open_static_vars or self._open_static_vars(time)
-        selection = list(self.variables) if osv else list(self.dynamic_vars)
-        xds = xds[selection].copy().load()
-        return xds
