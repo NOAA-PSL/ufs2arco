@@ -8,7 +8,7 @@ import pandas as pd
 import xarray as xr
 import zarr
 
-from ufs2arco.sources import Source, AnalysisSource, EnsembleForecastSource
+from ufs2arco.sources import Source
 from ufs2arco.targets import Target
 
 logger = logging.getLogger("ufs2arco")
@@ -25,7 +25,7 @@ class Anemoi(Target):
     so they have different names originally.
 
     Assumptions:
-        * For :class:`EnsembleForecastSource` and :class:`ForecastSource` datasets t0 from ForecastSource gets renamed to time, and fhr is silently dropped
+        * For :class:`EnsembleForecastSource` and :class:`ForecastSource` datasets, t0 gets renamed to time, and fhr is silently dropped
         * :attr:`do_flatten_grid` = ``True``
         * resolution = None, I have no idea where this gets set in anemoi-datasets
         * just setting use_level_index = False for now, but eventually it would be nice to use this flag to switch between how vertical level suffixes are labeled

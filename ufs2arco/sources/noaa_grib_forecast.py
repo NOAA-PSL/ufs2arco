@@ -30,7 +30,13 @@ class NOAAGribForecastData:
     def available_variables(self) -> tuple:
         return tuple(self._filter_by_keys.keys())
 
-    def __init__(self):
+    def __init__(
+        self,
+        variables: Optional[list | tuple] = None,
+        levels: Optional[list | tuple] = None,
+        use_nearest_levels: Optional[bool] = False,
+        slices: Optional[dict] = None,
+    ) -> None:
         """
         This just uses :attr:`name` to set the attributes
             * :attr:`_filter_by_keys` used to filter the grib files per variable
@@ -53,6 +59,12 @@ class NOAAGribForecastData:
         else:
             self._param_list = None
 
+        super().__init__(
+            variables=variables,
+            levels=levels,
+            use_nearest_levels=use_nearest_levels,
+            slices=slices,
+        )
 
     def open_sample_dataset(
         self,

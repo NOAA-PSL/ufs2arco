@@ -58,12 +58,7 @@ class AWSGEFSArchive(NOAAGribForecastData, Source):
         self.t0 = pd.date_range(**t0)
         self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
         self.member = np.arange(member["start"], member["end"] + 1, member["step"])
-
-        # first call NOAAGribForecastData.__init__ to set _filter_by_keys and _param_list
-        super().__init__()
-
-        # now sort through the variables, levels, and slices options
-        super(NOAAGribForecastData, self).__init__(
+        super().__init__(
             variables=variables,
             levels=levels,
             use_nearest_levels=use_nearest_levels,
