@@ -86,6 +86,7 @@ def _test_static_vars(source, target, store):
     lsm = {
         "gefs": "lsm",
         "gfs": "lsm",
+        "hrrr": "lsm",
         "replay": "land_static",
         "era5": "round_land_sea_mask",
     }[source]
@@ -93,6 +94,7 @@ def _test_static_vars(source, target, store):
     orog = {
         "gefs": "orog",
         "gfs": "orog",
+        "hrrr": "orog",
         "replay": "hgtsfc_static",
         "era5": "orography",
     }[source]
@@ -142,6 +144,7 @@ def setup_logging():
         ("replay", "anemoi"),
         ("gfs", "base"),
         ("gfs", "anemoi"),
+        ("hrrr", "base"),
         ("gefs", "base"),
         ("gefs", "anemoi"),
         ("era5", "base"),

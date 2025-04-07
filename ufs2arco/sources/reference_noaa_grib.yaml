@@ -34,6 +34,11 @@ filter_by_keys:
     paramId:
       - 174096
 
+  d2m:
+    typeOfLevel: heightAboveGround
+    paramId:
+      - 168
+
   gh:
     typeOfLevel: isobaricInhPa
     paramId:
@@ -94,3 +99,18 @@ param_list:
     w: ["", "b"]
     t: ["", "b"]
     q: ["b"]
+  hrrr:
+    lsm: ["sfc"]
+    orog: ["sfc"]
+    sp: ["sfc"]
+    u10: ["sfc"]
+    v10: ["sfc"]
+    t2m: ["sfc"]
+    sh2: ["sfc"]
+    d2m: ["sfc"]
+    gh: ["prs"]
+    u: ["prs"]
+    v: ["prs"]
+    w: ["prs"]
+    t: ["prs"]
+    q: ["prs"]

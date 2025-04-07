@@ -54,6 +54,8 @@ class NOAAGribForecastData:
             self._param_list = gribstuff["param_list"]["gefs"]
         elif "gfs" in self.name.lower():
             self._param_list = gribstuff["param_list"]["gfs"]
+        elif "hrrr" in self.name.lower():
+            self._param_list = gribstuff["param_list"]["hrrr"]
         else:
             self._param_list = None
 
@@ -81,7 +83,7 @@ class NOAAGribForecastData:
             local_file = None
             logger.warning(
                 f"{self.name}: Trouble finding the file: {path}\n\t" +
-                f"dims = {dims}, file_suffix = {suffix}"
+                f"dims = {dims}, file_suffix = {file_suffix}"
             )
         return local_file
 

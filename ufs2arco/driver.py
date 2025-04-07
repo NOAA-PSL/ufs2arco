@@ -81,6 +81,8 @@ class Driver:
         name = self.config["source"]["name"].lower()
         if name == "aws_gefs_archive":
             self.SourceDataset = sources.AWSGEFSArchive
+        if name == "aws_hrrr_archive":
+            self.SourceDataset = sources.AWSHRRRArchive
         elif name == "gcs_era5_1degree":
             self.SourceDataset = sources.GCSERA5OneDegree
         elif name == "gcs_replay_atmosphere":
