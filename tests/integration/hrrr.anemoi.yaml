@@ -1,13 +1,15 @@
-# Features tested
+# Features tested by HRRR
 # Datamover:
 # - serial
 # Source:
-# - regional determinstic forecast template
+# - regional deterministic forecast template
 # - level selection
 # - static variables
 # Target:
-# - base workflow for ensemble forecast
+# - anemoi workflow for regional deterministic forecast
 # - rename
+# - forcings computations
+# - sort channels by levels = False (default)
 # Driver:
 # - pass attrs at end like description
 mover:
@@ -28,8 +30,8 @@ source:
 
   fhr:
     start: 0
-    end: 6
-    step: 6
+    end: 0
+    step: 1
 
   variables:
     - lsm
@@ -45,16 +47,24 @@ source:
     - 1000
 
 target:
-  name: forecast
-  rename:
-    level: pressure
+  name: anemoi
+  forcings:
+    - cos_latitude
+    - sin_latitude
+    - cos_longitude
+    - sin_longitude
+    - cos_julian_day
+    - sin_julian_day
+    - cos_local_time
+    - sin_local_time
+    - cos_solar_zenith_angle
+    - insolation
 
   chunks:
-    t0: 1
-    fhr: 1
-    pressure: -1
-    y: -1
-    x: -1
+    time: 1
+    variable: -1
+    ensemble: 1
+    cell: -1
 
 attrs:
   description: "This is a test dataset"

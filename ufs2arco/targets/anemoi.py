@@ -40,7 +40,6 @@ class Anemoi(Target):
     data_dtype = np.float32
 
     # these are basically properties
-    base_dims = ("variable", "cell")
     always_open_static_vars = True
 
     @property
@@ -51,6 +50,17 @@ class Anemoi(Target):
             return ("time",)
 
     @property
+    def expanded_base_dims(self):
+        return tuple(self.protected_rename.get(d, d) for d in self.source.base_dims)
+
+    @property
+    def base_dims(self):
+        if self.do_flatten_grid:
+            return ("cell",)
+        else:
+            return self.expanded_base_dims
+
+    @property
     def datetime(self):
         if self._has_fhr:
             #TODO: this is the hack where I assume we're using fhr=0 always
@@ -59,12 +69,12 @@ class Anemoi(Target):
             return self.source.time
 
     @property
-    def time(self):
+    def dates(self):
+        return self.datetime
 
-        if self._has_fhr:
-            return np.arange(len(self.source.t0))
-        else:
-            return np.arange(len(self.source.time))
+    @property
+    def time(self):
+        return np.arange(len(self.dates))
 
     @property
     def ensemble(self):
@@ -91,10 +101,7 @@ class Anemoi(Target):
 
     @property
     def dim_order(self):
-        if self.do_flatten_grid:
-            return ("time", "variable", "ensemble", "cell")
-        else:
-            return ("time", "variable", "ensemble", "latitudes", "longitudes")
+        return ("time", "variable", "ensemble") + self.base_dims
 
 
     def __init__(
@@ -128,6 +135,7 @@ class Anemoi(Target):
                 logger.info(f"{self.name}.__init__: can't rename {key} -> {self.rename[key]}, either key or val is in a protected list. I'll drop it and forget about it.")
                 self.rename.pop(key)
 
+
     def get_expanded_dim_order(self, xds):
         """this is used in :meth:`map_static_to_expanded`"""
         return ("time", "ensemble") + tuple(xds.attrs["stack_order"])
@@ -148,7 +156,7 @@ class Anemoi(Target):
         xds = self._map_datetime_to_index(xds)
         xds = self._map_levels_to_suffixes(xds)
         xds = self._map_static_to_expanded(xds)
-        xds = xds.transpose(*self.get_expanded_dim_order(xds))
+        xds = xds.transpose(* (("time", "ensemble") + tuple(xds.attrs["stack_order"])) )
         xds = self._stackit(xds)
         xds = self._calc_sample_stats(xds)
         if self.do_flatten_grid:
@@ -191,6 +199,17 @@ class Anemoi(Target):
             xds (xr.Dataset): with renaming as above
         """
         # first, rename the protected list
+        # note that we do not update the attribute rename with protected_rename
+        # key: values because of the way time is handled ...
+        # it is convenient to rename time to dates
+        # however... anemoi target has "time" as a logical index in its sample_dims
+        # which is completely different...
+        # because datamover.create_container relies on Target.renamed_sample_dims attribute,
+        # this would rename time to dates, and then create a container with the dates as a dimension...
+        # even though it's not
+        # then, add on to that the fact that we drop the dates vector and recreate it at the very end,
+        # due to the differences in the way xarray and zarr handle datetime objects,
+        # we really have to treat these protected quantities differently
         xds = xds.rename(self.protected_rename)
         xds = super().rename_dataset(xds)
         return xds
@@ -293,8 +312,9 @@ class Anemoi(Target):
                 # so that it's in the order of the data arrays, not in the dataset order
                 # (they could be different)
                 if "field_shape" not in nds.attrs:
-                    nds.attrs["stack_order"] = list(d for d in xds[name].dims if d in ("latitudes", "longitudes"))
-                    nds.attrs["field_shape"] = list(len(xds[d]) for d in nds.attrs["stack_order"])
+                    stack_order = list(d for d in xds[name].dims if d in self.expanded_base_dims)
+                    nds.attrs["stack_order"] = stack_order
+                    nds.attrs["field_shape"] = list(len(xds[d]) for d in stack_order)
 
         return nds
 
@@ -439,7 +459,7 @@ class Anemoi(Target):
                 ["count", "has_nans", "maximum", "minimum", "squares", "sums"]
         """
 
-        dims = ["latitudes", "longitudes"]
+        dims = list(self.expanded_base_dims)
         xds["count_array"] = (~np.isnan(xds["data"])).sum(dims, skipna=self.allow_nans).astype(np.float64)
         xds["has_nans_array"] = np.isnan(xds["data"]).any(dims)
         xds["maximum_array"] = xds["data"].max(dims, skipna=self.allow_nans).astype(np.float64)

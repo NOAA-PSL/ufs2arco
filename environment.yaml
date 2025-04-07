@@ -30,6 +30,7 @@ dependencies:
 # developer
     - setuptools_scm>=8
     - pytest
+    - pytest-dependency
     - coverage
 # mpi, commented out b/c it really depends on the system
 #    - mpi4py
