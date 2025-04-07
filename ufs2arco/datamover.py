@@ -114,8 +114,9 @@ class DataMover():
                         open_static_vars=self.target.always_open_static_vars,
                         cache_dir=cache_dir,
                     )
-                    fds = self.transformer(fds)
-                    fds = self.target.apply_transforms_to_sample(fds)
+                    if len(fds) > 0:
+                        fds = self.transformer(fds)
+                        fds = self.target.apply_transforms_to_sample(fds)
                     dlist.append(fds)
                 xds = xr.merge(dlist)
                 return xds
