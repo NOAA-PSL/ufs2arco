@@ -81,10 +81,12 @@ class Driver:
         name = self.config["source"]["name"].lower()
         if name == "aws_gefs_archive":
             self.SourceDataset = sources.AWSGEFSArchive
-        elif name == "gcs_replay_atmosphere":
-            self.SourceDataset = sources.GCSReplayAtmosphere
         elif name == "gcs_era5_1degree":
             self.SourceDataset = sources.GCSERA5OneDegree
+        elif name == "gcs_replay_atmosphere":
+            self.SourceDataset = sources.GCSReplayAtmosphere
+        elif name == "rda_gfs_archive":
+            self.SourceDataset = sources.RDAGFSArchive
         else:
             raise NotImplementedError(f"Driver.__init__: only 'aws_gefs_archive', 'gcs_era5_1degree' is implemented")
 

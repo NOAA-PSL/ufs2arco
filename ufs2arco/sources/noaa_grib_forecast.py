@@ -12,8 +12,6 @@ class NOAAGribForecastData:
     """
     Generic access patterns for forecast datasets stored somewhere in Grib
 
-    Note that this assumes we're reading from s3 for now.
-
     Classes that inherit this need their own:
         * :attr:`available_level` attribute / property
         * :meth:`_build_path` method
@@ -55,7 +53,7 @@ class NOAAGribForecastData:
         if "gefs" in self.name.lower():
             self._param_list = gribstuff["param_list"]["gefs"]
         elif "gfs" in self.name.lower():
-            self._param_list = gribstuff["param_stuff"]["gfs"]
+            self._param_list = gribstuff["param_list"]["gfs"]
         else:
             self._param_list = None
 
@@ -65,6 +63,27 @@ class NOAAGribForecastData:
             use_nearest_levels=use_nearest_levels,
             slices=slices,
         )
+
+    def _open_local(self, dims, file_suffix, cache_dir):
+
+        path = self._build_path(
+            **dims,
+            file_suffix=file_suffix,
+        )
+        kw = {"s3": {"anon": True}} if "s3://" in path else {}
+        try:
+            local_file = fsspec.open_local(
+                path,
+                filecache={"cache_storage": cache_dir},
+                **kw,
+            )
+        except:
+            local_file = None
+            logger.warning(
+                f"{self.name}: Trouble finding the file: {path}\n\t" +
+                f"dims = {dims}, file_suffix = {suffix}"
+            )
+        return local_file
 
     def open_sample_dataset(
         self,
@@ -81,19 +100,7 @@ class NOAAGribForecastData:
                 file_suffix=suffix,
             )
             if cache_dir is not None:
-                try:
-                    local_file = fsspec.open_local(
-                        path,
-                        s3={"anon": True},
-                        filecache={"cache_storage": cache_dir},
-                    )
-                except:
-                    local_file = None
-                    logger.warning(
-                        f"{self.name}: Trouble finding the file: {path}\n\t" +
-                        f"dims = {dims}, file_suffix = {suffix}"
-                    )
-                cached_files[suffix] = local_file
+                cached_files[suffix] = self._open_local(dims, suffix, cache_dir)
             else:
                 cached_files[suffix] = path
 
@@ -145,7 +152,6 @@ class NOAAGribForecastData:
         Returns:
             xr.DataArray: The extracted variable as an xarray DataArray.
         """
-        print(f"_open_single_variable varname={varname}, dims={dims}")
         xds = xr.open_dataset(
             file,
             engine="cfgrib",

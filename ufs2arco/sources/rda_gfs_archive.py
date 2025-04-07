@@ -1,31 +1,40 @@
 import logging
 from typing import Optional
-import fsspec
 
+import numpy as np
 import pandas as pd
 import xarray as xr
 
-from ufs2arco.sources import EnsembleForecastSource
+from ufs2arco.sources import Source, NOAAGribForecastData
 
 logger = logging.getLogger("ufs2arco")
 
-class RDAGFSArchive(ForecastSource):
-    """Access NOAA's forecast archive from the Global Ensemble Forecast System (GEFS) at s3://noaa-gefs-pds."""
+class RDAGFSArchive(NOAAGribForecastData, Source):
+    """
+    Access the UCAR Research Data Archive (RDA) of NOAA's Global Forecast System (GFS).
 
-    static_vars = ("lsm", "orog")
-    sample_dims = ("t0", "fhr", "member")
+    For more see:
+        * https://rda.ucar.edu/datasets/d084001
+        * https://rda.ucar.edu/datasets/d084003
+
+    Note:
+        I don't know if the resolution changes at some point, as it does in the GEFS archive.
+    """
+
+    sample_dims = ("t0", "fhr")
     base_dims = ("latitude", "longitude")
-
-    @property
-    def available_variables(self) -> tuple:
-        return tuple(self._ic_variables.keys())
+    file_suffixes = ("", "b")
+    static_vars = ("lsm", "orog")
 
     @property
     def available_levels(self) -> tuple:
         return (
-            10, 20, 30, 50, 70,
-            100, 150, 200, 250, 300, 350, 400, 450,
-            500, 550, 600, 650, 700, 750, 800, 850,
+            1, 2, 3, 5, 7, 10, 15,
+            20, 30, 40, 50, 70,
+            100, 125, 150, 175, 200, 225, 250, 275,
+            300, 325, 350, 375, 400, 425, 450, 475,
+            500, 525, 550, 575, 600, 625, 650, 675,
+            700, 725, 750, 775, 800, 825, 850, 875,
             900, 925, 950, 975, 1000,
         )
 
@@ -37,295 +46,56 @@ class RDAGFSArchive(ForecastSource):
             "isobaricInhPa": "level",
         }
 
-    def open_sample_dataset(
+    def __init__(
+        self,
+        t0: dict,
+        fhr: dict,
+        variables: Optional[list | tuple] = None,
+        levels: Optional[list | tuple] = None,
+        use_nearest_levels: Optional[bool] = False,
+        slices: Optional[dict] = None,
+    ) -> None:
+        """
+        Args:
+            t0 (dict): Dictionary with start and end times for initial conditions, and e.g. "freq=6h". All options get passed to ``pandas.date_range``.
+            fhr (dict): Dictionary with 'start', 'end', and 'step' forecast hours.
+            variables (list, tuple, optional): variables to grab
+            levels (list, tuple, optional): vertical levels to grab
+            use_nearest_levels (bool, optional): if True, all level selection with
+                ``xarray.Dataset.sel(level=levels, method="nearest")``
+            slices (dict, optional): either "sel" or "isel", with slice, passed to xarray
+        """
+        self.t0 = pd.date_range(**t0)
+        self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
+        super().__init__(
+            variables=variables,
+            levels=levels,
+            use_nearest_levels=use_nearest_levels,
+            slices=slices,
+        )
+
+
+    def _build_path(
         self,
         t0: pd.Timestamp,
         fhr: int,
-        member: int,
-        open_static_vars: bool,
-        cache_dir: Optional[str] = None,
-    ) -> xr.Dataset:
-
-        # 1. cache the grib files for this date, member, fhr
-        cached_files = {}
-        for k in ["a", "b"]:
-            path = self._build_path(
-                t0=t0,
-                member=member,
-                fhr=fhr,
-                a_or_b=k,
-            )
-            if cache_dir is not None:
-                try:
-                    local_file = fsspec.open_local(
-                        path,
-                        s3={"anon": True},
-                        filecache={"cache_storage": cache_dir},
-                    )
-                except FileNotFoundError:
-                    local_file = None
-                    logger.warning(
-                        f"{self.name}: File Not Found: {path}\n\t" +
-                        f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
-                    )
-                except:
-                    local_file = None
-                    logger.warning(
-                        f"{self.name}: Trouble finding the file: {path}\n\t" +
-                        f"(t0, member, fhr, key) = {t0} {member} {fhr} {k}"
-                    )
-                cached_files[k] = local_file
-            else:
-                cached_files[k] = path
-
-        # 2. read data arrays from those files
-        dsdict = {}
-        osv = open_static_vars or self._open_static_vars(t0, fhr, member)
-        read_dict = self._ic_variables if osv else self._fc_variables
-        read_dict = {k: v for k,v in read_dict.items() if k in self.variables}
-        if cached_files["a"] is not None and cached_files["b"] is not None:
-            for varname, open_kwargs in read_dict.items():
-                dslist = []
-                for a_or_b in open_kwargs["param_list"]:
-                    try:
-                        thisvar = self._open_single_variable(
-                            file=cached_files[a_or_b],
-                            varname=varname,
-                            member=member,
-                            filter_by_keys=open_kwargs["filter_by_keys"],
-                        )
-                    except:
-                        thisvar = None
-                        logger.warning(
-                            f"{self.name}: Trouble opening {varname}\n\t" +
-                            f"(t0, member, fhr, key) = {t0} {member} {fhr} {a_or_b}"
-                        )
-                    dslist.append(thisvar)
-                if not any(x is None for x in dslist):
-                    dsdict[varname] = xr.merge(dslist)[varname]
-                else:
-                    dsdict[varname] = xr.DataArray(name=varname)
-        xds = xr.Dataset(dsdict)
-        xds = self.apply_slices(xds)
-        return xds
-
-    def _open_single_variable(
-        self,
-        file: fsspec.spec.AbstractFileSystem,
-        varname: str,
-        member: int,
-        filter_by_keys: dict,
-    ) -> xr.DataArray:
+        file_suffix: str,
+    ) -> str:
         """
-        Open a single variable from a GRIB file.
-
-        Args:
-            file (fsspec.spec.AbstractFileSystem): The file to read.
-            varname (str): The variable name to extract.
-            member (int): The ensemble member ID.
-            filter_by_keys (dict): Keys to filter the variable by.
-
-        Returns:
-            xr.DataArray: The extracted variable as an xarray DataArray.
-        """
-        xds = xr.open_dataset(file, engine="cfgrib", filter_by_keys=filter_by_keys)
-        xda = xds[varname]
-
-        if "isobaricInhPa" in xds.coords:
-            if len(xda.dims) < 3:
-                vv = xda["isobaricInhPa"].values
-                xda = xda.expand_dims({"isobaricInhPa": [vv]})
-
-        for v in ["heightAboveGround", "number", "surface"]:
-            if v in xda.coords:
-                xda = xda.drop_vars(v)
-
-
-        xds = xda.to_dataset(name=varname)
-        for key, val in self.rename.items():
-            if key in xds:
-                xds = xds.rename({key: val})
-        if varname in self.static_vars:
-            for key in ["lead_time", "t0", "valid_time"]:
-                if key in xds:
-                    xds = xds.drop_vars(key)
-        else:
-
-            if "level" in xds and self.levels is not None:
-                level_selection = [l for l in self.levels if l in xds.level.values]
-                if len(level_selection) == 0:
-                    return xr.DataArray(name=varname)
-                xds = xds.sel(level=level_selection, **self._level_sel_kwargs)
-
-            xds = xds.expand_dims(["t0", "lead_time", "member"])
-            xds["fhr"] = xr.DataArray(
-                int(xds["lead_time"].values / 1e9 / 3600),
-                coords=xds["lead_time"].coords,
-                attrs={
-                    "long_name": "hours since initial time",
-                    "units": "integer hours",
-                },
-            )
-            xds["member"] = xr.DataArray(
-                [member],
-                coords={"member": [member]},
-                dims=("member",),
-                attrs={
-                    "description": "ID=0 comes from gecXX files, ID>0 comes from gepXX files",
-                    "long_name": "ensemble member ID",
-                },
-            )
-
-            # recreate valid_time, since it's not always there
-            xds = xds.swap_dims({"lead_time": "fhr"})
-            valid_time = xds["t0"] + xds["lead_time"]
-            if "valid_time" in xds:
-                xds["valid_time"] = xds["valid_time"].expand_dims(["t0", "fhr"])
-                assert valid_time.squeeze() == xds.valid_time.squeeze()
-                xds = xds.drop_vars("valid_time")
-
-            xds["valid_time"] = valid_time
-            xds = xds.set_coords("valid_time")
-        return xds[varname]
-
-
-    def _build_path(self, t0: pd.Timestamp, member: int, fhr: int, a_or_b: str) -> str:
-        """
-        Build the file path to a GRIB file based on the provided parameters.
+        Build the file path to a GEFS GRIB file on AWS.
 
         Args:
             t0 (pd.Timestamp): The initial condition timestamp.
-            member (int): The ensemble member ID.
             fhr (int): The forecast hour.
-            a_or_b (str): The file type, either 'a' or 'b'.
+            file_suffix (str): For GFS, either '' or 'b'.
 
         Returns:
             str: The constructed file path.
         """
+        bucket = f"https://data.rda.ucar.edu/d084001" if file_suffix == "" else \
+                f"https://data.rda.ucar.edu/d084003"
         outer = f"{t0.year:04d}/{t0.year:04d}{t0.month:02d}{t0.day:02d}"
-        if a_or_b == "a":
-            bucket = f"https://data.rda.ucar.edu/d084001"
-            fname = f"gfs.0p25.{t0.year:04d}{t0.month:02d}{t0.day:02d}{t0.hour:02d}.f{fhr:03d}.grib2"
-        else:
-            bucket = f"https://data.rda.ucar.edu/d084003"
-            fname = f"gfs.0p25b.{t0.year:04d}{t0.month:02d}{t0.day:02d}{t0.hour:02d}.f{fhr:03d}.grib2"
-
+        fname = f"gfs.0p25{file_suffix}.{t0.year:04d}{t0.month:02d}{t0.day:02d}{t0.hour:02d}.f{fhr:03d}.grib2"
         fullpath = f"filecache::{bucket}/{outer}/{fname}"
         logger.debug(f"{self.name}._build_path: reading {fullpath}")
         return fullpath
-
-    @property
-    def _ic_variables(self) -> dict:
-        """
-        Get the dictionary of initial condition variables.
-
-        Returns:
-            dict: The dictionary of variables for initial conditions.
-        """
-        return {
-            "lsm": {
-                "param_list": ["b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "surface",
-                    "paramId": [172],
-                },
-            },
-            "orog": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "surface",
-                    "paramId": [228002],
-                },
-            },
-            "sp": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "surface",
-                    "paramId": [134],
-                },
-            },
-            "u10": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "heightAboveGround",
-                    "paramId": [165],
-                },
-            },
-            "v10": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "heightAboveGround",
-                    "paramId": [166],
-                },
-            },
-            "t2m": {
-                "param_list": ["a"],
-                "filter_by_keys": {
-                    "typeOfLevel": "heightAboveGround",
-                    "paramId": [167],
-                },
-            },
-            "sh2": {
-                "param_list": ["b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "heightAboveGround",
-                    "paramId": [174096],
-                },
-            },
-            "gh": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [156],
-                },
-            },
-            "u": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [131],
-                },
-            },
-            "v": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [132],
-                },
-            },
-            "w": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [135],
-                },
-            },
-            "t": {
-                "param_list": ["a", "b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [130],
-                },
-            },
-            "q": {
-                "param_list": ["b"],
-                "filter_by_keys": {
-                    "typeOfLevel": "isobaricInhPa",
-                    "paramId": [133],
-                },
-            },
-        }
-
-    @property
-    def _fc_variables(self):
-        """
-        Get the dictionary of forecast variables, which is notably different from
-        the initial condition files.
-
-        Returns:
-            dict: The dictionary of variables for forecast files/variables
-        """
-        fckw = self._ic_variables.copy()
-        for key in self.static_vars:
-            fckw.pop(key)
-        return fckw
