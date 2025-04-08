@@ -69,7 +69,6 @@ filter_by_keys:
     paramId:
       - 133
 
-
 param_list:
   gefs:
     lsm: ["b"]
@@ -79,6 +78,7 @@ param_list:
     v10: ["a"]
     t2m: ["a"]
     sh2: ["b"]
+    d2m: ["b"]
     gh: ["a", "b"]
     u: ["a", "b"]
     v: ["a", "b"]
@@ -93,6 +93,7 @@ param_list:
     v10: [""]
     t2m: [""]
     sh2: [""]
+    d2m: [""]
     gh: ["", "b"]
     u: ["", "b"]
     v: ["", "b"]

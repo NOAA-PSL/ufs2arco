@@ -25,6 +25,19 @@ class NOAAGribForecastData:
     file_suffixes = tuple()
 
     @property
+    def _fsname(self) -> str:
+        """hrrr, gefs, or gfs"""
+
+        if "gefs" in self.name.lower():
+            return "gefs"
+        elif "gfs" in self.name.lower():
+            return "gfs"
+        elif "hrrr" in self.name.lower():
+            return "hrrr"
+        else:
+            raise NotImplementedError(f"ufs2arco.sources.NOAAGribForecastData could not recognize forecast system with name = {self.name}")
+
+    @property
     def available_variables(self) -> tuple:
         return tuple(self._filter_by_keys.keys())
 
@@ -49,15 +62,9 @@ class NOAAGribForecastData:
         )
         with open(path, "r") as f:
             gribstuff = yaml.safe_load(f)
+
         self._filter_by_keys = gribstuff["filter_by_keys"]
-        if "gefs" in self.name.lower():
-            self._param_list = gribstuff["param_list"]["gefs"]
-        elif "gfs" in self.name.lower():
-            self._param_list = gribstuff["param_list"]["gfs"]
-        elif "hrrr" in self.name.lower():
-            self._param_list = gribstuff["param_list"]["hrrr"]
-        else:
-            self._param_list = None
+        self._param_list = gribstuff["param_list"][self._fsname]
 
         super().__init__(
             variables=variables,
