@@ -39,7 +39,7 @@ mpi = [
     "mpi4py",
 ]
 dev = [
-    "setuptools_scm>=8", "pytest", "coverage",
+    "setuptools_scm>=8", "pytest", "pytest-dependency", "coverage",
 ]
 
 [project.urls]

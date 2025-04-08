@@ -9,20 +9,31 @@ from ufs2arco.sources import Source, NOAAGribForecastData
 
 logger = logging.getLogger("ufs2arco")
 
-class AWSGEFSArchive(NOAAGribForecastData, Source):
-    """Access NOAA's forecast archive from the Global Ensemble Forecast System (GEFS) at s3://noaa-gefs-pds."""
+class AWSHRRRArchive(NOAAGribForecastData, Source):
+    """
+    Access the archive of of NOAA's High Resolution Rapid Refresh (HRRR) forecast system on AWS.
 
-    sample_dims = ("t0", "fhr", "member")
-    horizontal_dims = ("latitude", "longitude")
-    file_suffixes = ("a", "b")
+    For more see:
+        * https://rapidrefresh.noaa.gov/hrrr/
+        * https://registry.opendata.aws/noaa-hrrr-pds/
+
+    Note:
+        I don't know if the resolution changes at some point, as it does in the GEFS archive.
+    """
+
+    sample_dims = ("t0", "fhr")
+    horizontal_dims = ("y", "x")
+    file_suffixes = ("sfc", "prs")
     static_vars = ("lsm", "orog")
 
     @property
     def available_levels(self) -> tuple:
         return (
-            10, 20, 30, 50, 70,
-            100, 150, 200, 250, 300, 350, 400, 450,
-            500, 550, 600, 650, 700, 750, 800, 850,
+            50, 75,
+            100, 125, 150, 175, 200, 225, 250, 275,
+            300, 325, 350, 375, 400, 425, 450, 475,
+            500, 525, 550, 575, 600, 625, 650, 675,
+            700, 725, 750, 775, 800, 825, 850, 875,
             900, 925, 950, 975, 1000,
         )
 
@@ -38,7 +49,6 @@ class AWSGEFSArchive(NOAAGribForecastData, Source):
         self,
         t0: dict,
         fhr: dict,
-        member: dict,
         variables: Optional[list | tuple] = None,
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
@@ -48,7 +58,6 @@ class AWSGEFSArchive(NOAAGribForecastData, Source):
         Args:
             t0 (dict): Dictionary with start and end times for initial conditions, and e.g. "freq=6h". All options get passed to ``pandas.date_range``.
             fhr (dict): Dictionary with 'start', 'end', and 'step' forecast hours.
-            member (dict): Dictionary with 'start', 'end', and 'step' ensemble members.
             variables (list, tuple, optional): variables to grab
             levels (list, tuple, optional): vertical levels to grab
             use_nearest_levels (bool, optional): if True, all level selection with
@@ -57,7 +66,6 @@ class AWSGEFSArchive(NOAAGribForecastData, Source):
         """
         self.t0 = pd.date_range(**t0)
         self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
-        self.member = np.arange(member["start"], member["end"] + 1, member["step"])
         super().__init__(
             variables=variables,
             levels=levels,
@@ -69,7 +77,6 @@ class AWSGEFSArchive(NOAAGribForecastData, Source):
     def _build_path(
         self,
         t0: pd.Timestamp,
-        member: int,
         fhr: int,
         file_suffix: str,
     ) -> str:
@@ -78,26 +85,15 @@ class AWSGEFSArchive(NOAAGribForecastData, Source):
 
         Args:
             t0 (pd.Timestamp): The initial condition timestamp.
-            member (int): The ensemble member ID.
             fhr (int): The forecast hour.
-            file_suffix (str): For GEFS, either 'a' or 'b'.
+            file_suffix (str): For GFS, either '' or 'b'.
 
         Returns:
             str: The constructed file path.
         """
-        c_or_p = "c" if member == 0 else "p"
-        bucket = f"s3://noaa-gefs-pds"
-        outer = f"gefs.{t0.year:04d}{t0.month:02d}{t0.day:02d}/{t0.hour:02d}"
-        # Thanks to Herbie for figuring these out
-        if t0 < pd.Timestamp("2018-07-27"):
-            middle = ""
-            fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{file_suffix}f{fhr:03d}"
-        elif t0 < pd.Timestamp("2020-09-23T12"):
-            middle = f"pgrb2{file_suffix}/"
-            fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{file_suffix}f{fhr:02d}"
-        else:
-            middle = f"atmos/pgrb2{file_suffix}p5/"
-            fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{file_suffix}.0p50.f{fhr:03d}"
-        fullpath = f"filecache::{bucket}/{outer}/{middle}{fname}"
+        bucket = f"s3://noaa-hrrr-bdp-pds"
+        outer = f"hrrr.{t0.year:04d}{t0.month:02d}{t0.day:02d}/conus"
+        fname = f"hrrr.t{t0.hour:02d}z.wrf{file_suffix}f{fhr:02d}.grib2"
+        fullpath = f"filecache::{bucket}/{outer}/{fname}"
         logger.debug(f"{self.name}._build_path: reading {fullpath}")
         return fullpath

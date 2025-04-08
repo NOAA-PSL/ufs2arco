@@ -85,12 +85,16 @@ def _test_static_vars(source, target, store):
 
     lsm = {
         "gefs": "lsm",
+        "gfs": "lsm",
+        "hrrr": "lsm",
         "replay": "land_static",
         "era5": "round_land_sea_mask",
     }[source]
 
     orog = {
         "gefs": "orog",
+        "gfs": "orog",
+        "hrrr": "orog",
         "replay": "hgtsfc_static",
         "era5": "orography",
     }[source]
@@ -134,10 +138,15 @@ def _test_static_vars(source, target, store):
 def setup_logging():
     setup_test_log()
 
+@pytest.mark.dependency()
 @pytest.mark.parametrize(
     "source,target", [
         ("replay", "base"),
         ("replay", "anemoi"),
+        ("gfs", "base"),
+        ("gfs", "anemoi"),
+        ("hrrr", "base"),
+        ("hrrr", "anemoi"),
         ("gefs", "base"),
         ("gefs", "anemoi"),
         ("era5", "base"),
@@ -146,3 +155,42 @@ def setup_logging():
 )
 def test_this_combo(source, target):
     run_test(source, target)
+
+@pytest.mark.dependency(depends=["test_this_combo"])
+@pytest.mark.parametrize(
+    "source", [
+        "replay",
+        "gfs",
+        "gefs",
+        "hrrr",
+        "era5",
+    ],
+)
+def test_flattened_base_equals_anemoi(source):
+    ds = xr.open_zarr(os.path.join(_local_path, source, "base", "dataset.zarr"))
+    if "pressure" in ds.dims:
+        ds = ds.rename({"pressure": "level"})
+    if "t0" in ds.dims:
+        ds = ds.rename({"t0": "time"})
+        ds = ds.isel(fhr=0, drop=True)
+    ads = xr.open_zarr(os.path.join(_local_path, source, "anemoi", "dataset.zarr"))
+
+    for key in ds.data_vars:
+
+        if "level" in ds[key].dims:
+            for level in ds[key].level.values:
+                ilevel = int(level) if level==int(level) else level
+                idx = ads.attrs["variables"].index(f"{key}_{ilevel}")
+                for itime in ads.time.values:
+                    np.testing.assert_allclose(
+                        ds[key].isel(time=itime).sel(level=level).squeeze().values.flatten(),
+                        ads["data"].sel(variable=idx, time=itime).squeeze().values,
+                    )
+        else:
+            idx = ads.attrs["variables"].index(key)
+            for itime in ads.time.values:
+                xda = ds[key].isel(time=itime) if "time" in ds[key].dims else ds[key]
+                np.testing.assert_allclose(
+                    xda.squeeze().values.flatten(),
+                    ads["data"].sel(variable=idx, time=itime).squeeze().values,
+                )

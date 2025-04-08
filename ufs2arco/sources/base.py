@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -8,14 +9,12 @@ logger = logging.getLogger("ufs2arco")
 
 class Source:
     """
-    Base class for all ensemble forecast-like datasets
+    Base class for all datasets
     """
 
-    # these will be set by the different analysis, forecast, ensemble_forecast classes
-    sample_dims = tuple()
-    base_dims = tuple()
-
     # fill these out per subclass
+    sample_dims = tuple()
+    horizontal_dims = tuple()
     static_vars = tuple()
     available_variables = tuple()
     available_levels = tuple()
@@ -23,7 +22,7 @@ class Source:
     @property
     def rename(self) -> dict:
         """
-        Use this to map to the dimensions in sample_dims + base_dims
+        Use this to map whatever the original source is to the ufs2arco standards...which need to be documented
         """
         return dict()
 
@@ -59,6 +58,7 @@ class Source:
                 ``xarray.Dataset.sel(level=levels, method="nearest")``
             slices (dict, optional): either "sel" or "isel", with slice, passed to xarray
         """
+
 
         # check variable selection
         if variables is not None:
@@ -110,6 +110,13 @@ class Source:
         for key in attrslist:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         return msg
+
+    def _open_static_vars(self, dims) -> bool:
+        """Just do this once"""
+        cond = True
+        for key, val in dims.items():
+            cond = cond and val == getattr(self, key)[0]
+        return cond
 
     def add_full_extra_coords(self, xds: xr.Dataset) -> xr.Dataset:
         """

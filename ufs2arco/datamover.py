@@ -110,12 +110,13 @@ class DataMover():
 
                 for these_dims in batch_indices:
                     fds = self.source.open_sample_dataset(
+                        dims=these_dims,
                         open_static_vars=self.target.always_open_static_vars,
                         cache_dir=cache_dir,
-                        **these_dims,
                     )
-                    fds = self.transformer(fds)
-                    fds = self.target.apply_transforms_to_sample(fds)
+                    if len(fds) > 0:
+                        fds = self.transformer(fds)
+                        fds = self.target.apply_transforms_to_sample(fds)
                     dlist.append(fds)
                 xds = xr.merge(dlist)
                 return xds
@@ -163,12 +164,12 @@ class DataMover():
         """
 
         # open a minimal dataset
-        sample_dim_args = {
+        first_sample_dim_args = {
             key: getattr(self.source, key)[0]
             for key in self.source.sample_dims
         }
         xds = self.source.open_sample_dataset(
-            **sample_dim_args,
+            dims=first_sample_dim_args,
             open_static_vars=True,
             cache_dir=self.get_cache_dir("container"),
         )
@@ -191,7 +192,7 @@ class DataMover():
                 attrs=xds[key].attrs.copy(),
             )
 
-        # these will be the base_dims, we read these in each sample
+        # these will be the the verical dim + horizontal_dims, we read these in each sample
         for key in xds.dims:
             if key not in self.target.renamed_sample_dims:
                 nds[key] = xds[key].copy()

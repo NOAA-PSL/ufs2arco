@@ -1,0 +1,117 @@
+filter_by_keys:
+  lsm:
+    typeOfLevel: surface
+    paramId:
+      - 172
+
+  orog:
+    typeOfLevel: surface
+    paramId:
+      - 228002
+
+  sp:
+    typeOfLevel: surface
+    paramId:
+      - 134
+
+  u10:
+    typeOfLevel: heightAboveGround
+    paramId:
+      - 165
+
+  v10:
+    typeOfLevel: heightAboveGround
+    paramId:
+      - 166
+
+  t2m:
+    typeOfLevel: heightAboveGround
+    paramId:
+      - 167
+
+  sh2:
+    typeOfLevel: heightAboveGround
+    paramId:
+      - 174096
+
+  d2m:
+    typeOfLevel: heightAboveGround
+    paramId:
+      - 168
+
+  gh:
+    typeOfLevel: isobaricInhPa
+    paramId:
+      - 156
+
+  u:
+    typeOfLevel: isobaricInhPa
+    paramId:
+      - 131
+
+  v:
+    typeOfLevel: isobaricInhPa
+    paramId:
+      - 132
+
+  w:
+    typeOfLevel: isobaricInhPa
+    paramId:
+      - 135
+
+  t:
+    typeOfLevel: isobaricInhPa
+    paramId:
+      - 130
+
+  q:
+    typeOfLevel: isobaricInhPa
+    paramId:
+      - 133
+
+param_list:
+  gefs:
+    lsm: ["b"]
+    orog: ["a"]
+    sp: ["a"]
+    u10: ["a"]
+    v10: ["a"]
+    t2m: ["a"]
+    sh2: ["b"]
+    d2m: ["b"]
+    gh: ["a", "b"]
+    u: ["a", "b"]
+    v: ["a", "b"]
+    w: ["a", "b"]
+    t: ["a", "b"]
+    q: ["b"]
+  gfs:
+    lsm: [""]
+    orog: [""]
+    sp: [""]
+    u10: [""]
+    v10: [""]
+    t2m: [""]
+    sh2: [""]
+    d2m: [""]
+    gh: ["", "b"]
+    u: ["", "b"]
+    v: ["", "b"]
+    w: ["", "b"]
+    t: ["", "b"]
+    q: ["b"]
+  hrrr:
+    lsm: ["sfc"]
+    orog: ["sfc"]
+    sp: ["sfc"]
+    u10: ["sfc"]
+    v10: ["sfc"]
+    t2m: ["sfc"]
+    sh2: ["sfc"]
+    d2m: ["sfc"]
+    gh: ["prs"]
+    u: ["prs"]
+    v: ["prs"]
+    w: ["prs"]
+    t: ["prs"]
+    q: ["prs"]

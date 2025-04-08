@@ -23,6 +23,7 @@ directories:
 
 source:
   name: gcs_era5_1degree
+  uri: gs://gcp-public-data-arco-era5/ar/1959-2022-1h-360x181_equiangular_with_poles_conservative.zarr
   time:
     start: 2017-01-01T00
     end: 2017-01-02T18

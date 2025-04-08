@@ -79,14 +79,9 @@ class Driver:
 
         # the source dataset
         name = self.config["source"]["name"].lower()
-        if name == "aws_gefs_archive":
-            self.SourceDataset = sources.AWSGEFSArchive
-        elif name == "gcs_replay_atmosphere":
-            self.SourceDataset = sources.GCSReplayAtmosphere
-        elif name == "gcs_era5_1degree":
-            self.SourceDataset = sources.GCSERA5OneDegree
-        else:
-            raise NotImplementedError(f"Driver.__init__: only 'aws_gefs_archive', 'gcs_era5_1degree' is implemented")
+        if name not in sources._recognized:
+            raise NotImplementedError(f"Driver.__init__: unrecognized data source {name}. Must be one of {sources._recognized}")
+        self.SourceDataset = getattr(sources, sources._recognized[name])
 
         # the target
         name = self.config["target"].get("name", "base")

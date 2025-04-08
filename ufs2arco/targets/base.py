@@ -22,8 +22,8 @@ class Target:
         return self.source.sample_dims
 
     @property
-    def base_dims(self) -> tuple:
-        return self.source.base_dims
+    def horizontal_dims(self) -> tuple:
+        return self.source.horizontal_dims
 
     @property
     def time(self):
@@ -126,7 +126,7 @@ class Target:
 
     @property
     def renamed_sample_dims(self) -> tuple:
-        return tuple(self.rename[d] if d in self.rename else d for d in self.sample_dims)
+        return tuple(self.rename.get(d, d) for d in self.sample_dims)
 
 
     def apply_transforms_to_sample(

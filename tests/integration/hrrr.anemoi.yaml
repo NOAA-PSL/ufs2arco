@@ -1,0 +1,70 @@
+# Features tested by HRRR
+# Datamover:
+# - serial
+# Source:
+# - regional deterministic forecast template
+# - level selection
+# - static variables
+# Target:
+# - anemoi workflow for regional deterministic forecast
+# - rename
+# - forcings computations
+# - sort channels by levels = False (default)
+# Driver:
+# - pass attrs at end like description
+mover:
+  name: datamover
+  batch_size: 2
+
+directories:
+  zarr: dataset.zarr
+  cache: cache
+  logs: logs
+
+source:
+  name: aws_hrrr_archive
+  t0:
+    start: 2022-01-01T00
+    end: 2022-01-02T18
+    freq: 12h
+
+  fhr:
+    start: 0
+    end: 0
+    step: 1
+
+  variables:
+    - lsm
+    - orog
+    - sp
+    - t2m
+    - t
+    - gh
+
+  levels:
+    - 100
+    - 500
+    - 1000
+
+target:
+  name: anemoi
+  forcings:
+    - cos_latitude
+    - sin_latitude
+    - cos_longitude
+    - sin_longitude
+    - cos_julian_day
+    - sin_julian_day
+    - cos_local_time
+    - sin_local_time
+    - cos_solar_zenith_angle
+    - insolation
+
+  chunks:
+    time: 1
+    variable: -1
+    ensemble: 1
+    cell: -1
+
+attrs:
+  description: "This is a test dataset"

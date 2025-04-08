@@ -1,0 +1,60 @@
+# Features tested
+# Datamover:
+# - serial
+# Source:
+# - regional determinstic forecast template
+# - level selection
+# - static variables
+# Target:
+# - base workflow for ensemble forecast
+# - rename
+# Driver:
+# - pass attrs at end like description
+mover:
+  name: datamover
+  batch_size: 2
+
+directories:
+  zarr: dataset.zarr
+  cache: cache
+  logs: logs
+
+source:
+  name: aws_hrrr_archive
+  t0:
+    start: 2022-01-01T00
+    end: 2022-01-02T18
+    freq: 12h
+
+  fhr:
+    start: 0
+    end: 6
+    step: 6
+
+  variables:
+    - lsm
+    - orog
+    - sp
+    - t2m
+    - t
+    - gh
+
+  levels:
+    - 100
+    - 500
+    - 1000
+
+target:
+  name: forecast
+  rename:
+    level: pressure
+
+  chunks:
+    t0: 1
+    fhr: 1
+    pressure: -1
+    y: -1
+    x: -1
+
+attrs:
+  description: "This is a test dataset"
