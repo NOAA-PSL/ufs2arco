@@ -16,7 +16,7 @@ class GCSReplayAtmosphere(CloudZarrData, Source):
     """
 
     sample_dims = ("time",)
-    base_dims = ("latitude", "longitude")
+    horizontal_dims = ("latitude", "longitude")
     static_vars = ("land_static", "hgtsfc_static")
 
     @property

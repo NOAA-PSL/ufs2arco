@@ -17,7 +17,7 @@ class NOAAGribForecastData:
         * :meth:`_build_path` method
         * :attr:`static_vars`
         * :attr:`sample_dims`
-        * :attr:`base_dims`
+        * :attr:`horizontal_dims`
         * :attr:`file_suffixes`
     """
 

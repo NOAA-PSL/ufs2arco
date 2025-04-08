@@ -12,7 +12,7 @@ logger = logging.getLogger("ufs2arco")
 class GCSERA5OneDegree(CloudZarrData, Source):
 
     sample_dims = ("time",)
-    base_dims = ("latitude", "longitude")
+    horizontal_dims = ("latitude", "longitude")
     static_vars = ("land_sea_mask", "geopotential_at_surface")
 
     def __init__(

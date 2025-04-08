@@ -22,8 +22,8 @@ class Target:
         return self.source.sample_dims
 
     @property
-    def base_dims(self) -> tuple:
-        return self.source.base_dims
+    def horizontal_dims(self) -> tuple:
+        return self.source.horizontal_dims
 
     @property
     def time(self):

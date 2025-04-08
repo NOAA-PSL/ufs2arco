@@ -50,15 +50,15 @@ class Anemoi(Target):
             return ("time",)
 
     @property
-    def expanded_base_dims(self):
-        return tuple(self.protected_rename.get(d, d) for d in self.source.base_dims)
+    def expanded_horizontal_dims(self):
+        return tuple(self.protected_rename.get(d, d) for d in self.source.horizontal_dims)
 
     @property
-    def base_dims(self):
+    def horizontal_dims(self):
         if self.do_flatten_grid:
             return ("cell",)
         else:
-            return self.expanded_base_dims
+            return self.expanded_horizontal_dims
 
     @property
     def datetime(self):
@@ -101,7 +101,7 @@ class Anemoi(Target):
 
     @property
     def dim_order(self):
-        return ("time", "variable", "ensemble") + self.base_dims
+        return ("time", "variable", "ensemble") + self.horizontal_dims
 
 
     def __init__(
@@ -312,7 +312,7 @@ class Anemoi(Target):
                 # so that it's in the order of the data arrays, not in the dataset order
                 # (they could be different)
                 if "field_shape" not in nds.attrs:
-                    stack_order = list(d for d in xds[name].dims if d in self.expanded_base_dims)
+                    stack_order = list(d for d in xds[name].dims if d in self.expanded_horizontal_dims)
                     nds.attrs["stack_order"] = stack_order
                     nds.attrs["field_shape"] = list(len(xds[d]) for d in stack_order)
 
@@ -459,7 +459,7 @@ class Anemoi(Target):
                 ["count", "has_nans", "maximum", "minimum", "squares", "sums"]
         """
 
-        dims = list(self.expanded_base_dims)
+        dims = list(self.expanded_horizontal_dims)
         xds["count_array"] = (~np.isnan(xds["data"])).sum(dims, skipna=self.allow_nans).astype(np.float64)
         xds["has_nans_array"] = np.isnan(xds["data"]).any(dims)
         xds["maximum_array"] = xds["data"].max(dims, skipna=self.allow_nans).astype(np.float64)

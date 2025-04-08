@@ -22,7 +22,7 @@ class AWSHRRRArchive(NOAAGribForecastData, Source):
     """
 
     sample_dims = ("t0", "fhr")
-    base_dims = ("y", "x")
+    horizontal_dims = ("y", "x")
     file_suffixes = ("sfc", "prs")
     static_vars = ("lsm", "orog")
 

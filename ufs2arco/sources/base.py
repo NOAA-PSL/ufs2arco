@@ -14,7 +14,7 @@ class Source:
 
     # fill these out per subclass
     sample_dims = tuple()
-    base_dims = tuple()
+    horizontal_dims = tuple()
     static_vars = tuple()
     available_variables = tuple()
     available_levels = tuple()
@@ -22,7 +22,7 @@ class Source:
     @property
     def rename(self) -> dict:
         """
-        Use this to map to the dimensions in sample_dims + base_dims
+        Use this to map whatever the original source is to the ufs2arco standards...which need to be documented
         """
         return dict()
 

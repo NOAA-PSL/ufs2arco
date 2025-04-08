@@ -22,7 +22,7 @@ class RDAGFSArchive(NOAAGribForecastData, Source):
     """
 
     sample_dims = ("t0", "fhr")
-    base_dims = ("latitude", "longitude")
+    horizontal_dims = ("latitude", "longitude")
     file_suffixes = ("", "b")
     static_vars = ("lsm", "orog")
 

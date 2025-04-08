@@ -13,7 +13,7 @@ class AWSGEFSArchive(NOAAGribForecastData, Source):
     """Access NOAA's forecast archive from the Global Ensemble Forecast System (GEFS) at s3://noaa-gefs-pds."""
 
     sample_dims = ("t0", "fhr", "member")
-    base_dims = ("latitude", "longitude")
+    horizontal_dims = ("latitude", "longitude")
     file_suffixes = ("a", "b")
     static_vars = ("lsm", "orog")
 

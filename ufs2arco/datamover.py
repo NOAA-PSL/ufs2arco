@@ -192,7 +192,7 @@ class DataMover():
                 attrs=xds[key].attrs.copy(),
             )
 
-        # these will be the base_dims, we read these in each sample
+        # these will be the the verical dim + horizontal_dims, we read these in each sample
         for key in xds.dims:
             if key not in self.target.renamed_sample_dims:
                 nds[key] = xds[key].copy()
