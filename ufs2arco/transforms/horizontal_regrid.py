@@ -25,6 +25,9 @@ def horizontal_regrid(
     kw = {} if open_target_kwargs is None else open_target_kwargs
     ds_out = xr.open_dataset(target_grid_path, **kw)
 
+    # required for xesmf
+    xds = xds.rename({"longitude": "lon", "latitude": "lat"})
+
     # for the first time, we have to compute the regridder weights no matter what
     # so, figure out if we have the file or not
     kw = regridder_kwargs.copy()
@@ -40,7 +43,6 @@ def horizontal_regrid(
         logger.info(f"ufs2arco.transforms.horizontal_regrid: couldn't find xesmf weights filename {filename}, they'll be computed now.")
 
     # check if bounds are there
-    xds = xds.rename({"longitude": "lon", "latitude": "lat"})
     if "lat_b" not in xds and "lon_b" not in xds:
         if not os.path.isfile(filename):
             logger.info(f"ufs2arco.transforms.horizontal_regrid: did not find 'lat_b' or 'lon_b' in source, computing bounds.")
