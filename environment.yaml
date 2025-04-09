@@ -13,6 +13,7 @@ dependencies:
     - zarr<3
     - cfgrib
     - bottleneck
+    - flox
     - dask[complete]
     - fsspec
     - s3fs
@@ -26,7 +27,7 @@ dependencies:
     - nbsphinx
     - sphinx-book-theme
 # regrid
-    - xesmf
+    - xesmf>=0.8.8
 # developer
     - setuptools_scm>=8
     - pytest

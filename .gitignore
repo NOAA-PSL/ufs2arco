@@ -1,5 +1,7 @@
 # Additions
 .DS_Store
+*.nc
+*.zarr
 
 
 # Byte-compiled / optimized / DLL files

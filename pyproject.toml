@@ -22,6 +22,7 @@ dependencies = [
     "zarr<3",
     "cfgrib",
     "bottleneck",
+    "flox",
     "dask[complete]",
     "fsspec",
     "s3fs",
@@ -33,7 +34,7 @@ documentation = [
     "jupyter", "nbsphinx", "sphinx-book-theme", "matplotlib",
 ]
 regrid = [
-    "xesmf",
+    "xesmf>=0.8.8",
 ]
 mpi = [
     "mpi4py",

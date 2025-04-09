@@ -2,8 +2,9 @@ import logging
 
 import xarray as xr
 
-from ufs2arco.transforms.vertical_regrid import fv_vertical_regrid
+from ufs2arco.transforms.horizontal_regrid import horizontal_regrid
 from ufs2arco.transforms.mappings import get_available_mappings, apply_mappings
+from ufs2arco.transforms.vertical_regrid import fv_vertical_regrid
 
 logger = logging.getLogger("ufs2arco")
 
@@ -15,6 +16,7 @@ class Transformer:
             "multiply",
             "divide",
             "fv_vertical_regrid",
+            "horizontal_regrid",
             "mappings",
         )
 
@@ -73,6 +75,9 @@ class Transformer:
 
         if "fv_vertical_regrid" in self.names:
             xds = fv_vertical_regrid(xds, **self.options["fv_vertical_regrid"])
+
+        if "horizontal_regrid" in self.names:
+            xds = horizontal_regrid(xds, **self.options["horizontal_regrid"])
 
         if "mappings" in self.names:
             xds = apply_mappings(xds, self.options["mappings"])
