@@ -12,6 +12,8 @@ from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
 _local_path = os.path.dirname(__file__)
+_sources = ["replay", "gfs", "gefs", "hrrr", "era5"]
+_targets = ["base", "anemoi"]
 
 def setup_test_log():
     logger.setLevel(logging.INFO)
@@ -157,34 +159,19 @@ def setup_logging():
     setup_test_log()
 
 @pytest.mark.dependency()
-@pytest.mark.parametrize(
-    "source,target", [
-        ("replay", "base"),
-        ("replay", "anemoi"),
-        ("gfs", "base"),
-        ("gfs", "anemoi"),
-        ("hrrr", "base"),
-        ("hrrr", "anemoi"),
-        ("gefs", "base"),
-        ("gefs", "anemoi"),
-        ("era5", "base"),
-        ("era5", "anemoi"),
-    ],
-)
+@pytest.mark.parametrize("source", _sources)
+@pytest.mark.parametrize("target", _targets)
 def test_this_combo(source, target):
-
     run_test(source, target)
 
-@pytest.mark.dependency(depends=["test_this_combo"])
-@pytest.mark.parametrize(
-    "source", [
-        "replay",
-        "gfs",
-        "gefs",
-        "hrrr",
-        "era5",
-    ],
+@pytest.mark.dependency(
+    depends=[
+        f"test_this_combo[{source}-{target}]"
+        for source in _sources
+        for target in _targets
+    ]
 )
+@pytest.mark.parametrize("source", _sources)
 def test_flattened_base_equals_anemoi(source):
     ds = xr.open_zarr(os.path.join(_local_path, source, "base", "dataset.zarr"))
     if "pressure" in ds.dims:
