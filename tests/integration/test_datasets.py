@@ -30,6 +30,18 @@ def setup_test_log():
     # Ensure the test logger does not propagate messages to the root logger
     logger.propagate = False
 
+
+@pytest.mark.dependency()
+def create_regrid_target_grid():
+    import xesmf
+    ds = xesmf.util.grid_global(1, 1, cf=True, lon1=360)
+    ds = ds.drop_vars("latitude_longitude")
+
+    # GFS goes north -> south
+    ds = ds.sortby("lat", ascending=False)
+
+    ds.to_netcdf(f"{_local_path}/global_one_degree.nc")
+
 def run_test(source, target):
     logger.info(f"Starting Test: {source} {target}")
 
@@ -138,7 +150,7 @@ def _test_static_vars(source, target, store):
 def setup_logging():
     setup_test_log()
 
-@pytest.mark.dependency()
+@pytest.mark.dependency(depends=["create_regrid_target_grid"])
 @pytest.mark.parametrize(
     "source,target", [
         ("replay", "base"),
