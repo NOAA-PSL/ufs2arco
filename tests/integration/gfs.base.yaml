@@ -16,7 +16,7 @@ mover:
   batch_size: 2
 
 directories:
-  zarr: dataset.zarr
+  zarr: nest.zarr
   cache: cache
   logs: logs
 
@@ -47,7 +47,15 @@ source:
 
   slices:
     sel:
-      latitude: [89.5, -89.5]
+      latitude: [89.9, -89.9]
+
+transforms:
+  horizontal_regrid:
+    target_grid_path: /home/tsmith/work/ufs2arco/tests/integration/one_degree_target.nc
+    regridder_kwargs:
+      method: conservative
+      reuse_weights: True
+
 
 target:
   name: forecast
