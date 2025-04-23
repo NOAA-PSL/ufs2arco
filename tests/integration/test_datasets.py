@@ -31,7 +31,6 @@ def setup_test_log():
     logger.propagate = False
 
 
-@pytest.mark.dependency()
 def create_regrid_target_grid():
     import xesmf
     ds = xesmf.util.grid_global(1, 1, cf=True, lon1=360)
@@ -150,7 +149,7 @@ def _test_static_vars(source, target, store):
 def setup_logging():
     setup_test_log()
 
-@pytest.mark.dependency(depends=["create_regrid_target_grid"])
+@pytest.mark.dependency()
 @pytest.mark.parametrize(
     "source,target", [
         ("replay", "base"),
@@ -166,6 +165,8 @@ def setup_logging():
     ],
 )
 def test_this_combo(source, target):
+    if source == "gfs":
+        create_regrid_target_grid()
     run_test(source, target)
 
 @pytest.mark.dependency(depends=["test_this_combo"])
