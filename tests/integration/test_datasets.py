@@ -178,7 +178,7 @@ def test_flattened_base_equals_anemoi(source):
         ds = ds.rename({"pressure": "level"})
     if "t0" in ds.dims:
         ds = ds.rename({"t0": "time"})
-        ds = ds.isel(fhr=0, drop=True)
+        ds = ds.sel(fhr=0, drop=True)
     ads = xr.open_zarr(os.path.join(_local_path, source, "anemoi", "dataset.zarr"))
 
     for key in ds.data_vars:
@@ -190,7 +190,7 @@ def test_flattened_base_equals_anemoi(source):
                 for itime in ads.time.values:
                     np.testing.assert_allclose(
                         ds[key].isel(time=itime).sel(level=level).squeeze().values.flatten(),
-                        ads["data"].sel(variable=idx, time=itime).squeeze().values,
+                        ads["data"].sel(variable=idx, time=itime).squeeze().values.flatten(),
                     )
         else:
             idx = ads.attrs["variables"].index(key)
@@ -198,5 +198,5 @@ def test_flattened_base_equals_anemoi(source):
                 xda = ds[key].isel(time=itime) if "time" in ds[key].dims else ds[key]
                 np.testing.assert_allclose(
                     xda.squeeze().values.flatten(),
-                    ads["data"].sel(variable=idx, time=itime).squeeze().values,
+                    ads["data"].sel(variable=idx, time=itime).squeeze().values.flatten(),
                 )
