@@ -12,6 +12,8 @@ from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
 _local_path = os.path.dirname(__file__)
+_sources = ["replay", "gfs", "gefs", "hrrr", "era5"]
+_targets = ["base", "anemoi"]
 
 def setup_test_log():
     logger.setLevel(logging.INFO)
@@ -29,6 +31,17 @@ def setup_test_log():
 
     # Ensure the test logger does not propagate messages to the root logger
     logger.propagate = False
+
+
+def create_regrid_target_grid(filepath):
+    import xesmf
+    ds = xesmf.util.grid_global(1, 1, cf=True, lon1=360)
+    ds = ds.drop_vars("latitude_longitude")
+
+    # GFS goes north -> south
+    ds = ds.sortby("lat", ascending=False)
+
+    ds.to_netcdf(filepath)
 
 def run_test(source, target):
     logger.info(f"Starting Test: {source} {target}")
@@ -50,9 +63,16 @@ def run_test(source, target):
         os.makedirs(test_dir)
         logger.info(f"Creating {test_dir}")
 
+    # prepend directories and filenames with test directory path
     for key in config["directories"].keys():
         val = config["directories"][key]
         config["directories"][key] = os.path.join(test_dir, val)
+
+    if "horizontal_regrid" in config.get("transforms", {}):
+        filepath = config["transforms"]["horizontal_regrid"]["target_grid_path"]
+        filepath = os.path.join(test_dir, filepath)
+        config["transforms"]["horizontal_regrid"]["target_grid_path"] = filepath
+        create_regrid_target_grid(filepath)
 
     # write a specific config
     config_filename = os.path.join(test_dir, "config.yaml")
@@ -139,40 +159,26 @@ def setup_logging():
     setup_test_log()
 
 @pytest.mark.dependency()
-@pytest.mark.parametrize(
-    "source,target", [
-        ("replay", "base"),
-        ("replay", "anemoi"),
-        ("gfs", "base"),
-        ("gfs", "anemoi"),
-        ("hrrr", "base"),
-        ("hrrr", "anemoi"),
-        ("gefs", "base"),
-        ("gefs", "anemoi"),
-        ("era5", "base"),
-        ("era5", "anemoi"),
-    ],
-)
+@pytest.mark.parametrize("target", _targets)
+@pytest.mark.parametrize("source", _sources)
 def test_this_combo(source, target):
     run_test(source, target)
 
-@pytest.mark.dependency(depends=["test_this_combo"])
-@pytest.mark.parametrize(
-    "source", [
-        "replay",
-        "gfs",
-        "gefs",
-        "hrrr",
-        "era5",
-    ],
+@pytest.mark.dependency(
+    depends=[
+        f"test_this_combo[{source}-{target}]"
+        for source in _sources
+        for target in _targets
+    ]
 )
+@pytest.mark.parametrize("source", _sources)
 def test_flattened_base_equals_anemoi(source):
     ds = xr.open_zarr(os.path.join(_local_path, source, "base", "dataset.zarr"))
     if "pressure" in ds.dims:
         ds = ds.rename({"pressure": "level"})
     if "t0" in ds.dims:
         ds = ds.rename({"t0": "time"})
-        ds = ds.isel(fhr=0, drop=True)
+        ds = ds.sel(fhr=0, drop=True)
     ads = xr.open_zarr(os.path.join(_local_path, source, "anemoi", "dataset.zarr"))
 
     for key in ds.data_vars:
@@ -184,13 +190,15 @@ def test_flattened_base_equals_anemoi(source):
                 for itime in ads.time.values:
                     np.testing.assert_allclose(
                         ds[key].isel(time=itime).sel(level=level).squeeze().values.flatten(),
-                        ads["data"].sel(variable=idx, time=itime).squeeze().values,
+                        ads["data"].sel(variable=idx, time=itime).squeeze().values.flatten(),
                     )
         else:
             idx = ads.attrs["variables"].index(key)
             for itime in ads.time.values:
-                xda = ds[key].isel(time=itime) if "time" in ds[key].dims else ds[key]
-                np.testing.assert_allclose(
-                    xda.squeeze().values.flatten(),
-                    ads["data"].sel(variable=idx, time=itime).squeeze().values,
-                )
+                for imember in ads.ensemble.values:
+                    xda = ds[key].isel(time=itime) if "time" in ds[key].dims else ds[key]
+                    xda = xda.isel(member=imember) if "member" in ds[key].dims else xda
+                    np.testing.assert_allclose(
+                        xda.squeeze().values.flatten(),
+                        ads["data"].sel(variable=idx, time=itime, ensemble=imember).squeeze().values.flatten(),
+                    )

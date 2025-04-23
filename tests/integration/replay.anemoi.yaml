@@ -3,7 +3,6 @@
 # - serial
 # Source:
 # - analysis template
-# - level selection using nearest value
 # - static variables
 # Transform:
 # - fv_vertical_regrid
@@ -40,24 +39,9 @@ source:
     - spfh
     - spfh2m
 
-  levels:
-    - 100
-    - 150
-    - 200
-    - 250
-    - 300
-    - 350
-    - 400
-    - 450
-    - 500
-    - 550
-    - 600
-    - 650
-    - 700
-    - 850
-    - 1000
-
-  use_nearest_levels: True
+  slices:
+    sel:
+      level: [200, 1000]
 
 transforms:
   fv_vertical_regrid:

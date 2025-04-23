@@ -13,6 +13,7 @@ dependencies:
     - zarr<3
     - cfgrib
     - bottleneck
+    - flox
     - dask[complete]
     - fsspec
     - s3fs
