@@ -31,7 +31,7 @@ def setup_test_log():
     logger.propagate = False
 
 
-def create_regrid_target_grid():
+def create_regrid_target_grid(filepath):
     import xesmf
     ds = xesmf.util.grid_global(1, 1, cf=True, lon1=360)
     ds = ds.drop_vars("latitude_longitude")
@@ -39,7 +39,7 @@ def create_regrid_target_grid():
     # GFS goes north -> south
     ds = ds.sortby("lat", ascending=False)
 
-    ds.to_netcdf(f"global_one_degree.nc")
+    ds.to_netcdf(filepath)
 
 def run_test(source, target):
     logger.info(f"Starting Test: {source} {target}")
@@ -67,8 +67,10 @@ def run_test(source, target):
         config["directories"][key] = os.path.join(test_dir, val)
 
     if "horizontal_regrid" in config.get("transforms", {}):
-        tgp = config["transforms"]["horizontal_regrid"]["target_grid_path"]
-        config["transforms"]["horizontal_regrid"]["target_grid_path"] = os.path.join(test_dir, tgp)
+        filepath = config["transforms"]["horizontal_regrid"]["target_grid_path"]
+        filepath = os.path.join(test_dir, filepath)
+        config["transforms"]["horizontal_regrid"]["target_grid_path"] = filepath
+        create_regrid_target_grid(filepath)
 
     # write a specific config
     config_filename = os.path.join(test_dir, "config.yaml")
@@ -170,8 +172,7 @@ def setup_logging():
     ],
 )
 def test_this_combo(source, target):
-    if source == "gfs":
-        create_regrid_target_grid()
+
     run_test(source, target)
 
 @pytest.mark.dependency(depends=["test_this_combo"])
