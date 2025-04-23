@@ -159,8 +159,8 @@ def setup_logging():
     setup_test_log()
 
 @pytest.mark.dependency()
-@pytest.mark.parametrize("source", _sources)
 @pytest.mark.parametrize("target", _targets)
+@pytest.mark.parametrize("source", _sources)
 def test_this_combo(source, target):
     run_test(source, target)
 
