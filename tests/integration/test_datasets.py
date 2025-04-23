@@ -31,7 +31,7 @@ def setup_test_log():
     logger.propagate = False
 
 
-def create_regrid_target_grid():
+def create_regrid_target_grid(source, target):
     import xesmf
     ds = xesmf.util.grid_global(1, 1, cf=True, lon1=360)
     ds = ds.drop_vars("latitude_longitude")
@@ -39,7 +39,7 @@ def create_regrid_target_grid():
     # GFS goes north -> south
     ds = ds.sortby("lat", ascending=False)
 
-    ds.to_netcdf(f"global_one_degree.nc", mode="w")
+    ds.to_netcdf(f"global_one_degree.{source}.{target}.nc")
 
 def run_test(source, target):
     logger.info(f"Starting Test: {source} {target}")
@@ -166,7 +166,7 @@ def setup_logging():
 )
 def test_this_combo(source, target):
     if source == "gfs":
-        create_regrid_target_grid()
+        create_regrid_target_grid(source, target)
     run_test(source, target)
 
 @pytest.mark.dependency(depends=["test_this_combo"])
