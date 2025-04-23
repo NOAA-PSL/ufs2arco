@@ -24,7 +24,7 @@ class AWSHRRRArchive(NOAAGribForecastData, Source):
     sample_dims = ("t0", "fhr")
     horizontal_dims = ("y", "x")
     file_suffixes = ("sfc", "prs")
-    static_vars = ("orog")
+    static_vars = ("orog",)
 
     @property
     def available_levels(self) -> tuple:
