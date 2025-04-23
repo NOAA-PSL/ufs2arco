@@ -27,7 +27,7 @@ dependencies:
     - nbsphinx
     - sphinx-book-theme
 # regrid
-    - xesmf>=0.8.8
+    - xesmf
 # developer
     - setuptools_scm>=8
     - pytest

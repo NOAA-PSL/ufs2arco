@@ -34,7 +34,7 @@ documentation = [
     "jupyter", "nbsphinx", "sphinx-book-theme", "matplotlib",
 ]
 regrid = [
-    "xesmf>=0.8.8",
+    "xesmf",
 ]
 mpi = [
     "mpi4py",
