@@ -6,6 +6,8 @@
 # - level selection
 # - latitude .sel slicing
 # - static variables
+# Transforms:
+# - conservative horizontal regridding
 # Target:
 # - base workflow for ensemble forecast
 # - rename

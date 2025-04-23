@@ -6,6 +6,8 @@
 # - level selection
 # - latitude .sel slicing
 # - static variables
+# Transforms:
+# - conservative horizontal regridding
 # Target:
 # - anemoi workflow for deterministic forecast
 # - rename
@@ -49,7 +51,15 @@ source:
 
   slices:
     sel:
-      latitude: [89.5, -89.5]
+      latitude: [89.9, -89.9]
+
+transforms:
+  horizontal_regrid:
+    target_grid_path: global_one_degree.nc
+    regridder_kwargs:
+      method: conservative
+      reuse_weights: True
+
 
 target:
   name: anemoi
