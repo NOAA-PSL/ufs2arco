@@ -16,7 +16,7 @@ mover:
   batch_size: 2
 
 directories:
-  zarr: nest.zarr
+  zarr: dataset.zarr
   cache: cache
   logs: logs
 
