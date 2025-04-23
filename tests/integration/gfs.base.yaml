@@ -51,7 +51,7 @@ source:
 
 transforms:
   horizontal_regrid:
-    target_grid_path: ./global_one_degree.nc
+    target_grid_path: global_one_degree.nc
     regridder_kwargs:
       method: conservative
       reuse_weights: True

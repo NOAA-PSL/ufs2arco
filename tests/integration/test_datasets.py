@@ -39,7 +39,7 @@ def create_regrid_target_grid():
     # GFS goes north -> south
     ds = ds.sortby("lat", ascending=False)
 
-    ds.to_netcdf(f"{_local_path}/global_one_degree.nc")
+    ds.to_netcdf(f"global_one_degree.nc")
 
 def run_test(source, target):
     logger.info(f"Starting Test: {source} {target}")
