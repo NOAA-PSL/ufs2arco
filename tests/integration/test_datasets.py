@@ -195,8 +195,10 @@ def test_flattened_base_equals_anemoi(source):
         else:
             idx = ads.attrs["variables"].index(key)
             for itime in ads.time.values:
-                xda = ds[key].isel(time=itime) if "time" in ds[key].dims else ds[key]
-                np.testing.assert_allclose(
-                    xda.squeeze().values.flatten(),
-                    ads["data"].sel(variable=idx, time=itime).squeeze().values.flatten(),
-                )
+                for imember in ads.ensemble.values:
+                    xda = ds[key].isel(time=itime) if "time" in ds[key].dims else ds[key]
+                    xda = xda.isel(member=imember) if "member" in ds[key].dims else xda
+                    np.testing.assert_allclose(
+                        xda.squeeze().values.flatten(),
+                        ads["data"].sel(variable=idx, time=itime, ensemble=imember).squeeze().values.flatten(),
+                    )
