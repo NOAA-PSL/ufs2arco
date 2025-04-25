@@ -165,6 +165,7 @@ class NOAAGribForecastData:
             file,
             engine="cfgrib",
             filter_by_keys=self._filter_by_keys[varname],
+            decode_timedelta=True,
         )
         xda = xds[varname]
 
