@@ -101,7 +101,7 @@ def run_test(source, target):
     logger.info(f" ... Test Passed")
 
 def _test_static_vars(source, target, store):
-    ds = xr.open_zarr(store)
+    ds = xr.open_zarr(store, decode_timedelta=True)
 
     lsm = {
         "gefs": "lsm",
@@ -173,13 +173,13 @@ def test_this_combo(source, target):
 )
 @pytest.mark.parametrize("source", _sources)
 def test_flattened_base_equals_anemoi(source):
-    ds = xr.open_zarr(os.path.join(_local_path, source, "base", "dataset.zarr"))
+    ds = xr.open_zarr(os.path.join(_local_path, source, "base", "dataset.zarr"), decode_timedelta=True)
     if "pressure" in ds.dims:
         ds = ds.rename({"pressure": "level"})
     if "t0" in ds.dims:
         ds = ds.rename({"t0": "time"})
         ds = ds.sel(fhr=0, drop=True)
-    ads = xr.open_zarr(os.path.join(_local_path, source, "anemoi", "dataset.zarr"))
+    ads = xr.open_zarr(os.path.join(_local_path, source, "anemoi", "dataset.zarr"), decode_timedelta=True)
 
     for key in ds.data_vars:
 
