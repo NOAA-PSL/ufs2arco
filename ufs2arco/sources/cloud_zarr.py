@@ -36,6 +36,7 @@ class CloudZarrData(Source):
         xds = xr.open_zarr(
             uri,
             storage_options={"token": "anon"},
+            decode_timedelta=True,
         )
         self._xds = xds.rename(self.rename)
 

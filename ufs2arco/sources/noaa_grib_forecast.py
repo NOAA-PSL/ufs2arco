@@ -165,6 +165,7 @@ class NOAAGribForecastData:
             file,
             engine="cfgrib",
             filter_by_keys=self._filter_by_keys[varname],
+            decode_timedelta=True,
         )
         xda = xds[varname]
 
@@ -217,7 +218,7 @@ class NOAAGribForecastData:
             # handle lead_time/fhr coordinates
             xds = xds.expand_dims(["t0", "lead_time"])
             xds["fhr"] = xr.DataArray(
-                int(xds["lead_time"].values / 1e9 / 3600),
+                [int(lt / 1e9 / 3600) for lt in xds["lead_time"].values],
                 coords=xds["lead_time"].coords,
                 attrs={
                     "long_name": "hours since initial time",
