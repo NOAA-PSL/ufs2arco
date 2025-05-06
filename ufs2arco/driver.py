@@ -216,6 +216,14 @@ class Driver:
 
         topo.barrier()
         logger.info(f"Done moving the data\n")
+
+        if self.config["target"].get("name", "base") == "anemoi":
+            logger.info(f"Computing temporal increment statistics")
+            target._calc_temporal_increment_stats(topo)
+            logger.info(f"Done")
+
+
+
         logger.info(f"Aggregating statistics (if any specified for target)")
         if topo.is_root:
             target.aggregate_stats()

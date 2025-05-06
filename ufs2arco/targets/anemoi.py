@@ -3,6 +3,8 @@ from typing import Optional
 from copy import deepcopy
 import re
 
+from mpi4py import MPI
+
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -539,3 +541,36 @@ class Anemoi(Target):
             logger.info(f"{self.name}.aggregate_stats: Removing temporary version {key}")
             del zds[key]
         zarr.consolidate_metadata(self.store_path)
+
+    def _calc_temporal_increment_stats(self, topo):
+
+        xds = xr.open_zarr(self.store_path)
+        time_indices = np.array_split(np.arange(len(xds["time"])), topo.size)
+        local_indices = time_indices[topo.rank]
+
+        if local_indices.size > 0:
+            logger.info(f"{self.name}.calc_temporal_increment_stats: Computing temporal diff on rank {topo.rank}")
+            mdims = [d for d in xds["data"].dims if d not in ("variable", "time")]
+            lds = xds.isel(time=local_indices)
+            local_residual_variance = (lds["data"].diff("time")**2).mean(mdims).sum("time").compute()
+            local_count = len(lds.time)
+        else:
+            local_residual_variance = xr.zeros_like(xds["variable"])
+            local_count = 0
+
+        logger.info(f"{self.name}.calc_temporal_increment_stats: reduce 1")
+        residual_variance = topo.comm.reduce(local_residual_variance, op=MPI.SUM, root=topo.root)
+        logger.info(f"{self.name}.calc_temporal_increment_stats: reduce 2")
+        global_count = topo.comm.reduce(local_count, op=MPI.SUM, root=topo.root)
+
+        nds = xr.Dataset()
+        nds["residual_stdev"] = np.sqrt(residual_variance / global_count)
+
+        # compute geomtric mean by log-exp trick (since scipy isn't a dependency to ufs2arco)
+        denominator = np.exp(np.log(xds["residual_stdev"]).mean("variable"))
+        nds["gmean_residual_stdev"] = xds["residual_stdev"] / denominator
+
+        if topo.is_root:
+            logger.info(f"{self.name}.calc_temporal_increment_stats: storing temporal stats")
+            nds.to_zarr(self.store_path, mode="a")
+        topo.barrier()
