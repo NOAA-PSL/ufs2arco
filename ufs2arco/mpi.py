@@ -95,6 +95,7 @@ class MPITopology:
         """
         self.comm.Barrier()
 
+
 class SerialTopology:
     """
     Looks and acts like the MPITopology, but works in cases when mpi is not importable.
@@ -114,6 +115,8 @@ class SerialTopology:
 
         self.root = 0
         self.pid = os.getpid()
+        self.size = 1
+        self.rank = 0
 
         self._init_log(log_dir=log_dir, level=log_level)
         logger.info(str(self))
