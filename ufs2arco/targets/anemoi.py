@@ -3,8 +3,6 @@ from typing import Optional
 from copy import deepcopy
 import re
 
-from mpi4py import MPI
-
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -520,22 +518,12 @@ class Anemoi(Target):
 
         # reduce results
         logger.info(f"{self.name}.aggregate_stats: Communicating results to root")
-        if "MPI" in topo.__class__.__name__:
-            topo.comm.Reduce(local_count, count, op=MPI.SUM, root=topo.root)
-            topo.comm.Reduce(local_has_nans, has_nans, op=MPI.LOR, root=topo.root)
-            topo.comm.Reduce(local_maximum, maximum, op=MPI.MAX, root=topo.root)
-            topo.comm.Reduce(local_minimum, minimum, op=MPI.MIN, root=topo.root)
-            topo.comm.Reduce(local_squares, squares, op=MPI.SUM, root=topo.root)
-            topo.comm.Reduce(local_sums, sums, op=MPI.SUM, root=topo.root)
-
-        else:
-            count = local_count
-            has_nans = local_has_nans
-            maximum = local_maximum
-            minimum = local_minimum
-            squares = local_squares
-            sums = local_sums
-
+        topo.sum(local_count, count)
+        topo.any(local_has_nans, has_nans)
+        topo.max(local_maximum, maximum)
+        topo.min(local_minimum, minimum)
+        topo.sum(local_squares, squares)
+        topo.sum(local_sums, sums)
         logger.info(f"{self.name}.aggregate_stats: ... done communicating")
 
         # the rest is done on the root rank

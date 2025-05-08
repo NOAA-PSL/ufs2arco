@@ -95,6 +95,21 @@ class MPITopology:
         """
         self.comm.Barrier()
 
+    def Reduce(self, local_array, result_buffer, op):
+        self.comm.Reduce(local_array, result_buffer, op=op, root=self.root)
+
+    def sum(self, local_array, result_buffer):
+        self.Reduce(local_array, result_buffer, op=MPI.SUM)
+
+    def max(self, local_array, result_buffer):
+        self.Reduce(local_array, result_buffer, op=MPI.MAX)
+
+    def min(self, local_array, result_buffer):
+        self.Reduce(local_array, result_buffer, op=MPI.MIN)
+
+    def any(self, local_array, result_buffer):
+        self.Reduce(local_array, result_buffer, op=MPI.LOR)
+
 
 class SerialTopology:
     """
@@ -149,3 +164,18 @@ class SerialTopology:
 
     def barrier(self) -> None:
         pass
+
+    # since the communication doesn't need to happen
+    # we can assume these results already exist
+    # this is just for code compatibility without mpi
+    def sum(self, local_array, result_buffer):
+        result_buffer = local_array.copy()
+
+    def max(self, local_array, result_buffer):
+        result_buffer = local_array.copy()
+
+    def min(self, local_array, result_buffer):
+        result_buffer = local_array.copy()
+
+    def any(self, local_array, result_buffer):
+        result_buffer = local_array.copy()
