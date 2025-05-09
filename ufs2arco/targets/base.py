@@ -60,6 +60,7 @@ class Target:
         store_path: str,
         rename: Optional[dict] = None,
         forcings: Optional[list | tuple] = None,
+        compute_temporal_residual_statistics: Optional[bool] = False,
     ) -> None:
         """
         Initialize the GEFSDataset object.
@@ -69,6 +70,7 @@ class Target:
             chunks (dict): Dictionary with chunk sizes for Dask arrays.
             store_path (str): Path to store the output data.
             rename (dict, optional): rename variables
+            compute_temporal_residual_statistics: (bool, optional): if True, compute statistics of the temporal difference
         """
         self.source = source
         self.store_path = store_path
@@ -97,6 +99,12 @@ class Target:
             self.forcings = forcings
         else:
             self.forcings = tuple()
+
+        # temporal residual statistics
+        # For now, only implemented in anemoi target
+        if "anemoi" not in self.name.lower() and compute_temporal_residual_statistics:
+            raise NotImplementedError(f"{self.name}.__init__: computation of temporal residual statistics not implemented for this target")
+        self.compute_temporal_residual_statistics = compute_temporal_residual_statistics
 
         logger.info(str(self))
 
@@ -199,8 +207,11 @@ class Target:
         xds = self.source.add_full_extra_coords(xds)
         return xds
 
-    def aggregate_stats(self) -> None:
+    def aggregate_stats(self, topo) -> None:
         """Aggregate statistics over "time" and "ensemble" dimension...
         This should read in the zarr store, aggregate stats, and delete any temporary arrays from the zarr store
         """
+        pass
+
+    def calc_temporal_residual_stats(self, topo) -> None:
         pass

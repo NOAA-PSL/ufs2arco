@@ -111,6 +111,7 @@ class Anemoi(Target):
         store_path: str,
         rename: Optional[dict] = None,
         forcings: Optional[tuple | list] = None,
+        compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
     ) -> None:
 
@@ -120,6 +121,7 @@ class Anemoi(Target):
             store_path=store_path,
             rename=rename,
             forcings=forcings,
+            compute_temporal_residual_statistics=compute_temporal_residual_statistics,
         )
 
         self.sort_channels_by_levels = sort_channels_by_levels
@@ -468,7 +470,7 @@ class Anemoi(Target):
         xds["sums_array"] = xds["data"].sum(dims, skipna=self.allow_nans).astype(np.float64)
         return xds
 
-    def aggregate_stats(self) -> None:
+    def aggregate_stats(self, topo) -> None:
         """Aggregate statistics over "time" and "ensemble" dimension...
         I'm assuming that this is relatively inexpensive without the spatial dimension
 
@@ -480,62 +482,129 @@ class Anemoi(Target):
         """
 
         xds = xr.open_zarr(self.store_path)
+        attrs = xds.attrs.copy()
 
-        # first load up the arrays
-        stat_vars = [
-            "count_array",
-            "has_nans_array",
-            "maximum_array",
-            "minimum_array",
-            "squares_array",
-            "sums_array",
-        ]
-        xds = xds[stat_vars]
-        xds = xds.load()
+        dims = ["time", "ensemble"]
+        time_indices = np.array_split(np.arange(len(xds["time"])), topo.size)
+        local_indices = time_indices[topo.rank]
 
-        logger.info(f"{self.name}.aggregate_stats: Loaded temporary stats arrays")
+        vidx = xds["variable"].values
+        count = np.zeros_like(vidx, dtype=xds["count_array"].dtype)
+        has_nans = np.full_like(vidx, fill_value=False, dtype=xds["has_nans_array"].dtype)
+        maximum = np.full_like(vidx, fill_value=-np.inf, dtype=xds["maximum_array"].dtype)
+        minimum = np.full_like(vidx, fill_value=np.inf, dtype=xds["minimum_array"].dtype)
+        squares = np.zeros_like(vidx, dtype=xds["squares_array"].dtype)
+        sums = np.zeros_like(vidx, dtype=xds["sums_array"].dtype)
 
-        # the easy ones
-        xds["count"] = xds["count_array"].sum(["time", "ensemble"])
-        xds["has_nans"] = xds["has_nans_array"].any(["time", "ensemble"])
-        xds["maximum"] = xds["maximum_array"].max(["time", "ensemble"])
-        xds["minimum"] = xds["minimum_array"].min(["time", "ensemble"])
-        xds["squares"] = xds["squares_array"].sum(["time", "ensemble"])
-        xds["sums"] = xds["sums_array"].sum(["time", "ensemble"])
+        logger.info(f"{self.name}.aggregate_stats: Performing local computations")
+        if local_indices.size > 0:
 
-        # now add mean & stdev
-        xds["mean"] = xds["sums"] / xds["count"]
-        variance = xds["squares"] / xds["count"] - xds["mean"]**2
-        xds["stdev"] = xr.where(variance >= 0, np.sqrt(variance), 0.)
+            lds = xds.isel(time=local_indices)
+            local_count = lds["count_array"].sum(dims).compute().values
+            local_has_nans = lds["has_nans_array"].any(dims).compute().values
+            local_maximum = lds["maximum_array"].max(dims).compute().values
+            local_minimum = lds["minimum_array"].min(dims).compute().values
+            local_squares = lds["squares_array"].sum(dims).compute().values
+            local_sums = lds["sums_array"].sum(dims).compute().values
 
-        # ...and now we deal with the dates issue
-        # for some reason, it is a challenge to get the datetime64 dtype to open
-        # consistently between zarr and xarray, and
-        # it is much easier to deal with this all at once here
-        # than in the create_container and incrementally fill workflow.
-        xds["dates"] = xr.DataArray(
-            self.datetime,
-            coords=xds.time.coords,
-        )
-        xds["dates"].encoding = {
-            "dtype": "datetime64[s]",
-            "units": "seconds since 1970-01-01",
-        }
+        else:
 
-        # store it
-        xds.to_zarr(self.store_path, mode="a")
-        logger.info(f"{self.name}.aggregate_stats: Stored aggregated stats")
+            local_count = count.copy()
+            local_has_nans = has_nans.copy()
+            local_maximum = maximum.copy()
+            local_minimum = minimum.copy()
+            local_squares = squares.copy()
+            local_sums = sums.copy()
 
-        # now remove the temp versions
-        zds = zarr.open(self.store_path, mode="a")
-        for key in [
-            "count_array",
-            "has_nans_array",
-            "maximum_array",
-            "minimum_array",
-            "squares_array",
-            "sums_array",
-        ]:
-            logger.info(f"{self.name}.aggregate_stats: Removing temporary version {key}")
-            del zds[key]
-        zarr.consolidate_metadata(self.store_path)
+
+        # reduce results
+        logger.info(f"{self.name}.aggregate_stats: Communicating results to root")
+        topo.sum(local_count, count)
+        topo.any(local_has_nans, has_nans)
+        topo.max(local_maximum, maximum)
+        topo.min(local_minimum, minimum)
+        topo.sum(local_squares, squares)
+        topo.sum(local_sums, sums)
+        logger.info(f"{self.name}.aggregate_stats: ... done communicating")
+
+        # the rest is done on the root rank
+        if topo.is_root:
+            nds = xr.Dataset()
+            kw = {"coords": xds["variable"].coords}
+            nds["count"] = xr.DataArray(count, **kw)
+            nds["has_nans"] = xr.DataArray(has_nans, **kw)
+            nds["maximum"] = xr.DataArray(maximum, **kw)
+            nds["minimum"] = xr.DataArray(minimum, **kw)
+            nds["squares"] = xr.DataArray(squares, **kw)
+            nds["sums"] = xr.DataArray(sums, **kw)
+
+            # now add mean & stdev
+            nds["mean"] = nds["sums"] / nds["count"]
+            variance = nds["squares"] / nds["count"] - nds["mean"]**2
+            nds["stdev"] = xr.where(variance >= 0, np.sqrt(variance), 0.)
+
+            # ...and now we deal with the dates issue
+            # for some reason, it is a challenge to get the datetime64 dtype to open
+            # consistently between zarr and xarray, and
+            # it is much easier to deal with this all at once here
+            # than in the create_container and incrementally fill workflow.
+            nds["dates"] = xr.DataArray(
+                self.datetime,
+                coords=xds["time"].coords,
+            )
+            nds["dates"].encoding = {
+                "dtype": "datetime64[s]",
+                "units": "seconds since 1970-01-01",
+            }
+
+            # store it, first copying the attributes over
+            nds.attrs = attrs
+            nds.to_zarr(self.store_path, mode="a")
+            logger.info(f"{self.name}.aggregate_stats: Stored aggregated stats")
+
+        # unclear if this barrier is necessary...
+        topo.barrier()
+
+
+    def calc_temporal_residual_stats(self, topo):
+
+        xds = xr.open_zarr(self.store_path)
+        attrs = xds.attrs.copy()
+
+        data_diff = xds["data"].diff("time")
+        n_time = len(data_diff["time"])
+        time_indices = np.array_split(np.arange(len(data_diff["time"])), topo.size)
+        local_indices = time_indices[topo.rank]
+
+        residual_variance = np.zeros_like(xds["variable"].values, dtype=np.float64)
+
+        logger.info(f"{self.name}.calc_temporal_residual_stats: Performing local computations")
+        if local_indices.size > 0:
+            mdims = [d for d in xds["data"].dims if d not in ("variable", "time")]
+            local_data_diff = data_diff.isel(time=local_indices)
+            local_residual_variance = (local_data_diff**2).mean(mdims).sum("time").compute().values
+            local_residual_variance /= n_time
+        else:
+            local_residual_variance = residual_variance.copy()
+
+        logger.info(f"{self.name}.calc_temporal_residual_stats: Communicating results to root")
+        topo.sum(local_residual_variance, residual_variance)
+
+        logger.info(f"{self.name}.calc_temporal_residual_stats: ... done communicating")
+
+        if topo.is_root:
+            nds = xr.Dataset()
+            nds.attrs = attrs
+            nds["residual_stdev"] = xr.DataArray(np.sqrt(residual_variance), coords=xds["variable"].coords)
+
+            # compute geomtric mean by log-exp trick (since scipy isn't a dependency to ufs2arco)
+            # ignore 0 values, since this is probably from static variables
+            rstdev = nds["residual_stdev"].where(nds["residual_stdev"] > 0)
+            denominator = np.exp(np.log(rstdev).mean("variable").values)
+            nds["gmean_residual_stdev"] = nds["residual_stdev"] / denominator
+
+            nds.to_zarr(self.store_path, mode="a")
+            logger.info(f"{self.name}.calc_temporal_residual_stats: Stored temporal residual stats")
+
+        # unclear if this barrier is necessary
+        topo.barrier()

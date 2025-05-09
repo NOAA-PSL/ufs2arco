@@ -11,6 +11,7 @@
 # - log mapping, with variables as a list
 # Target:
 # - base workflow for analysis
+# - compute temporal residual statistics
 # - forcings computation
 mover:
   name: datamover
@@ -62,6 +63,7 @@ transforms:
 
 target:
   name: anemoi
+  compute_temporal_residual_statistics: True
 
   forcings:
     - cos_latitude
