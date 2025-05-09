@@ -207,8 +207,11 @@ class Target:
         xds = self.source.add_full_extra_coords(xds)
         return xds
 
-    def aggregate_stats(self) -> None:
+    def aggregate_stats(self, topo) -> None:
         """Aggregate statistics over "time" and "ensemble" dimension...
         This should read in the zarr store, aggregate stats, and delete any temporary arrays from the zarr store
         """
+        pass
+
+    def calc_temporal_residual_stats(self, topo) -> None:
         pass

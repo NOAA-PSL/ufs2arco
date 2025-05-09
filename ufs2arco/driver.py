@@ -221,10 +221,9 @@ class Driver:
         target.aggregate_stats(topo)
         logger.info(f"Done aggregating statistics\n")
 
-        compute_residual_stats = self.config["target"].get("name", "base") == "anemoi"
         if target.compute_temporal_residual_statistics:
             logger.info(f"Computing temporal residual statistics")
-            target._calc_temporal_increment_stats(topo)
+            target.calc_temporal_residual_stats(topo)
             logger.info(f"Done computing temporal residual statistics")
 
         logger.info(f"Storing the recipe and anything from the 'attrs' section in zarr store attributes")

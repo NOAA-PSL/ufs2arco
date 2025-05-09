@@ -564,7 +564,7 @@ class Anemoi(Target):
         topo.barrier()
 
 
-    def _calc_temporal_increment_stats(self, topo):
+    def calc_temporal_residual_stats(self, topo):
 
         xds = xr.open_zarr(self.store_path)
         attrs = xds.attrs.copy()
