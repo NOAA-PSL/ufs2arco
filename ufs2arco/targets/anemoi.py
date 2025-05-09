@@ -581,7 +581,7 @@ class Anemoi(Target):
         logger.info(f"{self.name}.calc_temporal_residual_stats: Performing local computations")
         if local_indices.size > 0:
             mdims = [d for d in xds["data"].dims if d not in ("variable", "time")]
-            local_data_diff = data_diff.isel(time=local_indices)
+            local_data_diff = data_diff.isel(time=local_indices).astype(np.float64)
             local_residual_variance = (local_data_diff**2).mean(mdims).sum("time").compute().values
             local_residual_variance /= n_time
         else:
