@@ -169,13 +169,13 @@ class SerialTopology:
     # we can assume these results already exist
     # this is just for code compatibility without mpi
     def sum(self, local_array, result_buffer):
-        result_buffer = local_array.copy()
+        result_buffer[:] = local_array
 
     def max(self, local_array, result_buffer):
-        result_buffer = local_array.copy()
+        result_buffer[:] = local_array
 
     def min(self, local_array, result_buffer):
-        result_buffer = local_array.copy()
+        result_buffer[:] = local_array
 
     def any(self, local_array, result_buffer):
-        result_buffer = local_array.copy()
+        result_buffer[:] = local_array
