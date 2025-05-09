@@ -488,12 +488,13 @@ class Anemoi(Target):
         time_indices = np.array_split(np.arange(len(xds["time"])), topo.size)
         local_indices = time_indices[topo.rank]
 
-        count = np.zeros_like(xds["variable"].values, dtype=xds["count_array"].dtype)
-        has_nans = np.full_like(xds["variable"].values, fill_value=False, dtype=xds["has_nans_array"].dtype)
-        maximum = np.full_like(xds["variable"].values, fill_value=-np.inf, dtype=xds["maximum_array"].dtype)
-        minimum = np.full_like(xds["variable"].values, fill_value=np.inf, dtype=xds["minimum_array"].dtype)
-        squares = np.zeros_like(xds["variable"].values, dtype=xds["squares_array"].dtype)
-        sums = np.zeros_like(xds["variable"].values, dtype=xds["sums_array"].dtype)
+        vidx = xds["variable"].values
+        count = np.zeros_like(vidx, dtype=xds["count_array"].dtype)
+        has_nans = np.full_like(vidx, fill_value=False, dtype=xds["has_nans_array"].dtype)
+        maximum = np.full_like(vidx, fill_value=-np.inf, dtype=xds["maximum_array"].dtype)
+        minimum = np.full_like(vidx, fill_value=np.inf, dtype=xds["minimum_array"].dtype)
+        squares = np.zeros_like(vidx, dtype=xds["squares_array"].dtype)
+        sums = np.zeros_like(vidx, dtype=xds["sums_array"].dtype)
 
         logger.info(f"{self.name}.aggregate_stats: Performing local computations")
         if local_indices.size > 0:
@@ -529,12 +530,13 @@ class Anemoi(Target):
         # the rest is done on the root rank
         if topo.is_root:
             nds = xr.Dataset()
-            nds["count"] = xr.DataArray(count, coords=xds.variable.coords)
-            nds["has_nans"] = xr.DataArray(has_nans, coords=xds.variable.coords)
-            nds["maximum"] = xr.DataArray(maximum, coords=xds.variable.coords)
-            nds["minimum"] = xr.DataArray(minimum, coords=xds.variable.coords)
-            nds["squares"] = xr.DataArray(squares, coords=xds.variable.coords)
-            nds["sums"] = xr.DataArray(sums, coords=xds.variable.coords)
+            kw = {"coords": xds["variable"].coords}
+            nds["count"] = xr.DataArray(count, **kw)
+            nds["has_nans"] = xr.DataArray(has_nans, **kw)
+            nds["maximum"] = xr.DataArray(maximum, **kw)
+            nds["minimum"] = xr.DataArray(minimum, **kw)
+            nds["squares"] = xr.DataArray(squares, **kw)
+            nds["sums"] = xr.DataArray(sums, **kw)
 
             # now add mean & stdev
             nds["mean"] = nds["sums"] / nds["count"]
@@ -548,7 +550,7 @@ class Anemoi(Target):
             # than in the create_container and incrementally fill workflow.
             nds["dates"] = xr.DataArray(
                 self.datetime,
-                coords=xds.time.coords,
+                coords=xds["time"].coords,
             )
             nds["dates"].encoding = {
                 "dtype": "datetime64[s]",
@@ -574,21 +576,26 @@ class Anemoi(Target):
         time_indices = np.array_split(np.arange(len(data_diff["time"])), topo.size)
         local_indices = time_indices[topo.rank]
 
+        residual_variance = np.zeros_like(xds["variable"].values, dtype=np.float64)
+
+        logger.info(f"{self.name}.calc_temporal_residual_stats: Performing local computations")
         if local_indices.size > 0:
             mdims = [d for d in xds["data"].dims if d not in ("variable", "time")]
             local_data_diff = data_diff.isel(time=local_indices)
-            local_residual_variance = (local_data_diff**2).mean(mdims).sum("time").compute()
+            local_residual_variance = (local_data_diff**2).mean(mdims).sum("time").compute().values
             local_residual_variance /= n_time
         else:
-            local_residual_variance = xr.zeros_like(xds["variable"])
+            local_residual_variance = residual_variance.copy()
 
-        logger.info(f"{self.name}.calc_temporal_increment_stats: aggregating local computations")
-        residual_variance = topo.sum(local_residual_variance)
+        logger.info(f"{self.name}.calc_temporal_residual_stats: Communicating results to root")
+        residual_variance = topo.sum(local_residual_variance, residual_variance)
+
+        logger.info(f"{self.name}.calc_temporal_residual_stats: ... done communicating")
 
         if topo.is_root:
             nds = xr.Dataset()
             nds.attrs = attrs
-            nds["residual_stdev"] = np.sqrt(residual_variance)
+            nds["residual_stdev"] = xr.DataArray(np.sqrt(residual_variance), coords=xds["variable"].coords)
 
             # compute geomtric mean by log-exp trick (since scipy isn't a dependency to ufs2arco)
             # ignore 0 values, since this is probably from static variables
@@ -597,7 +604,7 @@ class Anemoi(Target):
             nds["gmean_residual_stdev"] = nds["residual_stdev"] / denominator
 
             nds.to_zarr(self.store_path, mode="a")
-            logger.info(f"{self.name}.calc_temporal_increment_stats: stored temporal stats")
+            logger.info(f"{self.name}.calc_temporal_residual_stats: Stored temporal residual stats")
 
         # unclear if this barrier is necessary
         topo.barrier()
