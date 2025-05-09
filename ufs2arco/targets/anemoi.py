@@ -588,7 +588,7 @@ class Anemoi(Target):
             local_residual_variance = residual_variance.copy()
 
         logger.info(f"{self.name}.calc_temporal_residual_stats: Communicating results to root")
-        residual_variance = topo.sum(local_residual_variance, residual_variance)
+        topo.sum(local_residual_variance, residual_variance)
 
         logger.info(f"{self.name}.calc_temporal_residual_stats: ... done communicating")
 
