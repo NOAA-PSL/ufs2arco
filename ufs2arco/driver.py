@@ -3,6 +3,7 @@ try:
 except:
     pass
 
+import os
 import logging
 import yaml
 from datetime import datetime
@@ -143,7 +144,7 @@ class Driver:
             dict: The target dataset initialization arguments.
         """
         kw = {key: val for key, val in self.config["target"].items() if key != "name"}
-        kw["store_path"] = self.config["directories"]["zarr"]
+        kw["store_path"] = os.path.expandvars(self.config["directories"]["zarr"])
         return kw
 
     @property
@@ -160,7 +161,7 @@ class Driver:
             kw["start"] = 0
 
         # enforced options
-        kw["cache_dir"] = self.config["directories"]["cache"]
+        kw["cache_dir"] = os.path.expandvars(self.config["directories"]["cache"])
         return kw
 
     def run(self, overwrite: bool = False):
@@ -176,11 +177,11 @@ class Driver:
         # MPI requires some extra setup
         mover_kwargs = self.mover_kwargs.copy()
         if self.use_mpi:
-            topo = MPITopology(log_dir=self.config["directories"]["logs"])
+            topo = MPITopology(log_dir=os.path.expandvars(self.config["directories"]["logs"]))
             mover_kwargs["mpi_topo"] = topo
 
         else:
-            topo = SerialTopology(log_dir=self.config["directories"]["logs"])
+            topo = SerialTopology(log_dir=os.path.expandvars(self.config["directories"]["logs"]))
 
         source = self.SourceDataset(**self.source_kwargs)
         # create the transformer
