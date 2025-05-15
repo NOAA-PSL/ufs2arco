@@ -23,7 +23,7 @@ def horizontal_regrid(
 ):
 
     kw = {} if open_target_kwargs is None else open_target_kwargs
-    ds_out = xr.open_dataset(target_grid_path, **kw)
+    ds_out = xr.open_dataset(os.path.expandvars(target_grid_path), **kw)
 
     # required for xesmf
     xds = xds.rename({"longitude": "lon", "latitude": "lat"})
@@ -35,6 +35,7 @@ def horizontal_regrid(
         "filename",
         f"{kw['method']}_{len(xds.lat)}x{len(xds.lon)}_{len(ds_out.lat)}x{len(ds_out.lon)}.nc",
     )
+    filename = os.path.expandvars(filename)
     kw["filename"] = filename
     if os.path.isfile(filename):
         kw["reuse_weights"] = kw.get("reuse_weights", True)
