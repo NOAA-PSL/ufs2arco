@@ -21,6 +21,10 @@ def get_mappings(time="time") -> dict:
         "sin_local_time": lambda xds: _sin_local_time(xds, time=time),
         "cos_solar_zenith_angle": lambda xds: _cos_solar_zenith_angle(xds, time=time),
         "insolation": lambda xds: _cos_solar_zenith_angle(xds, time=time),
+        "cos_year_progress": lambda xds: _cos_year_progress(xds, time=time),
+        "sin_year_progress": lambda xds: _sin_year_progress(xds, time=time),
+        "cos_day_progress": lambda xds: _cos_day_progress(xds, time=time),
+        "sin_day_progress": lambda xds: _sin_day_progress(xds, time=time),
     }
 
 def _latitude(xds: xr.Dataset):
@@ -168,3 +172,66 @@ def _cos_solar_zenith_angle(xds: xr.Dataset, time="time"):
     zenith_angle.attrs["computed_forcing"] = True
     zenith_angle.attrs["constant_in_time"] = False
     return zenith_angle
+
+
+def _year_progress(xds: xr.Dataset, time="time"):
+
+    seconds_since_epoch = xds[time].astype("datetime64[s]").astype(np.int64)
+    seconds_per_day = 3600 * 24
+    avg_days_per_year = np.float64(365.24219)
+    denominator = seconds_per_day * avg_days_per_year
+    years_since_epoch = seconds_since_epoch / denominator
+    return np.mod(years_since_epoch, 1.0).astype(np.float32)
+
+def _cos_year_progress(xds: xr.Dataset, time="time"):
+
+    yp = _year_progress(xds, time)
+    cyp = np.cos( yp * 2 * np.pi )
+    cyp.attrs["description"] = "cosine of year progress, since UNIX start time"
+    cyp.attrs["attribution"] = "this is computed exactly as in the graphcast code base: https://github.com/google-deepmind/graphcast/blob/main/graphcast/data_utils.py"
+    cyp.attrs["computed_forcing"] = True
+    cyp.attrs["constant_in_time"] = False
+    return cyp
+
+
+def _sin_year_progress(xds: xr.Dataset, time="time"):
+
+    yp = _year_progress(xds, time)
+    syp = np.sin( yp * 2 * np.pi )
+    syp.attrs["description"] = "sine of year progress, since UNIX start time"
+    syp.attrs["attribution"] = "this is computed exactly as in the graphcast code base: https://github.com/google-deepmind/graphcast/blob/main/graphcast/data_utils.py"
+    syp.attrs["computed_forcing"] = True
+    syp.attrs["constant_in_time"] = False
+    return syp
+
+def _day_progress(xds: xr.Dataset, time="time"):
+
+    seconds_since_epoch = xds[time].astype("datetime64[s]").astype(np.int64)
+    seconds_per_day = 3600 * 24
+    day_progress_greenwich = np.mod(seconds_since_epoch, seconds_per_day) / seconds_per_day
+
+    longitude_offsets = np.deg2rad(xds["longitude"]) / 2 / np.pi
+    day_progress = np.mod(day_progress_greenwich + longitude_offsets, 1.0)
+    return day_progress.astype(np.float32)
+
+
+def _cos_day_progress(xds: xr.Dataset, time="time"):
+
+    dp = _day_progress(xds, time)
+    cdp = np.cos( dp * 2 * np.pi )
+    cdp.attrs["description"] = "cosine of day progress at each longitude"
+    cdp.attrs["attribution"] = "this is computed exactly as in the graphcast code base: https://github.com/google-deepmind/graphcast/blob/main/graphcast/data_utils.py"
+    cdp.attrs["computed_forcing"] = True
+    cdp.attrs["constant_in_time"] = False
+    return cdp
+
+
+def _sin_day_progress(xds: xr.Dataset, time="time"):
+
+    dp = _day_progress(xds, time)
+    sdp = np.sin( dp * 2 * np.pi )
+    sdp.attrs["description"] = "sine of day progress at each longitude"
+    sdp.attrs["attribution"] = "this is computed exactly as in the graphcast code base: https://github.com/google-deepmind/graphcast/blob/main/graphcast/data_utils.py"
+    sdp.attrs["computed_forcing"] = True
+    sdp.attrs["constant_in_time"] = False
+    return sdp
