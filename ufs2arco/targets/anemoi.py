@@ -569,11 +569,14 @@ class Anemoi(Target):
     def calc_temporal_residual_stats(self, topo):
 
         xds = xr.open_zarr(self.store_path)
+        stdev = xds["stdev"].load()
+        mean = xds["mean"].load()
         attrs = xds.attrs.copy()
 
-        data_diff = xds["data"].diff("time")
+        data_norm = (xds["data"] - mean)/stdev
+        data_diff = data_norm.diff("time")
         n_time = len(data_diff["time"])
-        time_indices = np.array_split(np.arange(len(data_diff["time"])), topo.size)
+        time_indices = np.array_split(np.arange(n_time), topo.size)
         local_indices = time_indices[topo.rank]
 
         residual_variance = np.zeros_like(xds["variable"].values, dtype=np.float64)
