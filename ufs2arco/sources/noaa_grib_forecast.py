@@ -39,7 +39,7 @@ class NOAAGribForecastData:
 
     @property
     def available_variables(self) -> tuple:
-        return tuple(self._filter_by_keys.keys())
+        return tuple(self._varmeta.keys())
 
     def __init__(
         self,
@@ -48,24 +48,6 @@ class NOAAGribForecastData:
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
     ) -> None:
-        """
-        This just uses :attr:`name` to set the attributes
-            * :attr:`_filter_by_keys` used to filter the grib files per variable
-            * :attr:`_param_list` which sets which file suffixes each variable lives in
-        """
-        # set filter_by_keys for NOAA datasets
-        # note this has to be first, since it will
-        # set the available variables for those datasets
-        path = os.path.join(
-            os.path.dirname(__file__),
-            "reference_noaa_grib.yaml",
-        )
-        with open(path, "r") as f:
-            gribstuff = yaml.safe_load(f)
-
-        self._filter_by_keys = gribstuff["filter_by_keys"]
-        self._param_list = gribstuff["param_list"][self._fsname]
-
         super().__init__(
             variables=variables,
             levels=levels,
@@ -121,7 +103,9 @@ class NOAAGribForecastData:
         if we_got_the_data:
             for varname in variables:
                 dslist = []
-                for suffix in self._param_list[varname]:
+                # NOAA data is inconsistent. Some timestamps it's in one file, sometimes another
+                # I would rather "over-read" and guarantee we do our best to get the data than turn up dry
+                for suffix in self.file_suffixes:
                     try:
                         thisvar = self._open_single_variable(
                             dims=dims,
@@ -129,15 +113,21 @@ class NOAAGribForecastData:
                             file=cached_files[suffix],
                         )
                     except:
-                        thisvar = None
-                        logger.warning(
-                            f"{self.name}: Trouble opening {varname}\n\t" +
-                            f"dims = {dims}, file_suffix = {suffix}"
-                        )
+                        thisvar = xr.DataArray(name=varname)
+                        if self._fsname != "gfs":
+                            # GFS data is so annoying, sometimes data is in one file, sometimes another, sometimes in both
+                            logger.warning(
+                                f"{self.name}: Trouble opening {varname}\n\t" +
+                                f"dims = {dims}, file_suffix = {suffix}"
+                            )
                     dslist.append(thisvar)
-                if not any(x is None for x in dslist):
-                    dsdict[varname] = xr.merge(dslist)[varname]
+                if not all(x is None for x in dslist):
+                    dsdict[varname] = xr.merge([xds for xds in dslist if xds is not None])[varname]
                 else:
+                    logger.warning(
+                        f"{self.name}: Could not find {varname}\n\t" +
+                        f"dims = {dims}, file_suffixes = {self._varmeta[varname]['file_suffixes']}"
+                    )
                     dsdict[varname] = xr.DataArray(name=varname)
         xds = xr.Dataset(dsdict)
         xds = self.apply_slices(xds)
@@ -156,17 +146,21 @@ class NOAAGribForecastData:
         Args:
             file (fsspec.spec.AbstractFileSystem): The file to read.
             varname (str): The variable name to extract.
-            filter_by_keys (dict): Keys to filter the variable by.
 
         Returns:
             xr.DataArray: The extracted variable as an xarray DataArray.
         """
+        fbk = self._varmeta[varname]["filter_by_keys"]
         xds = xr.open_dataset(
             file,
             engine="cfgrib",
-            filter_by_keys=self._filter_by_keys[varname],
+            filter_by_keys=fbk,
             decode_timedelta=True,
         )
+        if "original_name" in self._varmeta[varname]:
+            og = self._varmeta[varname]["original_name"]
+            xds = xds.rename({og: varname})
+            xds[varname].attrs["original_name"] = og
         xda = xds[varname]
 
         if "isobaricInhPa" in xds.coords:
@@ -174,8 +168,26 @@ class NOAAGribForecastData:
                 vv = xda["isobaricInhPa"].values
                 xda = xda.expand_dims({"isobaricInhPa": [vv]})
 
-        for v in ["heightAboveGround", "number", "surface"]:
-            if v in xda.coords:
+        if fbk["typeOfLevel"] == "heightAboveGround":
+            if "original_name" in self._varmeta[varname]:
+                level = fbk["level"]
+                xda.attrs["long_name"] = f"{level} metre " + xda.long_name
+
+        elif fbk["typeOfLevel"] == "surface":
+            if self._varmeta[varname].get("original_name", "") == "t":
+                xda.attrs["long_name"] += " at surface"
+
+            if varname == "sdwe_accum":
+                xda.attrs["long_name"] += " accumulated over forecast"
+
+        elif fbk["typeOfLevel"] in ("lowCloudLayer", "middleCloudLayer", "highCloudLayer"):
+            full = fbk["typeOfLevel"].replace("CloudLayer", "")
+            new = f"{full[0]}cc"
+            xda.attrs["long_name"] = xda.long_name.replace("Total", full.capitalize())
+
+
+        for v in [fbk["typeOfLevel"], "number"]:
+            if v in xda.coords and v not in xda.dims:
                 xda = xda.drop_vars(v)
 
         xds = xda.to_dataset(name=varname)
