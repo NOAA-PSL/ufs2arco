@@ -40,11 +40,18 @@ source:
     - t2m
     - t
     - gh
+    - u10
+    - v10
 
   levels:
     - 100
     - 500
     - 1000
+
+transforms:
+  rotate_vectors:
+    vector_pairs:
+      - ["u10", "v10"]
 
 target:
   name: anemoi
