@@ -48,6 +48,13 @@ class NOAAGribForecastData:
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
     ) -> None:
+
+        path = os.path.join(
+            os.path.dirname(__file__),
+            f"reference.{self._fsname}.yaml",
+        )
+        with open(path, "r") as f:
+            self._varmeta = yaml.safe_load(f)
         super().__init__(
             variables=variables,
             levels=levels,
@@ -103,8 +110,9 @@ class NOAAGribForecastData:
         if we_got_the_data:
             for varname in variables:
                 dslist = []
-                # NOAA data is inconsistent. Some timestamps it's in one file, sometimes another
-                # I would rather "over-read" and guarantee we do our best to get the data than turn up dry
+                # Note that when there are 2 file suffixes, we always try to read from both
+                # because sometimes (e.g. GFS humidity), the variable is in one, sometimes
+                # it's in the other. This is more straightforward, and not "too bad".
                 for suffix in self.file_suffixes:
                     try:
                         thisvar = self._open_single_variable(
@@ -113,20 +121,14 @@ class NOAAGribForecastData:
                             file=cached_files[suffix],
                         )
                     except:
-                        thisvar = xr.DataArray(name=varname)
-                        if self._fsname != "gfs":
-                            # GFS data is so annoying, sometimes data is in one file, sometimes another, sometimes in both
-                            logger.warning(
-                                f"{self.name}: Trouble opening {varname}\n\t" +
-                                f"dims = {dims}, file_suffix = {suffix}"
-                            )
+                        thisvar = None
                     dslist.append(thisvar)
                 if not all(x is None for x in dslist):
                     dsdict[varname] = xr.merge([xds for xds in dslist if xds is not None])[varname]
                 else:
                     logger.warning(
                         f"{self.name}: Could not find {varname}\n\t" +
-                        f"dims = {dims}, file_suffixes = {self._varmeta[varname]['file_suffixes']}"
+                        f"dims = {dims}, file_suffixes = {self.file_suffixes}"
                     )
                     dsdict[varname] = xr.DataArray(name=varname)
         xds = xr.Dataset(dsdict)
