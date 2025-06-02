@@ -66,7 +66,6 @@ class AWSHRRRArchive(NOAAGribForecastData, Source):
         """
         self.t0 = pd.date_range(**t0)
         self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
-
         super().__init__(
             variables=variables,
             levels=levels,
