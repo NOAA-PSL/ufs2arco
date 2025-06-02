@@ -1,5 +1,3 @@
-import os
-import yaml
 import logging
 from typing import Optional
 
@@ -69,12 +67,6 @@ class AWSHRRRArchive(NOAAGribForecastData, Source):
         self.t0 = pd.date_range(**t0)
         self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
 
-        path = os.path.join(
-            os.path.dirname(__file__),
-            "reference.hrrr.yaml",
-        )
-        with open(path, "r") as f:
-            self._varmeta = yaml.safe_load(f)
         super().__init__(
             variables=variables,
             levels=levels,

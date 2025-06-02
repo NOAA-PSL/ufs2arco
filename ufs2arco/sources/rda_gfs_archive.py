@@ -1,5 +1,3 @@
-import os
-import yaml
 import logging
 from typing import Optional
 
@@ -70,12 +68,12 @@ class RDAGFSArchive(NOAAGribForecastData, Source):
         self.t0 = pd.date_range(**t0)
         self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
 
-        path = os.path.join(
-            os.path.dirname(__file__),
-            "reference.gfs.yaml",
+        super().__init__(
+            variables=variables,
+            levels=levels,
+            use_nearest_levels=use_nearest_levels,
+            slices=slices,
         )
-        with open(path, "r") as f:
-            self._varmeta = yaml.safe_load(f)
 
         # for GFS, plenty of variables only exist in the forecast, not analysis grib files
         # make sure the user doesn't ask for these before we get started
@@ -89,15 +87,6 @@ class RDAGFSArchive(NOAAGribForecastData, Source):
                 msg += f"\n\n{requested_vars_not_in_analysis}\n\n"
                 msg += "these should be requested separately with only fhr > 0 (i.e., fhr start >0 in your yaml)"
                 raise Exception(msg)
-
-
-        super().__init__(
-            variables=variables,
-            levels=levels,
-            use_nearest_levels=use_nearest_levels,
-            slices=slices,
-        )
-
 
     def _build_path(
         self,
