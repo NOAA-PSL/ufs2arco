@@ -48,7 +48,6 @@ class NOAAGribForecastData:
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
     ) -> None:
-
         path = os.path.join(
             os.path.dirname(__file__),
             f"reference.{self._fsname}.yaml",
