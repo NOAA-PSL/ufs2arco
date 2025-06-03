@@ -1,77 +1,105 @@
 d2m:
+  file_suffixes:
+  - prs
   filter_by_keys:
     level: 2
     paramId: 168
     typeOfLevel: heightAboveGround
   long_name: 2 metre dewpoint temperature
 gh:
+  file_suffixes:
+  - prs
   filter_by_keys:
     paramId: 156
     typeOfLevel: isobaricInhPa
   long_name: Geopotential height
 lsm:
+  file_suffixes:
+  - prs
   filter_by_keys:
     paramId: 172
     stepType: instant
     typeOfLevel: surface
   long_name: Land-sea mask
 orog:
+  file_suffixes:
+  - prs
   filter_by_keys:
     paramId: 228002
     stepType: instant
     typeOfLevel: surface
   long_name: Orography
 q:
+  file_suffixes:
+  - prs
   filter_by_keys:
     paramId: 133
     typeOfLevel: isobaricInhPa
   long_name: Specific humidity
 sh2:
+  file_suffixes:
+  - prs
   filter_by_keys:
     level: 2
     paramId: 174096
     typeOfLevel: heightAboveGround
   long_name: 2 metre specific humidity
 sp:
+  file_suffixes:
+  - prs
   filter_by_keys:
     paramId: 134
     stepType: instant
     typeOfLevel: surface
   long_name: Surface pressure
 t:
+  file_suffixes:
+  - prs
   filter_by_keys:
     paramId: 130
     typeOfLevel: isobaricInhPa
   long_name: Temperature
 t2m:
+  file_suffixes:
+  - prs
   filter_by_keys:
     level: 2
     paramId: 167
     typeOfLevel: heightAboveGround
   long_name: 2 metre temperature
 u:
+  file_suffixes:
+  - prs
   filter_by_keys:
     paramId: 131
     typeOfLevel: isobaricInhPa
   long_name: U component of wind
 u10:
+  file_suffixes:
+  - prs
   filter_by_keys:
     level: 10
     paramId: 165
     typeOfLevel: heightAboveGround
   long_name: 10 metre U wind component
 v:
+  file_suffixes:
+  - prs
   filter_by_keys:
     paramId: 132
     typeOfLevel: isobaricInhPa
   long_name: V component of wind
 v10:
+  file_suffixes:
+  - prs
   filter_by_keys:
     level: 10
     paramId: 166
     typeOfLevel: heightAboveGround
   long_name: 10 metre V wind component
 w:
+  file_suffixes:
+  - prs
   filter_by_keys:
     paramId: 135
     typeOfLevel: isobaricInhPa

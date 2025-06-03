@@ -112,7 +112,7 @@ class NOAAGribForecastData:
                 # Note that when there are 2 file suffixes, we always try to read from both
                 # because sometimes (e.g. GFS humidity), the variable is in one, sometimes
                 # it's in the other. This is more straightforward, and not "too bad".
-                for suffix in self.file_suffixes:
+                for suffix in self._varmeta[varname]["file_suffixes"]:
                     try:
                         thisvar = self._open_single_variable(
                             dims=dims,
@@ -127,7 +127,7 @@ class NOAAGribForecastData:
                 else:
                     logger.warning(
                         f"{self.name}: Could not find {varname}\n\t" +
-                        f"dims = {dims}, file_suffixes = {self.file_suffixes}"
+                        f"dims = {dims}, file_suffixes = {self._varmeta[varname]['file_suffixes']}"
                     )
                     dsdict[varname] = xr.DataArray(name=varname)
         xds = xr.Dataset(dsdict)
