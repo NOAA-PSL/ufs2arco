@@ -4,6 +4,7 @@ import xarray as xr
 
 from ufs2arco.transforms.horizontal_regrid import horizontal_regrid
 from ufs2arco.transforms.mappings import get_available_mappings, apply_mappings
+from ufs2arco.transforms.rotate_vectors import rotate_vectors
 from ufs2arco.transforms.vertical_regrid import fv_vertical_regrid
 
 logger = logging.getLogger("ufs2arco")
@@ -18,6 +19,7 @@ class Transformer:
             "fv_vertical_regrid",
             "horizontal_regrid",
             "mappings",
+            "rotate_vectors",
         )
 
     def __init__(self, options):
@@ -72,6 +74,9 @@ class Transformer:
 
         if "divide" in self.names:
             xds = divide(xds, self.options["divide"])
+
+        if "rotate_vectors" in self.names:
+            xds = rotate_vectors(xds, **self.options["rotate_vectors"])
 
         if "fv_vertical_regrid" in self.names:
             xds = fv_vertical_regrid(xds, **self.options["fv_vertical_regrid"])
