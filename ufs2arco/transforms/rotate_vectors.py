@@ -74,8 +74,8 @@ def rotate_lambert_conical_vectors(u_grid, v_grid):
 
     dlon = (u_grid["longitude"] - orient + 180 + 3600 % 360) - 180
 
-    crot = np.cos(angle*np.deg2rad(dlon))
-    srot = np.sin(angle*np.deg2rad(dlon))
+    crot = np.cos(angle*np.deg2rad(dlon)).astype(u_grid.dtype)
+    srot = np.sin(angle*np.deg2rad(dlon)).astype(u_grid.dtype)
 
     with xr.set_options(keep_attrs=True):
         u_east  = u_grid * crot + v_grid * srot
@@ -86,6 +86,8 @@ def rotate_lambert_conical_vectors(u_grid, v_grid):
     v_north = v_north.rename(vname)
     u_east.attrs["GRIB_uvRelativeToGrid"] = 0
     v_north.attrs["GRIB_uvRelativeToGrid"] = 0
+    u_east.attrs["GRIB_latitudeOfSouthernPoleInDegrees"] = -90.0
+    v_north.attrs["GRIB_latitudeOfSouthernPoleInDegrees"] = -90.0
 
     u_east.attrs["rotation"] = "rotated to point eastward via ufs2arco.transforms.rotate_lambert_conical_vectors"
     v_north.attrs["rotation"] = "rotated to point northward via ufs2arco.transforms.rotate_lambert_conical_vectors"
