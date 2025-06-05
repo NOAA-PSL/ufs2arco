@@ -113,7 +113,6 @@ class NOAAGribForecastData:
         dsdict = {}
         osv = open_static_vars or self._open_static_vars(dims)
         variables = self.variables if osv else self.dynamic_vars
-        print(f"dims = {dims}\nosv = {osv}\nvariables = {variables}")
         we_got_the_data = all(val is not None for val in cached_files.values())
         if we_got_the_data:
             for varname in variables:
