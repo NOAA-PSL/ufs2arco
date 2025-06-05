@@ -78,7 +78,7 @@ class RDAGFSArchive(NOAAGribForecastData, Source):
         # make sure the user doesn't ask for these before we get started
         if any(self.fhr == 0):
             requested_vars_not_in_analysis = []
-            for varname in variables:
+            for varname in self.variables:
                 if self._varmeta[varname]["forecast_only"]:
                     requested_vars_not_in_analysis.append(varname)
             if len(requested_vars_not_in_analysis) > 0:
