@@ -93,6 +93,14 @@ lsm:
     stepType: instant
     typeOfLevel: surface
   long_name: Land-sea mask
+max_10si:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 10
+    paramId: 237207
+    typeOfLevel: heightAboveGround
+  long_name: Time-maximum 10 metre wind speed
 orog:
   file_suffixes:
   - prs
@@ -116,6 +124,24 @@ q:
     paramId: 133
     typeOfLevel: isobaricInhPa
   long_name: Specific humidity
+refd1000:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 1000
+    paramId: 260389
+    typeOfLevel: heightAboveGround
+  long_name: 1000 metre Derived radar reflectivity
+  original_name: refd
+refd4000:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 4000
+    paramId: 260389
+    typeOfLevel: heightAboveGround
+  long_name: 4000 metre Derived radar reflectivity
+  original_name: refd
 sde:
   file_suffixes:
   - prs
@@ -230,6 +256,15 @@ u10:
     paramId: 165
     typeOfLevel: heightAboveGround
   long_name: 10 metre U wind component
+u80:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 80
+    paramId: 131
+    typeOfLevel: heightAboveGround
+  long_name: 80 metre U component of wind
+  original_name: u
 v:
   file_suffixes:
   - prs
@@ -245,6 +280,15 @@ v10:
     paramId: 166
     typeOfLevel: heightAboveGround
   long_name: 10 metre V wind component
+v80:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 80
+    paramId: 132
+    typeOfLevel: heightAboveGround
+  long_name: 80 metre V component of wind
+  original_name: v
 vgtyp:
   file_suffixes:
   - prs
