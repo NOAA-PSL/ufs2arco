@@ -74,6 +74,18 @@ class RDAGFSArchive(NOAAGribForecastData, Source):
             slices=slices,
         )
 
+        # for GFS, plenty of variables only exist in the forecast, not analysis grib files
+        # make sure the user doesn't ask for these before we get started
+        if any(self.fhr == 0):
+            requested_vars_not_in_analysis = []
+            for varname in self.variables:
+                if self._varmeta[varname]["forecast_only"]:
+                    requested_vars_not_in_analysis.append(varname)
+            if len(requested_vars_not_in_analysis) > 0:
+                msg = f"{self.name}.__init__: the following requested variables only exist in forecast timesteps"
+                msg += f"\n\n{requested_vars_not_in_analysis}\n\n"
+                msg += "these should be requested separately with only fhr > 0 (i.e., fhr start >0 in your yaml)"
+                raise Exception(msg)
 
     def _build_path(
         self,
