@@ -251,3 +251,83 @@ class NOAAGribForecastData:
             xds = xds.set_coords("valid_time")
 
         return xds[varname]
+
+
+    def open_grib(
+        self,
+        dims,
+        file_suffix,
+        cache_dir,
+        **kwargs,
+    ) -> xr.Dataset:
+        """
+        Open a single GRIB file.
+
+        Args:
+            dims (dict): e.g. {"t0": "2020-01-01T00", "fhr": 0}
+            file_suffix (str): e.g. "a", "b", "prs", etc
+            cache_dir (str): path to caching the grib file
+            kwargs: passed to xarray.open_dataset
+
+        Returns:
+            xr.Dataset: with the contents of the grib file, after some minimal postprocessing
+        """
+
+        file = self._open_local(dims, file_suffix, cache_dir)
+
+        if "decode_timedelta" not in kwargs:
+            kwargs["decode_timedelta"] = True
+        xds = xr.open_dataset(
+            file,
+            engine="cfgrib",
+            **kwargs,
+        )
+        if "isobaricInhPa" in xds.coords:
+            if len(xds.dims) < 3:
+                vv = xds["isobaricInhPa"].values
+                xds = xds.expand_dims({"isobaricInhPa": [vv]})
+
+        for key, val in self.rename.items():
+            if key in xds:
+                xds = xds.rename({key: val})
+
+        # handle potential ensemble member dimension
+        # note that we do this first so that the dims work out in order:
+        # t0, fhr, member, level, **horizontal_dims
+        if "member" in dims:
+            # Note that the description is only known to be true for GEFS...
+            # but I'll just leave it for now
+            xds = xds.expand_dims("member")
+            xds["member"] = xr.DataArray(
+                [dims["member"]],
+                coords={"member": [dims["member"]]},
+                dims=("member",),
+                attrs={
+                    "description": "ID=0 comes from gecXX files, ID>0 comes from gepXX files",
+                    "long_name": "ensemble member ID",
+                },
+            )
+
+        # handle lead_time/fhr coordinates
+        xds = xds.expand_dims(["t0", "lead_time"])
+        xds["fhr"] = xr.DataArray(
+            [int(lt / 1e9 / 3600) for lt in xds["lead_time"].values],
+            coords=xds["lead_time"].coords,
+            attrs={
+                "long_name": "hours since initial time",
+                "units": "integer hours",
+            },
+        )
+        xds = xds.swap_dims({"lead_time": "fhr"})
+
+        # recreate valid_time, since it's not always there
+        valid_time = xds["t0"] + xds["lead_time"]
+        if "valid_time" in xds:
+            xds["valid_time"] = xds["valid_time"].expand_dims(["t0", "fhr"])
+            assert valid_time.squeeze() == xds.valid_time.squeeze()
+            xds = xds.drop_vars("valid_time")
+
+        xds["valid_time"] = valid_time
+        xds = xds.set_coords("valid_time")
+
+        return xds
