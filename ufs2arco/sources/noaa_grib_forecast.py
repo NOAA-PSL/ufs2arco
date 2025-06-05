@@ -61,6 +61,14 @@ class NOAAGribForecastData:
             slices=slices,
         )
 
+    def _open_static_vars(self, dims) -> bool:
+        """Do this once per t0, ensemble member"""
+        cond = True
+        for key, val in dims.items():
+            if key != "t0":
+                cond = cond and val == getattr(self, key)[0]
+        return cond
+
     def _open_local(self, dims, file_suffix, cache_dir):
 
         path = self._build_path(
@@ -105,6 +113,7 @@ class NOAAGribForecastData:
         dsdict = {}
         osv = open_static_vars or self._open_static_vars(dims)
         variables = self.variables if osv else self.dynamic_vars
+        print(f"dims = {dims}\nosv = {osv}\nvariables = {variables}")
         we_got_the_data = all(val is not None for val in cached_files.values())
         if we_got_the_data:
             for varname in variables:
@@ -197,9 +206,11 @@ class NOAAGribForecastData:
                 xds = xds.rename({key: val})
 
         if varname in self.static_vars:
-            for key in ["lead_time", "t0", "valid_time"]:
+            for key in ["lead_time", "valid_time"]:
                 if key in xds:
                     xds = xds.drop_vars(key)
+
+            xds = xds.expand_dims("t0")
         else:
 
             # handle vertical levels
