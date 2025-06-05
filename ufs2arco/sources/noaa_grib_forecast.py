@@ -178,7 +178,7 @@ class NOAAGribForecastData:
             if self._varmeta[varname].get("original_name", "") == "t":
                 xda.attrs["long_name"] += " at surface"
 
-            if varname == "sdwe_accum":
+            if xda.attrs["GRIB_stepType"] == "accum":
                 xda.attrs["long_name"] += " accumulated over forecast"
 
         elif fbk["typeOfLevel"] in ("lowCloudLayer", "middleCloudLayer", "highCloudLayer"):
