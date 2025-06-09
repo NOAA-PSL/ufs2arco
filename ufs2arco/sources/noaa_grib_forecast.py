@@ -189,6 +189,9 @@ class NOAAGribForecastData:
             if xda.attrs["GRIB_stepType"] == "accum":
                 xda.attrs["long_name"] += " accumulated over forecast"
 
+            elif xda.attrs["GRIB_stepType"] == "avg":
+                xda.attrs["long_name"] = "Time-mean " + xda.attrs["long_name"]
+
         elif fbk["typeOfLevel"] in ("lowCloudLayer", "middleCloudLayer", "highCloudLayer"):
             full = fbk["typeOfLevel"].replace("CloudLayer", "")
             new = f"{full[0]}cc"
