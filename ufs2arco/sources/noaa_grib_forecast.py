@@ -137,7 +137,7 @@ class NOAAGribForecastData:
                         f"{self.name}: Could not find {varname}\n\t" +
                         f"dims = {dims}, file_suffixes = {self._varmeta[varname]['file_suffixes']}"
                     )
-                    dsdict[varname] = xr.DataArray(name=varname)
+                    dsdict[varname] = xr.DataArray(name=varname, dtype=np.float32)
         xds = xr.Dataset(dsdict)
         xds = self.apply_slices(xds)
         return xds
@@ -221,7 +221,7 @@ class NOAAGribForecastData:
                 if len(level_selection) == 0:
                     # we don't select vertical levels available in this file
                     # return an empty data array
-                    return xr.DataArray(name=varname)
+                    return xr.DataArray(name=varname, dtype=xda.dtype)
                 xds = xds.sel(level=level_selection, **self._level_sel_kwargs)
 
             # handle potential ensemble member dimension
