@@ -1,0 +1,613 @@
+SUNSD:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 7001292
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Sunshine Duration
+accum_acpcp:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 3063
+    stepType: accum
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Convective precipitation (water) accumulated over forecast
+  original_name: acpcp
+accum_tp:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 228228
+    stepType: accum
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Total Precipitation accumulated over forecast
+  original_name: tp
+accum_watr:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260181
+    stepType: accum
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Water runoff accumulated over forecast
+  original_name: watr
+aptmp2:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 2
+    paramId: 260255
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 2 metre Apparent temperature
+  original_name: aptmp
+avg_al:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 235263
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean forecast albedo
+avg_cduvb:
+  file_suffixes:
+  - b
+  filter_by_keys:
+    paramId: 260341
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Clear sky UV-B downward solar flux
+  original_name: cduvb
+avg_cfrzr:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260030
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Categorical freezing rain
+  original_name: cfrzr
+avg_cicep:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260031
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Categorical ice pellets
+  original_name: cicep
+avg_cpr:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260033
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Convective precipitation rate
+  original_name: cpr
+avg_crain:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260029
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Categorical rain
+  original_name: crain
+avg_csnow:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260032
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Categorical snow
+  original_name: csnow
+avg_duvb:
+  file_suffixes:
+  - b
+  filter_by_keys:
+    paramId: 260340
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean UV-B downward solar flux
+  original_name: duvb
+avg_gflux:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260186
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Ground heat flux
+  original_name: gflux
+avg_iegwss:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260081
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Instantaneous eastward gravity wave surface stress
+  original_name: iegwss
+avg_ingwss:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260082
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Instantaneous northward gravity wave surface stress
+  original_name: ingwss
+avg_ishf:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 235033
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean surface sensible heat flux
+avg_prate:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 3059
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Precipitation rate
+  original_name: prate
+avg_sdlwrf:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260097
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Surface downward long-wave radiation flux
+  original_name: sdlwrf
+avg_sdswrf:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260087
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Surface downward short-wave radiation flux
+  original_name: sdswrf
+avg_slhtf:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 235034
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean surface latent heat flux
+avg_sulwrf:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260098
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Surface upward long-wave radiation flux
+  original_name: sulwrf
+avg_suswrf:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260088
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean Surface upward short-wave radiation flux
+  original_name: suswrf
+avg_utaua:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 141101
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean U-component of atmospheric surface momentum flux
+avg_vtaua:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 141102
+    stepType: avg
+    typeOfLevel: surface
+  forecast_only: true
+  long_name: Time-mean V-component of atmospheric surface momentum flux
+cape:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 59
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Convective available potential energy
+cin:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 228001
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Convective inhibition
+cnwat:
+  file_suffixes:
+  - b
+  filter_by_keys:
+    paramId: 260189
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Plant canopy surface water
+cpofp:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260035
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Percent frozen precipitation
+d2m:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 2
+    paramId: 168
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 2 metre dewpoint temperature
+fldcp:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260483
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Field Capacity
+gh:
+  file_suffixes:
+  - ''
+  - b
+  filter_by_keys:
+    paramId: 156
+    typeOfLevel: isobaricInhPa
+  forecast_only: false
+  long_name: Geopotential height
+gust:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260065
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Wind speed (gust)
+hindex:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260256
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Haines Index
+lftx:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260127
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Surface lifted index
+lftx4:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260128
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Best (4-layer) lifted index
+lsm:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 172
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Land-sea mask
+orog:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 228002
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Orography
+pres80:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 80
+    paramId: 54
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 80 metre Pressure
+  original_name: pres
+q:
+  file_suffixes:
+  - ''
+  - b
+  filter_by_keys:
+    paramId: 133
+    typeOfLevel: isobaricInhPa
+  forecast_only: false
+  long_name: Specific humidity
+q80:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 80
+    paramId: 133
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 80 metre Specific humidity
+  original_name: q
+r2:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 2
+    paramId: 260242
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 2 metre relative humidity
+sde:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 3066
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Snow depth
+sdwe:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260056
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Water equivalent of accumulated snow depth (deprecated)
+sh2:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 2
+    paramId: 174096
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 2 metre specific humidity
+siconc:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 31
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Sea ice area fraction
+sithick:
+  file_suffixes:
+  - b
+  filter_by_keys:
+    paramId: 262000
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Sea ice thickness
+sp:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 134
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Surface pressure
+t:
+  file_suffixes:
+  - ''
+  - b
+  filter_by_keys:
+    paramId: 130
+    typeOfLevel: isobaricInhPa
+  forecast_only: false
+  long_name: Temperature
+t100:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 100
+    paramId: 130
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 100 metre Temperature
+  original_name: t
+t2m:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 2
+    paramId: 167
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 2 metre temperature
+t80:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 80
+    paramId: 130
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 80 metre Temperature
+  original_name: t
+t_surface:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 130
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Temperature at surface
+  original_name: t
+tmax2:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 2
+    paramId: 3015
+    typeOfLevel: heightAboveGround
+  forecast_only: true
+  long_name: 2 metre Maximum temperature
+  original_name: tmax
+tmin2:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 2
+    paramId: 3016
+    typeOfLevel: heightAboveGround
+  forecast_only: true
+  long_name: 2 metre Minimum temperature
+  original_name: tmin
+u:
+  file_suffixes:
+  - ''
+  - b
+  filter_by_keys:
+    paramId: 131
+    typeOfLevel: isobaricInhPa
+  forecast_only: false
+  long_name: U component of wind
+u10:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 10
+    paramId: 165
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 10 metre U wind component
+u100:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 100
+    paramId: 228246
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 100 metre U wind component
+u80:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 80
+    paramId: 131
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 80 metre U component of wind
+  original_name: u
+v:
+  file_suffixes:
+  - ''
+  - b
+  filter_by_keys:
+    paramId: 132
+    typeOfLevel: isobaricInhPa
+  forecast_only: false
+  long_name: V component of wind
+v10:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 10
+    paramId: 166
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 10 metre V wind component
+v100:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 100
+    paramId: 228247
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 100 metre V wind component
+v80:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    level: 80
+    paramId: 132
+    typeOfLevel: heightAboveGround
+  forecast_only: false
+  long_name: 80 metre V component of wind
+  original_name: v
+w:
+  file_suffixes:
+  - ''
+  - b
+  filter_by_keys:
+    paramId: 135
+    typeOfLevel: isobaricInhPa
+  forecast_only: false
+  long_name: Vertical velocity
+wilt:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260442
+    stepType: instant
+    typeOfLevel: surface
+  forecast_only: false
+  long_name: Wilting Point

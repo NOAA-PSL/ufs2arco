@@ -39,7 +39,7 @@ class NOAAGribForecastData:
 
     @property
     def available_variables(self) -> tuple:
-        return tuple(self._filter_by_keys.keys())
+        return tuple(self._varmeta.keys())
 
     def __init__(
         self,
@@ -48,30 +48,26 @@ class NOAAGribForecastData:
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
     ) -> None:
-        """
-        This just uses :attr:`name` to set the attributes
-            * :attr:`_filter_by_keys` used to filter the grib files per variable
-            * :attr:`_param_list` which sets which file suffixes each variable lives in
-        """
-        # set filter_by_keys for NOAA datasets
-        # note this has to be first, since it will
-        # set the available variables for those datasets
         path = os.path.join(
             os.path.dirname(__file__),
-            "reference_noaa_grib.yaml",
+            f"reference.{self._fsname}.yaml",
         )
         with open(path, "r") as f:
-            gribstuff = yaml.safe_load(f)
-
-        self._filter_by_keys = gribstuff["filter_by_keys"]
-        self._param_list = gribstuff["param_list"][self._fsname]
-
+            self._varmeta = yaml.safe_load(f)
         super().__init__(
             variables=variables,
             levels=levels,
             use_nearest_levels=use_nearest_levels,
             slices=slices,
         )
+
+    def _open_static_vars(self, dims) -> bool:
+        """Do this once per t0, ensemble member"""
+        cond = True
+        for key, val in dims.items():
+            if key != "t0":
+                cond = cond and val == getattr(self, key)[0]
+        return cond
 
     def _open_local(self, dims, file_suffix, cache_dir):
 
@@ -121,7 +117,10 @@ class NOAAGribForecastData:
         if we_got_the_data:
             for varname in variables:
                 dslist = []
-                for suffix in self._param_list[varname]:
+                # Note that when there are 2 file suffixes, we always try to read from both
+                # because sometimes (e.g. GFS humidity), the variable is in one, sometimes
+                # it's in the other. This is more straightforward, and not "too bad".
+                for suffix in self._varmeta[varname]["file_suffixes"]:
                     try:
                         thisvar = self._open_single_variable(
                             dims=dims,
@@ -130,14 +129,14 @@ class NOAAGribForecastData:
                         )
                     except:
                         thisvar = None
-                        logger.warning(
-                            f"{self.name}: Trouble opening {varname}\n\t" +
-                            f"dims = {dims}, file_suffix = {suffix}"
-                        )
                     dslist.append(thisvar)
-                if not any(x is None for x in dslist):
-                    dsdict[varname] = xr.merge(dslist)[varname]
+                if not all(x is None for x in dslist):
+                    dsdict[varname] = xr.merge([xds for xds in dslist if xds is not None])[varname]
                 else:
+                    logger.warning(
+                        f"{self.name}: Could not find {varname}\n\t" +
+                        f"dims = {dims}, file_suffixes = {self._varmeta[varname]['file_suffixes']}"
+                    )
                     dsdict[varname] = xr.DataArray(name=varname)
         xds = xr.Dataset(dsdict)
         xds = self.apply_slices(xds)
@@ -156,17 +155,21 @@ class NOAAGribForecastData:
         Args:
             file (fsspec.spec.AbstractFileSystem): The file to read.
             varname (str): The variable name to extract.
-            filter_by_keys (dict): Keys to filter the variable by.
 
         Returns:
             xr.DataArray: The extracted variable as an xarray DataArray.
         """
+        fbk = self._varmeta[varname]["filter_by_keys"]
         xds = xr.open_dataset(
             file,
             engine="cfgrib",
-            filter_by_keys=self._filter_by_keys[varname],
+            filter_by_keys=fbk,
             decode_timedelta=True,
         )
+        if "original_name" in self._varmeta[varname]:
+            og = self._varmeta[varname]["original_name"]
+            xds = xds.rename({og: varname})
+            xds[varname].attrs["original_name"] = og
         xda = xds[varname]
 
         if "isobaricInhPa" in xds.coords:
@@ -174,8 +177,29 @@ class NOAAGribForecastData:
                 vv = xda["isobaricInhPa"].values
                 xda = xda.expand_dims({"isobaricInhPa": [vv]})
 
-        for v in ["heightAboveGround", "number", "surface"]:
-            if v in xda.coords:
+        if fbk["typeOfLevel"] == "heightAboveGround":
+            if "original_name" in self._varmeta[varname]:
+                level = fbk["level"]
+                xda.attrs["long_name"] = f"{level} metre " + xda.long_name
+
+        elif fbk["typeOfLevel"] == "surface":
+            if self._varmeta[varname].get("original_name", "") == "t":
+                xda.attrs["long_name"] += " at surface"
+
+            if xda.attrs["GRIB_stepType"] == "accum":
+                xda.attrs["long_name"] += " accumulated over forecast"
+
+            elif xda.attrs["GRIB_stepType"] == "avg":
+                xda.attrs["long_name"] = "Time-mean " + xda.attrs["long_name"]
+
+        elif fbk["typeOfLevel"] in ("lowCloudLayer", "middleCloudLayer", "highCloudLayer"):
+            full = fbk["typeOfLevel"].replace("CloudLayer", "")
+            new = f"{full[0]}cc"
+            xda.attrs["long_name"] = xda.long_name.replace("Total", full.capitalize())
+
+
+        for v in [fbk["typeOfLevel"], "number"]:
+            if v in xda.coords and v not in xda.dims:
                 xda = xda.drop_vars(v)
 
         xds = xda.to_dataset(name=varname)
@@ -184,9 +208,11 @@ class NOAAGribForecastData:
                 xds = xds.rename({key: val})
 
         if varname in self.static_vars:
-            for key in ["lead_time", "t0", "valid_time"]:
+            for key in ["lead_time", "valid_time"]:
                 if key in xds:
                     xds = xds.drop_vars(key)
+
+            xds = xds.expand_dims("t0")
         else:
 
             # handle vertical levels
@@ -238,3 +264,83 @@ class NOAAGribForecastData:
             xds = xds.set_coords("valid_time")
 
         return xds[varname]
+
+
+    def open_grib(
+        self,
+        dims,
+        file_suffix,
+        cache_dir,
+        **kwargs,
+    ) -> xr.Dataset:
+        """
+        Open a single GRIB file.
+
+        Args:
+            dims (dict): e.g. {"t0": "2020-01-01T00", "fhr": 0}
+            file_suffix (str): e.g. "a", "b", "prs", etc
+            cache_dir (str): path to caching the grib file
+            kwargs: passed to xarray.open_dataset
+
+        Returns:
+            xr.Dataset: with the contents of the grib file, after some minimal postprocessing
+        """
+
+        file = self._open_local(dims, file_suffix, cache_dir)
+
+        if "decode_timedelta" not in kwargs:
+            kwargs["decode_timedelta"] = True
+        xds = xr.open_dataset(
+            file,
+            engine="cfgrib",
+            **kwargs,
+        )
+        if "isobaricInhPa" in xds.coords:
+            if len(xds.dims) < 3:
+                vv = xds["isobaricInhPa"].values
+                xds = xds.expand_dims({"isobaricInhPa": [vv]})
+
+        for key, val in self.rename.items():
+            if key in xds:
+                xds = xds.rename({key: val})
+
+        # handle potential ensemble member dimension
+        # note that we do this first so that the dims work out in order:
+        # t0, fhr, member, level, **horizontal_dims
+        if "member" in dims:
+            # Note that the description is only known to be true for GEFS...
+            # but I'll just leave it for now
+            xds = xds.expand_dims("member")
+            xds["member"] = xr.DataArray(
+                [dims["member"]],
+                coords={"member": [dims["member"]]},
+                dims=("member",),
+                attrs={
+                    "description": "ID=0 comes from gecXX files, ID>0 comes from gepXX files",
+                    "long_name": "ensemble member ID",
+                },
+            )
+
+        # handle lead_time/fhr coordinates
+        xds = xds.expand_dims(["t0", "lead_time"])
+        xds["fhr"] = xr.DataArray(
+            [int(lt / 1e9 / 3600) for lt in xds["lead_time"].values],
+            coords=xds["lead_time"].coords,
+            attrs={
+                "long_name": "hours since initial time",
+                "units": "integer hours",
+            },
+        )
+        xds = xds.swap_dims({"lead_time": "fhr"})
+
+        # recreate valid_time, since it's not always there
+        valid_time = xds["t0"] + xds["lead_time"]
+        if "valid_time" in xds:
+            xds["valid_time"] = xds["valid_time"].expand_dims(["t0", "fhr"])
+            assert valid_time.squeeze() == xds.valid_time.squeeze()
+            xds = xds.drop_vars("valid_time")
+
+        xds["valid_time"] = valid_time
+        xds = xds.set_coords("valid_time")
+
+        return xds

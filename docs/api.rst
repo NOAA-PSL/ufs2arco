@@ -31,9 +31,9 @@ Data Sources
    :toctree: generated/
 
    ufs2arco.sources.Source
-   ufs2arco.sources.AnalysisSource
-   ufs2arco.sources.EnsembleForecastSource
    ufs2arco.sources.AWSGEFSArchive
+   ufs2arco.sources.AWSHRRRArchive
+   ufs2arco.sources.RDAGFSArchive
 
 Data Targets
 ------------

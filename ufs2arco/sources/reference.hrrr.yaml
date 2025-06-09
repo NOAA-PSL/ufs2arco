@@ -1,0 +1,314 @@
+accum_sdwe:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260056
+    stepType: accum
+    typeOfLevel: surface
+  long_name: Water equivalent of accumulated snow depth (deprecated) accumulated over
+    forecast
+  original_name: sdwe
+accum_tp:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 228228
+    stepType: accum
+    typeOfLevel: surface
+  long_name: Total Precipitation accumulated over forecast
+  original_name: tp
+blh:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 159
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Boundary layer height
+cape:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 59
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Convective available potential energy
+cfrzr:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260030
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Categorical freezing rain
+cicep:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260031
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Categorical ice pellets
+cin:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 228001
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Convective inhibition
+cpofp:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260035
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Percent frozen precipitation
+crain:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260029
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Categorical rain
+csnow:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260032
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Categorical snow
+d2m:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 2
+    paramId: 168
+    typeOfLevel: heightAboveGround
+  long_name: 2 metre dewpoint temperature
+gh:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 156
+    typeOfLevel: isobaricInhPa
+  long_name: Geopotential height
+gust:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260065
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Wind speed (gust)
+lsm:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 172
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Land-sea mask
+max_10si:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 10
+    paramId: 237207
+    typeOfLevel: heightAboveGround
+  long_name: Time-maximum 10 metre wind speed
+orog:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 228002
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Orography
+prate:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 3059
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Precipitation rate
+q:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 133
+    typeOfLevel: isobaricInhPa
+  long_name: Specific humidity
+refd1000:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 1000
+    paramId: 260389
+    typeOfLevel: heightAboveGround
+  long_name: 1000 metre Derived radar reflectivity
+  original_name: refd
+refd4000:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 4000
+    paramId: 260389
+    typeOfLevel: heightAboveGround
+  long_name: 4000 metre Derived radar reflectivity
+  original_name: refd
+sde:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 3066
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Snow depth
+sdswrf:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260087
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Surface downward short-wave radiation flux
+sdwe:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260056
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Water equivalent of accumulated snow depth (deprecated)
+sh2:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 2
+    paramId: 174096
+    typeOfLevel: heightAboveGround
+  long_name: 2 metre specific humidity
+siconc:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 31
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Sea ice area fraction
+snowc:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260038
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Snow cover
+sp:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 134
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Surface pressure
+t:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 130
+    typeOfLevel: isobaricInhPa
+  long_name: Temperature
+t2m:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 2
+    paramId: 167
+    typeOfLevel: heightAboveGround
+  long_name: 2 metre temperature
+t_surface:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 130
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Temperature at surface
+  original_name: t
+u:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 131
+    typeOfLevel: isobaricInhPa
+  long_name: U component of wind
+u10:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 10
+    paramId: 165
+    typeOfLevel: heightAboveGround
+  long_name: 10 metre U wind component
+u80:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 80
+    paramId: 131
+    typeOfLevel: heightAboveGround
+  long_name: 80 metre U component of wind
+  original_name: u
+v:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 132
+    typeOfLevel: isobaricInhPa
+  long_name: V component of wind
+v10:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 10
+    paramId: 166
+    typeOfLevel: heightAboveGround
+  long_name: 10 metre V wind component
+v80:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    level: 80
+    paramId: 132
+    typeOfLevel: heightAboveGround
+  long_name: 80 metre V component of wind
+  original_name: v
+vgtyp:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260439
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Vegetation Type
+vis:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 3020
+    stepType: instant
+    typeOfLevel: surface
+  long_name: Visibility
+w:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 135
+    typeOfLevel: isobaricInhPa
+  long_name: Vertical velocity
