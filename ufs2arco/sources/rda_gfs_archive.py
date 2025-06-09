@@ -74,6 +74,16 @@ class RDAGFSArchive(NOAAGribForecastData, Source):
             slices=slices,
         )
 
+
+        # make sure the default variable set "just works"
+        # by pulling out the variable names only available at forecast time
+        if tuple(self.variables) == self.available_variables:
+            varlist = []
+            for key, meta in self._varmeta.items():
+                if not self._varmeta[key]["forecast_only"]:
+                    varlist.append(key)
+            self.variables = varlist
+
         # for GFS, plenty of variables only exist in the forecast, not analysis grib files
         # make sure the user doesn't ask for these before we get started
         if any(self.fhr == 0):
