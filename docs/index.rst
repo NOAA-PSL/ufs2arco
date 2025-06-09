@@ -16,6 +16,14 @@ Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Clo
 
 .. toctree::
    :maxdepth: 1
+   :caption: Data Sources
+
+   gefs_archive
+   gfs_archive
+   hrrr_archive
+
+.. toctree::
+   :maxdepth: 1
    :caption: Examples
 
    Replay FV3 (1 Degree) <example_replay_fv3>
