@@ -1,3 +1,22 @@
+accum_sdwe:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260056
+    stepType: accum
+    typeOfLevel: surface
+  long_name: Water equivalent of accumulated snow depth (deprecated) accumulated over
+    forecast
+  original_name: sdwe
+accum_tp:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 228228
+    stepType: accum
+    typeOfLevel: surface
+  long_name: Total Precipitation accumulated over forecast
+  original_name: tp
 blh:
   file_suffixes:
   - prs
@@ -166,16 +185,6 @@ sdwe:
     stepType: instant
     typeOfLevel: surface
   long_name: Water equivalent of accumulated snow depth (deprecated)
-sdwe_accum:
-  file_suffixes:
-  - prs
-  filter_by_keys:
-    paramId: 260056
-    stepType: accum
-    typeOfLevel: surface
-  long_name: Water equivalent of accumulated snow depth (deprecated) accumulated over
-    forecast
-  original_name: sdwe
 sh2:
   file_suffixes:
   - prs
@@ -232,15 +241,6 @@ t_surface:
     typeOfLevel: surface
   long_name: Temperature at surface
   original_name: t
-tp_accum:
-  file_suffixes:
-  - prs
-  filter_by_keys:
-    paramId: 228228
-    stepType: accum
-    typeOfLevel: surface
-  long_name: Total Precipitation accumulated over forecast
-  original_name: tp
 u:
   file_suffixes:
   - prs
