@@ -63,7 +63,6 @@ class Anemoi(Target):
     @property
     def datetime(self):
         if self._has_fhr:
-            #TODO: this is the hack where I assume we're using fhr=0 always
             return self.source.t0 + pd.Timedelta(hours=self.source.fhr[0])
         else:
             return self.source.time
@@ -90,7 +89,7 @@ class Anemoi(Target):
             "longitude": "longitudes",
         }
         if self._has_fhr:
-            protected_rename["t0"] = "dates"
+            protected_rename["valid_time"] = "dates"
         else:
             protected_rename["time"] = "dates"
 
@@ -127,8 +126,8 @@ class Anemoi(Target):
         self.sort_channels_by_levels = sort_channels_by_levels
         # additional checks
         if self._has_fhr:
-            assert len(self.source.fhr) == 1 and self.source.fhr[0] == 0, \
-                f"{self.name}.__init__: Can only use this class with fhr=0, no multiple lead times"
+            assert len(self.source.fhr) == 1, \
+                f"{self.name}.__init__: Can only use this class with len(fhr)==1, no multiple lead times"
 
         renamekeys = list(self.rename.keys())
         protected = list(self.protected_rename.keys()) + list(self.protected_rename.values())
@@ -150,6 +149,7 @@ class Anemoi(Target):
 
         if self._has_fhr:
             xds = xds.squeeze("fhr", drop=True)
+            xds = xds.swap_dims({"t0": "valid_time"})
 
         if not self._has_member:
             xds = xds.expand_dims({"ensemble": self.ensemble})
