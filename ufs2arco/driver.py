@@ -233,7 +233,7 @@ class Driver:
         topo.barrier()
         logger.info(f"Done moving the data\n")
 
-        self.report_missing_data(topo, missing_dims)
+        self.report_missing_data(topo, source, target, missing_dims)
 
         logger.info(f"Aggregating statistics (if any specified for target)")
         target.aggregate_stats(topo)
@@ -263,7 +263,7 @@ class Driver:
             zarr.consolidate_metadata(target.store_path)
         topo.barrier()
 
-    def report_missing_data(self, topo, missing_dims):
+    def report_missing_data(self, topo, source, target, missing_dims):
 
         missing_dims = topo.gather(missing_dims)
 
@@ -282,11 +282,11 @@ class Driver:
                     missing_data_yaml = target.store_path.replace(".zarr", ".missing.yaml")
                 else:
                     missing_data_yaml = target.store_path + ".missing.yaml"
-                msg = f"⚠️  Some data are missing.\n" +\
+                msg = f"\n⚠️  Some data are missing.\n" +\
                     f"⚠️  The missing dimension combos, i.e.,\n" +\
-                    f"⚠️ \t{self.source.sample_dims}\n" +\
+                    f"⚠️ \t{source.sample_dims}\n" +\
                     f"⚠️  will be written to: {missing_data_yaml}"
-                logger.info(msg)
+                logger.warning(msg)
                 with open(missing_data_yaml, "w") as f:
                     yaml.dump(missing_dims, stream=f)
 
