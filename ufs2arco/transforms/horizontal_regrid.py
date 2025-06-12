@@ -51,6 +51,9 @@ def horizontal_regrid(
         if not os.path.isfile(filename):
             logger.info(f"ufs2arco.transforms.horizontal_regrid: computed bounds are\nLongitude\n{xds.lon_b}\nLatitude\n{xds.lat_b}")
 
+    # check input_array for c_contiguous or not
+    xds = maybe_make_dataset_c_contiguous(xds)
+
     # do the work
     regridder = xesmf.Regridder(
         ds_in=xds,
@@ -105,3 +108,32 @@ def create_output_dataset(lat, lon, is_gaussian):
         "lon": lon,
     })
     return get_bounds(xds, is_gaussian)
+
+def maybe_make_dataset_c_contiguous(xds: xr.Dataset) -> xr.Dataset:
+    """xesmf expects arrays to be C_CONTIGUOUS, conforming to python data standards.
+    However, GCM data is often F_CONTIGUOUS, since most numerical cores are in fortran.
+    Deal with that here...
+
+    Args:
+        xds (xr.Dataset): with the input data, pre regridding
+
+    Returns:
+        xds (xr.Dataset): with original data if it's already C_CONTIGUOUS, or
+            with data modified to be C_CONTIGUOUS
+    """
+    modified = False
+    new_vars = {}
+
+    for name, xda in xds.data_vars.items():
+        data = xda.data
+        if hasattr(data, "flags") and not data.flags["C_CONTIGUOUS"]:
+            data = np.ascontiguousarray(data)
+            modified = True
+            new_vars[name] = xr.DataArray(data, dims=xda.dims, coords=xda.coords, attrs=xda.attrs)
+        else:
+            new_vars[name] = xda
+
+    if modified:
+        return xr.Dataset(new_vars, coords=xds.coords, attrs=xds.attrs)
+    else:
+        return xds
