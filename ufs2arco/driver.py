@@ -8,7 +8,9 @@ import logging
 import yaml
 from datetime import datetime
 
+import numpy as np
 import xarray as xr
+import pandas as pd
 import zarr
 
 from ufs2arco.log import setup_simple_log
@@ -164,16 +166,7 @@ class Driver:
         kw["cache_dir"] = os.path.expandvars(self.config["directories"]["cache"])
         return kw
 
-    def run(self, overwrite: bool = False):
-        """Runs the data movement process, managing the datasets and mover.
-
-        This method sets up the datasets, creates the container, and loops through
-        batches to move data to the specified store path (Zarr format).
-
-        Args:
-            overwrite (bool, optional): Whether to overwrite the existing container.
-                Defaults to False.
-        """
+    def setup(self):
         # MPI requires some extra setup
         mover_kwargs = self.mover_kwargs.copy()
         if self.use_mpi:
@@ -191,17 +184,32 @@ class Driver:
             self.transformer = None
         target = self.TargetDataset(source=source, **self.target_kwargs)
         mover = self.Mover(source=source, target=target, transformer=self.transformer, **mover_kwargs)
+        return topo, mover, source, target
+
+    def run(self, overwrite: bool = False):
+        """Runs the data movement process, managing the datasets and mover.
+
+        This method sets up the datasets, creates the container, and loops through
+        batches to move data to the specified store path (Zarr format).
+
+        Args:
+            overwrite (bool, optional): Whether to overwrite the existing container.
+                Defaults to False.
+        """
+        topo, mover, source, target = self.setup()
 
         # create container, only if mover start is not 0
-        if mover_kwargs["start"] == 0:
+        if mover.start == 0:
             container_kwargs = {"mode": "w"} if overwrite else {}
             mover.create_container(**container_kwargs)
 
         # loop through batches
         n_batches = len(mover)
-        for batch_idx in range(mover_kwargs["start"], len(mover)):
+        missing_dims = []
+        for batch_idx in range(mover.start, n_batches):
 
             xds = next(mover)
+
 
             # xds is None if MPI rank looks for non existent indices (i.e., last batch scenario)
             # len(xds) == 0 if we couldn't find the file we were looking for
@@ -213,10 +221,19 @@ class Driver:
                 xds.to_zarr(target.store_path, region=region)
                 mover.clear_cache(batch_idx)
 
+            elif xds is not None:
+
+                # we couldn't find the file, keep track of it
+                batch_indices = mover.get_batch_indices(batch_idx)
+                for these_dims in batch_indices:
+                    missing_dims.append(these_dims)
+
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
 
         topo.barrier()
         logger.info(f"Done moving the data\n")
+
+        self.report_missing_data(topo, missing_dims)
 
         logger.info(f"Aggregating statistics (if any specified for target)")
         target.aggregate_stats(topo)
@@ -226,6 +243,12 @@ class Driver:
             logger.info(f"Computing temporal residual statistics")
             target.calc_temporal_residual_stats(topo)
             logger.info(f"Done computing temporal residual statistics")
+
+        self.finalize_attributes(topo, target)
+        logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {target.store_path}")
+
+
+    def finalize_attributes(self, topo, target):
 
         logger.info(f"Storing the recipe and anything from the 'attrs' section in zarr store attributes")
         if topo.is_root:
@@ -240,4 +263,47 @@ class Driver:
             zarr.consolidate_metadata(target.store_path)
         topo.barrier()
 
-        logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {target.store_path}")
+    def report_missing_data(self, topo, missing_dims):
+
+        missing_dims = topo.gather(missing_dims)
+
+        if topo.is_root:
+            # collect the list of lists into one list of dicts
+            missing_dims = [item for sublist in missing_dims for item in sublist]
+
+            if len(missing_dims) > 0:
+                # sort it by t0 or time
+                # then convert numpy or pandas types to int/str etc
+                missing_dims = sorted(missing_dims, key=_get_time)
+                missing_dims = [_convert_types(d) for d in missing_dims]
+
+                # write it out
+                if ".zarr" in target.store_path:
+                    missing_data_yaml = target.store_path.replace(".zarr", ".missing.yaml")
+                else:
+                    missing_data_yaml = target.store_path + ".missing.yaml"
+                msg = f"⚠️  Some data are missing.\n" +\
+                    f"⚠️  The missing dimension combos, i.e.,\n" +\
+                    f"⚠️ \t{self.source.sample_dims}\n" +\
+                    f"⚠️  will be written to: {missing_data_yaml}"
+                logger.info(msg)
+                with open(missing_data_yaml, "w") as f:
+                    yaml.dump(missing_dims, stream=f)
+
+
+# some utilities for handling missing data
+def _get_time(d):
+    return d.get("t0", d.get("time", None))
+
+def _convert_types(d):
+    d = d.copy()
+    # Convert pd.Timestamp to string
+    if "t0" in d and isinstance(d["t0"], pd.Timestamp):
+        d["t0"] = str(d["t0"])
+    if "time" in d and isinstance(d["time"], pd.Timestamp):
+        d["time"] = str(d["time"])
+    # Convert numpy integers to Python int
+    for key in ["fhr", "member"]:
+        if key in d and isinstance(d[key], np.integer):
+            d[key] = int(d[key])
+    return d

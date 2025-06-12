@@ -5,6 +5,7 @@ from typing import Optional
 import fsspec
 
 import xarray as xr
+import gribapi
 
 logger = logging.getLogger("ufs2arco")
 
@@ -130,16 +131,23 @@ class NOAAGribForecastData:
                     except:
                         thisvar = None
                     dslist.append(thisvar)
-                if not all(x is None for x in dslist):
-                    dsdict[varname] = xr.merge([xds for xds in dslist if xds is not None])[varname]
+                dslist = [xds for xds in dslist if xds is not None]
+                if len(dslist) == 1:
+                    dsdict[varname] = dslist[0]
+                elif len(dslist) > 1:
+                    dsdict[varname] = xr.merge(dslist)
                 else:
                     logger.warning(
-                        f"{self.name}: Could not find {varname}\n\t" +
+                        f"{self.name}: Could not find {varname}, will stop reading variables for this sample\n\t" +
                         f"dims = {dims}, file_suffixes = {self._varmeta[varname]['file_suffixes']}"
                     )
-                    dsdict[varname] = xr.DataArray(name=varname, dtype=np.float32)
+                    dsdict = {}
+                    break
+
+        # the dataset is either full or completely empty if we had trouble
         xds = xr.Dataset(dsdict)
-        xds = self.apply_slices(xds)
+        if len(xds) > 0:
+            xds = self.apply_slices(xds)
         return xds
 
 
@@ -160,12 +168,17 @@ class NOAAGribForecastData:
             xr.DataArray: The extracted variable as an xarray DataArray.
         """
         fbk = self._varmeta[varname]["filter_by_keys"]
-        xds = xr.open_dataset(
-            file,
-            engine="cfgrib",
-            filter_by_keys=fbk,
-            decode_timedelta=True,
-        )
+        try:
+            xds = xr.open_dataset(
+                file,
+                engine="cfgrib",
+                filter_by_keys=fbk,
+                decode_timedelta=True,
+            )
+        except gribapi.errors.WrongLengthError:
+            logger.warning(f"{self.name}: gribapi.errors.WrongLengthError for varname = {varname} at dims = {dims}")
+            return None
+
         if "original_name" in self._varmeta[varname]:
             og = self._varmeta[varname]["original_name"]
             xds = xds.rename({og: varname})
@@ -220,8 +233,7 @@ class NOAAGribForecastData:
                 level_selection = [l for l in self.levels if l in xds.level.values]
                 if len(level_selection) == 0:
                     # we don't select vertical levels available in this file
-                    # return an empty data array
-                    return xr.DataArray(name=varname, dtype=xda.dtype)
+                    return None
                 xds = xds.sel(level=level_selection, **self._level_sel_kwargs)
 
             # handle potential ensemble member dimension
@@ -287,6 +299,8 @@ class NOAAGribForecastData:
         """
 
         file = self._open_local(dims, file_suffix, cache_dir)
+        if file is None:
+            return None
 
         if "decode_timedelta" not in kwargs:
             kwargs["decode_timedelta"] = True
