@@ -25,7 +25,7 @@ directories:
   logs: logs
 
 source:
-  name: rda_gfs_archive
+  name: gfs_archive
   t0:
     start: 2017-01-01T00
     end: 2017-01-02T18

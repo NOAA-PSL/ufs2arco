@@ -9,16 +9,13 @@ from ufs2arco.sources import Source, NOAAGribForecastData
 
 logger = logging.getLogger("ufs2arco")
 
-class RDAGFSArchive(NOAAGribForecastData, Source):
+class GFSArchive(NOAAGribForecastData, Source):
     """
-    Access the UCAR Research Data Archive (RDA) of NOAA's Global Forecast System (GFS).
-
-    For more see:
-        * https://rda.ucar.edu/datasets/d084001
-        * https://rda.ucar.edu/datasets/d084003
-
-    Note:
-        I don't know if the resolution changes at some point, as it does in the GEFS archive.
+    Access 1/4 degree archives of NOAA's Global Forecast System (GFS) via:
+        * if before 2021: UCAR Research Data Archive (RDA)
+            * https://rda.ucar.edu/datasets/d084001
+            * https://rda.ucar.edu/datasets/d084003
+        * after 2021: AWS at https://registry.opendata.aws/noaa-gfs-bdp-pds/
     """
 
     sample_dims = ("t0", "fhr")
@@ -104,7 +101,7 @@ class RDAGFSArchive(NOAAGribForecastData, Source):
         file_suffix: str,
     ) -> str:
         """
-        Build the file path to a GEFS GRIB file on AWS.
+        Build the file path to a GFS GRIB file on RDA or AWS.
 
         Args:
             t0 (pd.Timestamp): The initial condition timestamp.
@@ -114,10 +111,22 @@ class RDAGFSArchive(NOAAGribForecastData, Source):
         Returns:
             str: The constructed file path.
         """
-        bucket = f"https://data.rda.ucar.edu/d084001" if file_suffix == "" else \
-                f"https://data.rda.ucar.edu/d084003"
-        outer = f"{t0.year:04d}/{t0.year:04d}{t0.month:02d}{t0.day:02d}"
-        fname = f"gfs.0p25{file_suffix}.{t0.year:04d}{t0.month:02d}{t0.day:02d}{t0.hour:02d}.f{fhr:03d}.grib2"
+        if t0 < pd.Timestamp("2021-01-01T00"):
+
+            bucket = f"https://data.rda.ucar.edu/d084001" if file_suffix == "" else \
+                    f"https://data.rda.ucar.edu/d084003"
+            outer = f"{t0.year:04d}/{t0.year:04d}{t0.month:02d}{t0.day:02d}"
+            fname = f"gfs.0p25{file_suffix}.{t0.year:04d}{t0.month:02d}{t0.day:02d}{t0.hour:02d}.f{fhr:03d}.grib2"
+
+
+        else:
+            bucket = "s3://noaa-gfs-bdp-pds"
+            outer = f"gfs.{t0.year:04d}{t0.month:02d}{t0.day:02d}/{t0.hour:02d}"
+            fname = f"gfs.t{t0.hour:02d}z.pgrb2{file_suffix}.0p25.f{fhr:03d}"
+
+            if t0 > pd.Timestamp("2021-03-22T06"):
+                fname = "atmos/" + fname
+
         fullpath = f"filecache::{bucket}/{outer}/{fname}"
         logger.debug(f"{self.name}._build_path: reading {fullpath}")
         return fullpath
