@@ -313,7 +313,7 @@ class Anemoi(Target):
                 # Is attributes here a hack? Add the "field_shape" here
                 # so that it's in the order of the data arrays, not in the dataset order
                 # (they could be different)
-                if "field_shape" not in nds.attrs:
+                if "field_shape" not in nds.attrs and all(d in xds[name].dims for d in self.expanded_horizontal_dims):
                     stack_order = list(d for d in xds[name].dims if d in self.expanded_horizontal_dims)
                     nds.attrs["stack_order"] = stack_order
                     nds.attrs["field_shape"] = list(len(xds[d]) for d in stack_order)
