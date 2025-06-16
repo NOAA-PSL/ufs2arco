@@ -499,6 +499,27 @@ class Anemoi(Target):
         return xds
 
 
+    def finalize(self, topo) -> None:
+        """Finalize the dataset with
+        * dates
+        * stats
+        * temporal stats (if specified)
+        """
+
+        self.add_dates(topo)
+
+        logger.info(f"Aggregating statistics")
+        self.aggregate_stats(topo)
+        logger.info(f"Done aggregating statistics\n")
+
+        if self.compute_temporal_residual_statistics:
+            logger.info(f"Computing temporal residual statistics")
+            self.calc_temporal_residual_stats(topo)
+            logger.info(f"Done computing temporal residual statistics\n")
+
+        super().finalize(topo=topo)
+
+
     def add_dates(self, topo) -> None:
         """Deal with the dates issue
 
@@ -525,7 +546,7 @@ class Anemoi(Target):
             # store it, first copying the attributes over
             nds.attrs = attrs
             nds.to_zarr(self.store_path, mode="a")
-            logger.info(f"{self.name}.add_dates: dates appended to the dataset")
+            logger.info(f"{self.name}.add_dates: dates appended to the dataset\n")
 
 
     def aggregate_stats(self, topo) -> None:

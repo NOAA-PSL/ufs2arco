@@ -218,16 +218,7 @@ class Driver:
         topo.barrier()
         logger.info(f"Done moving the data\n")
 
-        target.add_dates(topo)
-
-        logger.info(f"Aggregating statistics (if any specified for target)")
-        target.aggregate_stats(topo)
-        logger.info(f"Done aggregating statistics\n")
-
-        if target.compute_temporal_residual_statistics:
-            logger.info(f"Computing temporal residual statistics")
-            target.calc_temporal_residual_stats(topo)
-            logger.info(f"Done computing temporal residual statistics")
+        target.finalize(topo)
 
         logger.info(f"Storing the recipe and anything from the 'attrs' section in zarr store attributes")
         if topo.is_root:
