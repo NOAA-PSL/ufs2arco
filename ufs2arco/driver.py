@@ -283,8 +283,7 @@ class Driver:
         topo.barrier()
         logger.info(f"Done moving the data\n")
 
-        logger.info(f"After patch, these are still missing\n {missing_again}\n")
-
+        self.report_missing_data(topo, source, target, missing_again)
         target.finalize(topo)
         self.finalize_attributes(topo, target)
 
@@ -322,16 +321,20 @@ class Driver:
                 # sort it by t0 or time
                 # then convert numpy or pandas types to int/str etc
                 missing_dims = sorted(missing_dims, key=_get_time)
-                missing_dims = [_convert_types(d) for d in missing_dims]
+                missing_dims = [_convert_types_to_yaml(d) for d in missing_dims]
 
-                missing_data_yaml = get_missing_data_path(target.store_path)
+                target.handle_missing_data(missing_dims)
+
+                missing_data_yaml = self.get_missing_data_path(target.store_path)
                 with open(missing_data_yaml, "w") as f:
                     yaml.dump(missing_dims, stream=f)
 
                 logger.warning(f"⚠️  Some data are missing.")
-                logger.warning(f"⚠️  The missing dimension combos, i.e.,")
-                logger.warning(f"⚠️ \t{source.sample_dims}")
+                logger.warning(f"⚠️  The missing dimension combos, i.e., {source.sample_dims}")
                 logger.warning(f"⚠️  were written to: {missing_data_yaml}")
+                logger.warning(f"You can try running")
+                logger.warning(f"\tpython -c 'import ufs2arco; ufs2arco.Driver(''/path/to/your/original/recipe.yaml'').patch()'")
+                logger.warning(f"to try getting those data again\n")
 
 # some utilities for handling missing data
 def _get_time(d):

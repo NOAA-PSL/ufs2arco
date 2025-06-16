@@ -689,3 +689,30 @@ class Anemoi(Target):
 
         # unclear if this barrier is necessary
         topo.barrier()
+
+
+    def handle_missing_data(self, missing_data: list[dict]) -> None:
+        """Take a list of dicts, with dimensions of missing data. Keep track of any missing dates
+        (via "t0" or "time") and store that in the zarr.
+
+        Note that anemoi doesn't really care if we have 30 ensemble members that are good to go for a missing date,
+        if one is missing they all are.
+
+        Note: it is assumed this is only called from the root process
+
+        Args:
+            missing_data (list[dict]): list with missing data dicts
+        """
+
+        missing_dates = []
+        zds = zarr.open(self.store_path, mode="a")
+
+        for missing_sample in missing_data:
+            if self._has_fhr:
+                valid_time = pd.Timestamp(missing_sample["t0"]) + pd.Timedelta(hours=missing_sample["fhr"])
+                missing_dates.append(str(valid_time))
+            else:
+                missing_dates.append(missing_sample["time"])
+
+        zds.attrs["missing_dates"] = missing_dates
+        zarr.consolidate_metadata(self.store_path)

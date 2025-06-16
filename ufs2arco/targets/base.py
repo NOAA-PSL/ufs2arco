@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 import xarray as xr
+import zarr
 
 from ufs2arco.sources import Source
 from ufs2arco.targets import forcings as fmod # funky name because 'forcings' seems like the more natural user specified option
@@ -223,3 +224,16 @@ class Target:
     def finalize(self, topo) -> None:
         """Any last minute operations"""
         pass
+
+    def handle_missing_data(self, missing_data: list[dict]) -> None:
+        """Take a list of dicts, with dimensions of missing data, and store it in the zarr
+
+        Note: it is assumed this is only called from the root process
+
+        Args:
+            missing_data (list[dict]): list with missing data dicts
+        """
+
+        zds = zarr.open(self.store_path, mode="a")
+        zds.attrs["missing_data"] = missing_data
+        zarr.consolidate_metadata(self.store_path)
