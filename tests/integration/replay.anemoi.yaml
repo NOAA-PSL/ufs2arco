@@ -64,6 +64,9 @@ transforms:
 target:
   name: anemoi
   compute_temporal_residual_statistics: True
+  statistics_period:
+    start: 2017-01-01T00
+    end: 2017-01-01T18
 
   forcings:
     - cos_latitude

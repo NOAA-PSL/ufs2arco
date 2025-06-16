@@ -60,6 +60,7 @@ class Target:
         store_path: str,
         rename: Optional[dict] = None,
         forcings: Optional[list | tuple] = None,
+        statistics_period: Optional[dict] = None,
         compute_temporal_residual_statistics: Optional[bool] = False,
     ) -> None:
         """
@@ -70,6 +71,7 @@ class Target:
             chunks (dict): Dictionary with chunk sizes for Dask arrays.
             store_path (str): Path to store the output data.
             rename (dict, optional): rename variables
+            statistics_period (dict, optional): start and end dates to bound data for statistics computation, inclusive
             compute_temporal_residual_statistics: (bool, optional): if True, compute statistics of the temporal difference
         """
         self.source = source
@@ -100,10 +102,21 @@ class Target:
         else:
             self.forcings = tuple()
 
-        # temporal residual statistics
+        # statistics
         # For now, only implemented in anemoi target
+        if "anemoi" not in self.name.lower() and statistics_period is not None:
+            raise NotImplementedError(f"{self.name}.__init__: computation of statistics not implemented for this target")
         if "anemoi" not in self.name.lower() and compute_temporal_residual_statistics:
             raise NotImplementedError(f"{self.name}.__init__: computation of temporal residual statistics not implemented for this target")
+
+        if statistics_period is not None:
+            start = statistics_period.get("start", None)
+            end = statistics_period.get("end", None)
+            for thisone in [start, end]:
+                if thisone is not None:
+                    assert isinstance(thisone, str), \
+                        f"{self.name}.__init__: couldn't recognize statistics_period input, provide start & end as strings in the format 'YYYY-mm-ddTHH', got {thisone}"
+        self.statistics_period = statistics_period if statistics_period is not None else dict()
         self.compute_temporal_residual_statistics = compute_temporal_residual_statistics
 
         logger.info(str(self))
@@ -207,11 +220,6 @@ class Target:
         xds = self.source.add_full_extra_coords(xds)
         return xds
 
-    def aggregate_stats(self, topo) -> None:
-        """Aggregate statistics over "time" and "ensemble" dimension...
-        This should read in the zarr store, aggregate stats, and delete any temporary arrays from the zarr store
-        """
-        pass
-
-    def calc_temporal_residual_stats(self, topo) -> None:
+    def finalize(self, topo) -> None:
+        """Any last minute operations"""
         pass
