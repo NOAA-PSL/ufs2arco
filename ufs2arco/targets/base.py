@@ -109,6 +109,13 @@ class Target:
         if "anemoi" not in self.name.lower() and compute_temporal_residual_statistics:
             raise NotImplementedError(f"{self.name}.__init__: computation of temporal residual statistics not implemented for this target")
 
+        if statistics_period is not None:
+            start = statistics_period.get("start", None)
+            end = statistics_period.get("end", None)
+            for thisone in [start, end]:
+                if thisone is not None:
+                    assert isinstance(thisone, str), \
+                        f"{self.name}.__init__: couldn't recognize statistics_period input, provide start & end as strings in the format 'YYYY-mm-ddTHH', got {thisone}"
         self.statistics_period = statistics_period if statistics_period is not None else dict()
         self.compute_temporal_residual_statistics = compute_temporal_residual_statistics
 
