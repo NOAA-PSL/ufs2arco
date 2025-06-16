@@ -55,6 +55,8 @@ class Driver:
         "attrs",
     )
 
+
+
     def __init__(self, config_filename: str):
         """Initializes the Driver object with configuration from the specified YAML file.
 
@@ -166,15 +168,23 @@ class Driver:
         kw["cache_dir"] = os.path.expandvars(self.config["directories"]["cache"])
         return kw
 
-    def setup(self):
+    def setup(self, runtype):
         # MPI requires some extra setup
         mover_kwargs = self.mover_kwargs.copy()
+
+        log_dir = os.path.expandvars(self.config["directories"]["logs"])
+
+        if runtype != "create":
+            if log_dir.endswith("/"):
+                log_dir = log_dir[:-1]
+            log_dir += f"-{runtype}"
+
         if self.use_mpi:
-            topo = MPITopology(log_dir=os.path.expandvars(self.config["directories"]["logs"]))
+            topo = MPITopology(log_dir=log_dir)
             mover_kwargs["mpi_topo"] = topo
 
         else:
-            topo = SerialTopology(log_dir=os.path.expandvars(self.config["directories"]["logs"]))
+            topo = SerialTopology(log_dir=log_dir)
 
         source = self.SourceDataset(**self.source_kwargs)
         # create the transformer
@@ -196,7 +206,7 @@ class Driver:
             overwrite (bool, optional): Whether to overwrite the existing container.
                 Defaults to False.
         """
-        topo, mover, source, target = self.setup()
+        topo, mover, source, target = self.setup(runtype="create")
 
         # create container, only if mover start is not 0
         if mover.start == 0:
@@ -235,9 +245,48 @@ class Driver:
 
         self.report_missing_data(topo, source, target, missing_dims)
         target.finalize(topo)
-
         self.finalize_attributes(topo, target)
-        logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {target.store_path}")
+
+    def patch(self):
+
+        topo, mover, source, target = self.setup(runtype="patch")
+        missing_dims = _open_patch_yaml(self.get_missing_data_path(target.store_path))
+
+        logger.info(f"Starting patch workflow with missing_dims\n{missing_dims}\n")
+
+        # hacky for now, reset the mover's sample_indices to be the missing dims
+        mover.sample_indices = missing_dims
+        mover.restart(idx=0)
+
+        missing_again = list()
+        n_batches = len(mover)
+        for batch_idx, xds in enumerate(mover):
+
+            # xds is None if MPI rank looks for non existent indices (i.e., last batch scenario)
+            # len(xds) == 0 if we couldn't find the file we were looking for
+            has_content = xds is not None and len(xds) > 0
+            if has_content:
+
+                xds = xds.reset_coords(drop=True)
+                region = mover.find_my_region(xds)
+                xds.to_zarr(target.store_path, region=region)
+                mover.clear_cache(batch_idx)
+
+            elif xds is not None:
+
+                batch_indices = mover.get_batch_indices(batch_idx)
+                for these_dims in batch_indices:
+                    missing_again.append(these_dims)
+
+            logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
+
+        topo.barrier()
+        logger.info(f"Done moving the data\n")
+
+        logger.info(f"After patch, these are still missing\n {missing_again}\n")
+
+        target.finalize(topo)
+        self.finalize_attributes(topo, target)
 
 
     def finalize_attributes(self, topo, target):
@@ -254,6 +303,12 @@ class Driver:
             # just in case
             zarr.consolidate_metadata(target.store_path)
         topo.barrier()
+        logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {target.store_path}")
+
+
+    def get_missing_data_path(self, store_path) -> str:
+        directory, zstore = os.path.split(store_path)
+        return f"{directory}/missing.{zstore}.yaml"
 
     def report_missing_data(self, topo, source, target, missing_dims):
 
@@ -269,25 +324,20 @@ class Driver:
                 missing_dims = sorted(missing_dims, key=_get_time)
                 missing_dims = [_convert_types(d) for d in missing_dims]
 
-                # write it out
-                if ".zarr" in target.store_path:
-                    missing_data_yaml = target.store_path.replace(".zarr", ".missing.yaml")
-                else:
-                    missing_data_yaml = target.store_path + ".missing.yaml"
-                msg = f"\n⚠️  Some data are missing.\n" +\
-                    f"⚠️  The missing dimension combos, i.e.,\n" +\
-                    f"⚠️ \t{source.sample_dims}\n" +\
-                    f"⚠️  will be written to: {missing_data_yaml}\n"
-                logger.warning(msg)
+                missing_data_yaml = get_missing_data_path(target.store_path)
                 with open(missing_data_yaml, "w") as f:
                     yaml.dump(missing_dims, stream=f)
 
+                logger.warning(f"⚠️  Some data are missing.")
+                logger.warning(f"⚠️  The missing dimension combos, i.e.,")
+                logger.warning(f"⚠️ \t{source.sample_dims}")
+                logger.warning(f"⚠️  were written to: {missing_data_yaml}")
 
 # some utilities for handling missing data
 def _get_time(d):
     return d.get("t0", d.get("time", None))
 
-def _convert_types(d):
+def _convert_types_to_yaml(d):
     d = d.copy()
     # Convert pd.Timestamp to string
     if "t0" in d and isinstance(d["t0"], pd.Timestamp):
@@ -299,3 +349,15 @@ def _convert_types(d):
         if key in d and isinstance(d[key], np.integer):
             d[key] = int(d[key])
     return d
+
+def _open_patch_yaml(yamlpath):
+
+    with open(yamlpath, "r") as f:
+        missing_dims = yaml.safe_load(f)
+    # Convert string -> pd.Timestamp
+    for i, d in enumerate(missing_dims):
+        if "t0" in d and isinstance(d["t0"], str):
+            missing_dims[i]["t0"] = pd.Timestamp(d["t0"])
+        if "time" in d and isinstance(d["time"], str):
+            missing_dims[i]["time"] = pd.Timestamp(d["time"])
+    return missing_dims
