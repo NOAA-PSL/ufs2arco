@@ -83,6 +83,32 @@ class Anemoi(Target):
             return [0]
 
     @property
+    def start_date(self):
+        return str(self.datetime[0]).replace(" ", "T")
+
+    @property
+    def end_date(self):
+        return str(self.datetime[-1]).replace(" ", "T")
+
+    @property
+    def statistics_start_date(self):
+        if self.statistics_period.get("start", None) is None:
+            return self.start_date
+        else:
+            date = pd.Timestamp(self.statistics_period.get("start"))
+            assert date in self.datetime, "{self.name}: could not find statistics_start_date within datetime"
+            return str(date).replace(" ", "T")
+
+    @property
+    def statistics_end_date(self):
+        if self.statistics_period.get("end", None) is None:
+            return self.end_date
+        else:
+            date = pd.Timestamp(self.statistics_period.get("end"))
+            assert date in self.datetime, "{self.name}: could not find statistics_end_date within datetime"
+            return str(date).replace(" ", "T")
+
+    @property
     def protected_rename(self) -> dict:
         protected_rename = {
             "latitude": "latitudes",
@@ -110,6 +136,7 @@ class Anemoi(Target):
         store_path: str,
         rename: Optional[dict] = None,
         forcings: Optional[tuple | list] = None,
+        statistics_period: Optional[dict] = None,
         compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
     ) -> None:
@@ -120,6 +147,7 @@ class Anemoi(Target):
             store_path=store_path,
             rename=rename,
             forcings=forcings,
+            statistics_period=statistics_period,
             compute_temporal_residual_statistics=compute_temporal_residual_statistics,
         )
 
@@ -175,11 +203,11 @@ class Anemoi(Target):
             "ensemble_dimension": len(self.ensemble),
             "flatten_grid": self.do_flatten_grid,
             "resolution": str(self.resolution),
-            "start_date": str(self.datetime[0]).replace(" ", "T"),
-            "end_date": str(self.datetime[-1]).replace(" ", "T"),
+            "start_date": self.start_date,
+            "end_date": self.end_date,
             "frequency": self.datetime.freqstr,
-            "statistics_start_date": str(self.datetime[0]).replace(" ", "T"),
-            "statistics_end_date": str(self.datetime[-1]).replace(" ", "T"),
+            "statistics_start_date": self.statistics_start_date,
+            "statistics_end_date": self.statistics_end_date,
         }
         xds.attrs.update(attrs)
         return xds
@@ -470,6 +498,36 @@ class Anemoi(Target):
         xds["sums_array"] = xds["data"].sum(dims, skipna=self.allow_nans).astype(np.float64)
         return xds
 
+
+    def add_dates(self, topo) -> None:
+        """Deal with the dates issue
+
+        for some reason, it is a challenge to get the datetime64 dtype to open
+        consistently between zarr and xarray, and
+        it is much easier to deal with this all at once here
+        than in the create_container and incrementally fill workflow.
+        """
+
+        if topo.is_root:
+            xds = xr.open_zarr(self.store_path)
+            attrs = xds.attrs.copy()
+
+            nds = xr.Dataset()
+            nds["dates"] = xr.DataArray(
+                self.datetime,
+                coords=xds["time"].coords,
+            )
+            nds["dates"].encoding = {
+                "dtype": "datetime64[s]",
+                "units": "seconds since 1970-01-01",
+            }
+
+            # store it, first copying the attributes over
+            nds.attrs = attrs
+            nds.to_zarr(self.store_path, mode="a")
+            logger.info(f"{self.name}.add_dates: dates appended to the dataset")
+
+
     def aggregate_stats(self, topo) -> None:
         """Aggregate statistics over "time" and "ensemble" dimension...
         I'm assuming that this is relatively inexpensive without the spatial dimension
@@ -483,6 +541,12 @@ class Anemoi(Target):
 
         xds = xr.open_zarr(self.store_path)
         attrs = xds.attrs.copy()
+
+        # get the start/end times for computing statistics
+        # in terms of logical time index values
+        start_idx = list(self.datetime).index(pd.Timestamp(self.statistics_start_date))
+        end_idx = list(self.datetime).index(pd.Timestamp(self.statistics_end_date))
+        xds = xds.sel(time=slice(start_idx, end_idx))
 
         dims = ["time", "ensemble"]
         time_indices = np.array_split(np.arange(len(xds["time"])), topo.size)
@@ -543,20 +607,6 @@ class Anemoi(Target):
             variance = nds["squares"] / nds["count"] - nds["mean"]**2
             nds["stdev"] = xr.where(variance >= 0, np.sqrt(variance), 0.)
 
-            # ...and now we deal with the dates issue
-            # for some reason, it is a challenge to get the datetime64 dtype to open
-            # consistently between zarr and xarray, and
-            # it is much easier to deal with this all at once here
-            # than in the create_container and incrementally fill workflow.
-            nds["dates"] = xr.DataArray(
-                self.datetime,
-                coords=xds["time"].coords,
-            )
-            nds["dates"].encoding = {
-                "dtype": "datetime64[s]",
-                "units": "seconds since 1970-01-01",
-            }
-
             # store it, first copying the attributes over
             nds.attrs = attrs
             nds.to_zarr(self.store_path, mode="a")
@@ -569,9 +619,16 @@ class Anemoi(Target):
     def calc_temporal_residual_stats(self, topo):
 
         xds = xr.open_zarr(self.store_path)
+        attrs = xds.attrs.copy()
+
+        # get the start/end times for computing statistics
+        # in terms of logical time index values
+        start_idx = list(self.datetime).index(pd.Timestamp(self.statistics_start_date))
+        end_idx = list(self.datetime).index(pd.Timestamp(self.statistics_end_date))
+        xds = xds.sel(time=slice(start_idx, end_idx))
+
         stdev = xds["stdev"].load()
         mean = xds["mean"].load()
-        attrs = xds.attrs.copy()
 
         data_norm = (xds["data"] - mean)/stdev
         data_diff = data_norm.diff("time")

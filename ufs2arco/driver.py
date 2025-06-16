@@ -218,6 +218,8 @@ class Driver:
         topo.barrier()
         logger.info(f"Done moving the data\n")
 
+        target.add_dates(topo)
+
         logger.info(f"Aggregating statistics (if any specified for target)")
         target.aggregate_stats(topo)
         logger.info(f"Done aggregating statistics\n")
