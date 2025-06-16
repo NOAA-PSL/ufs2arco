@@ -234,15 +234,7 @@ class Driver:
         logger.info(f"Done moving the data\n")
 
         self.report_missing_data(topo, source, target, missing_dims)
-
-        logger.info(f"Aggregating statistics (if any specified for target)")
-        target.aggregate_stats(topo)
-        logger.info(f"Done aggregating statistics\n")
-
-        if target.compute_temporal_residual_statistics:
-            logger.info(f"Computing temporal residual statistics")
-            target.calc_temporal_residual_stats(topo)
-            logger.info(f"Done computing temporal residual statistics")
+        target.finalize(topo)
 
         self.finalize_attributes(topo, target)
         logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {target.store_path}")
@@ -285,7 +277,7 @@ class Driver:
                 msg = f"\n⚠️  Some data are missing.\n" +\
                     f"⚠️  The missing dimension combos, i.e.,\n" +\
                     f"⚠️ \t{source.sample_dims}\n" +\
-                    f"⚠️  will be written to: {missing_data_yaml}"
+                    f"⚠️  will be written to: {missing_data_yaml}\n"
                 logger.warning(msg)
                 with open(missing_data_yaml, "w") as f:
                     yaml.dump(missing_dims, stream=f)
