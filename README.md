@@ -1,4 +1,9 @@
 # ufs2arco
+[![PyPI version](https://img.shields.io/pypi/v/ufs2arco.svg)](https://pypi.org/project/ufs2arco/)
+![OS Support](https://img.shields.io/badge/OS-Linux%20%7C%20macOS-blue?logo=apple&logoColor=white)
+![Supported Python Versions](https://img.shields.io/pypi/pyversions/ufs2arco)
+[![Documentation Status](https://readthedocs.org/projects/ufs2arco/badge/?version=latest)](https://ufs2arco.readthedocs.io/en/latest/?badge=latest)
+
 Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Cloud Optimized (ARCO) format
 
 ## Installation
