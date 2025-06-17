@@ -4,10 +4,6 @@ dynamic = ["version"]
 description = "Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Cloud Optimized (ARCO) format"
 authors = [
     {name="Timothy Smith", email="tim.smith@noaa.gov"},
-    {name="Daniel Abdi"},
-    {name="Mariah Pope"},
-    {name="Lauryn Eldridge"},
-    {name="Ken Witt"},
 ]
 license = {file = "LICENSE.txt"}
 readme = "README.md"
