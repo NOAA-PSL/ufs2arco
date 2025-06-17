@@ -332,9 +332,9 @@ class Driver:
                 logger.warning(f"⚠️  Some data are missing.")
                 logger.warning(f"⚠️  The missing dimension combos, i.e., {source.sample_dims}")
                 logger.warning(f"⚠️  were written to: {missing_data_yaml}")
-                logger.warning(f"You can try running")
-                logger.warning(f"\tpython -c 'import ufs2arco; ufs2arco.Driver(''/path/to/your/original/recipe.yaml'').patch()'")
-                logger.warning(f"to try getting those data again\n")
+                logger.warning(f"If you know the files are actually available, You can run")
+                logger.warning(f"\tpython -c 'import ufs2arco; ufs2arco.Driver(\"/path/to/your/original/recipe.yaml\").patch()'")
+                logger.warning(f"to try getting the data again\n")
 
 # some utilities for handling missing data
 def _get_time(d):
