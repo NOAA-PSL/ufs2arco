@@ -19,25 +19,26 @@ author = 'ufs2arco developers'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-        "sphinx.ext.autodoc",
-        "sphinx.ext.autosummary",
-        "sphinx.ext.napoleon",
-        "nbsphinx",
-        ]
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
+    "nbsphinx",
+]
 
 numpydoc_show_class_members = False
 napolean_google_docstring = True
 napolean_numpy_docstring = False
 
 templates_path = ['_templates']
-exclude_patterns = []
+exclude_patterns = ["archive/*.ipynb"]
 
-napoleon_custom_sections = [("Returns", "params_style"),
-                            ("Sets Attributes", "params_style"),
-                            ("Assumptions", "notes_style"),
-                            ("Required Fields in Config", "params_style"),
-                            ("Optional Fields in Config", "params_style"),
-                            ]
+napoleon_custom_sections = [
+    ("Returns", "params_style"),
+    ("Sets Attributes", "params_style"),
+    ("Assumptions", "notes_style"),
+    ("Required Fields in Config", "params_style"),
+    ("Optional Fields in Config", "params_style"),
+]
 
 
 # -- Options for HTML output -------------------------------------------------

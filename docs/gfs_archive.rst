@@ -1,3 +1,5 @@
+.. _gfs-archive:
+
 GFS Archive
 ###########
 

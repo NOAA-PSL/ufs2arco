@@ -1,3 +1,5 @@
+.. _gefs-archive:
+
 GEFS Archive
 ############
 

@@ -13,6 +13,8 @@ Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Clo
    :caption: Getting Started
 
    installation
+   capability_overview
+   moving_data
 
 .. toctree::
    :maxdepth: 1
@@ -26,11 +28,7 @@ Tools for converting Unified Forecast System (UFS) output to Analysis Ready, Clo
    :maxdepth: 1
    :caption: Examples
 
-   Replay FV3 (1 Degree) <example_replay_fv3>
-   Replay MOM6 (1 Degree) <example_replay_mom6>
-   Replay CICE6 (1 Degree) <example_replay_cice6>
    Interpolate FV3 to Pressure Levels <example_pressure_interpolation>
-
 
 .. toctree::
    :maxdepth: 1

@@ -1,18 +1,6 @@
 API Reference
 #############
 
-
-UFS Datasets
-------------
-
-.. autosummary::
-   :toctree: generated/
-
-   ufs2arco.FV3Dataset
-   ufs2arco.MOM6Dataset
-   ufs2arco.CICE6Dataset
-
-
 Regridding
 ----------
 
@@ -20,8 +8,6 @@ Regridding
    :toctree: generated/
 
    ufs2arco.Layers2Pressure
-   ufs2arco.MOM6Regridder
-   ufs2arco.CICE6Regridder
 
 
 Data Sources
@@ -33,7 +19,7 @@ Data Sources
    ufs2arco.sources.Source
    ufs2arco.sources.AWSGEFSArchive
    ufs2arco.sources.AWSHRRRArchive
-   ufs2arco.sources.RDAGFSArchive
+   ufs2arco.sources.GFSArchive
 
 Data Targets
 ------------
