@@ -4,6 +4,7 @@ try:
 except PackageNotFoundError:
     pass
 
+from .driver import Driver
 from .cice6dataset import CICE6Dataset
 from .fv3dataset import FV3Dataset
 from .layers2pressure import Layers2Pressure

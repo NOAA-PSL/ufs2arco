@@ -95,6 +95,9 @@ class MPITopology:
         """
         self.comm.Barrier()
 
+    def gather(self, local_array):
+        return self.comm.gather(local_array, root=self.root)
+
     def Reduce(self, local_array, result_buffer, op):
         self.comm.Reduce(local_array, result_buffer, op=op, root=self.root)
 
@@ -164,6 +167,9 @@ class SerialTopology:
 
     def barrier(self) -> None:
         pass
+
+    def gather(self, local_array):
+        return local_array
 
     # since the communication doesn't need to happen
     # we can assume these results already exist

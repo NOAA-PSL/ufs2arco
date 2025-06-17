@@ -49,6 +49,7 @@ class DataMover():
         self.target = target
         self.transformer = transformer if transformer is not None else lambda xds: xds
         self.batch_size = batch_size
+        self.start = start
         self.counter = start
         self.data_counter = start
         self.outer_cache_dir = cache_dir
@@ -117,8 +118,12 @@ class DataMover():
                     if len(fds) > 0:
                         fds = self.transformer(fds)
                         fds = self.target.apply_transforms_to_sample(fds)
-                    dlist.append(fds)
-                xds = xr.merge(dlist)
+                        dlist.append(fds)
+                if len(dlist) == 1:
+                    xds = dlist[0]
+                else:
+                    # if len(dlist) == 0, this returns an empty dataset
+                    xds = xr.merge(dlist)
                 return xds
 
             else:
