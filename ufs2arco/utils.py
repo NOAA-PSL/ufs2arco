@@ -77,3 +77,41 @@ def expand_anemoi_to_dataset(xda: xr.DataArray, variable_names: list[str]) -> xr
         dims = tuple(d for d in ("time", "ensemble", "level", "cell") if d in xds[key].dims)
         xds[key] = xds[key].transpose(*dims)
     return xds
+
+
+def convert_anemoi_inference(xds: xr.Dataset):
+
+    # Use regex to detect base name and level
+    level_pattern = re.compile(r"^(?P<base>[a-zA-Z0-9]+)_(?P<level>\d+)$")
+    level_groups = defaultdict(list)
+    flat_vars = []
+
+    for name in xds.data_vars:
+        parts = name.rsplit("_", 1)
+        if len(parts) > 1 and parts[-1].isdigit():
+            base = parts[0]
+            level = int(parts[-1])
+            level_groups[base].append((level, name))
+        else:
+            flat_vars.append(name)
+
+    dsdict = {}
+
+    # Add grouped variables with levels
+    for base, level_name_pairs in level_groups.items():
+
+        dalist = []
+        for level, level_name in level_name_pairs:
+            this_2d_array = xds[level_name].expand_dims({"level": [level]})
+            dalist.append(this_2d_array)
+
+        dsdict[base] = xr.concat(dalist, dim="level")
+
+    # Add flat variables
+    for name in flat_vars:
+        dsdict[name] = xds[name]
+
+    result = xr.Dataset(dsdict, attrs=xds.attrs)
+    result = result.set_coords(["latitude", "longitude"])
+    result = result.rename({"values": "cell"})
+    return result
