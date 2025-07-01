@@ -47,3 +47,4 @@ Available Variables
 
 .. include:: variables.hrrr.rst
 
+.. include:: variable_notes.rst

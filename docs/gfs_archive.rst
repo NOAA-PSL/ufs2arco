@@ -48,3 +48,5 @@ Available Variables
    available.
 
 .. include:: variables.gfs.rst
+
+.. include:: variable_notes.rst
