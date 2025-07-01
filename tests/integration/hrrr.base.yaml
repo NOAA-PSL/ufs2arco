@@ -40,6 +40,10 @@ source:
     - gh
     - u10
     - v10
+    - accum_tp
+
+  accum_start:
+    accum_tp: 0
 
   levels:
     - 100

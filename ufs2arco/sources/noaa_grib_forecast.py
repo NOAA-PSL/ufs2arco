@@ -48,6 +48,7 @@ class NOAAGribForecastData:
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
+        accum_start: Optional[dict] = None,
     ) -> None:
         path = os.path.join(
             os.path.dirname(__file__),
@@ -55,6 +56,7 @@ class NOAAGribForecastData:
         )
         with open(path, "r") as f:
             self._varmeta = yaml.safe_load(f)
+        self._accum_start = accum_start
         super().__init__(
             variables=variables,
             levels=levels,
@@ -167,7 +169,10 @@ class NOAAGribForecastData:
         Returns:
             xr.DataArray: The extracted variable as an xarray DataArray.
         """
-        fbk = self._varmeta[varname]["filter_by_keys"]
+        fbk = self._varmeta[varname]["filter_by_keys"].copy()
+        if self._accum_start is not None and varname in self._accum_start and dims["fhr"]>0:
+            stepRange = f"{self._accum_start[varname]}-{dims['fhr']}"
+            fbk.update({"stepRange": stepRange})
         try:
             xds = xr.open_dataset(
                 file,
