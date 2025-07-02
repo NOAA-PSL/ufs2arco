@@ -197,8 +197,8 @@ class NOAAGribForecastData:
                 filter_by_keys=fbk,
                 decode_timedelta=True,
             )
-        except gribapi.errors.WrongLengthError:
-            logger.warning(f"{self.name}: gribapi.errors.WrongLengthError for varname = {varname} at dims = {dims}")
+        except gribapi.errors.GribInternalError as e:
+            logger.warning(f"{self.name}: {type(e)} for varname = {varname} at dims = {dims}")
             return None
 
         if "original_name" in self._varmeta[varname]:
