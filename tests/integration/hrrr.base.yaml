@@ -40,6 +40,10 @@ source:
     - gh
     - u10
     - v10
+    - accum_tp
+
+  accum_hrs:
+    accum_tp: 6
 
   levels:
     - 100
