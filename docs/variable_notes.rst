@@ -5,7 +5,7 @@ Temporally Accumulated Variables
 Variables that are accumulated over a specific period have been prepended with
 ``"accum_"``.
 To be specific, reading these fields with xarray + `cfgrib
-<https://pypi.org/project/cfgrib/>`_ 
+<https://pypi.org/project/cfgrib/>`_
 might look something like this:
 
 .. code-block:: python
@@ -22,13 +22,14 @@ might look something like this:
     )
 
 All variable names with this ``stepType`` are prepended with ``"accum_"`` within ufs2arco
-(see e.g., ``"accum_tp"`` above).
+(see e.g., ``"accum_tp"`` in the table above).
 
 For these variables, an additional option can be provided to read different accumulation
 periods.
-For example, if we were to modify the ``filter_by_keys`` option above to read
+For example, if we were reading data from forecast hour 6, we could
+modify the ``filter_by_keys`` option above to read
 surface variables accumulated from the forecast initialization to hour 6
-we could provide the ``stepRange`` option:
+by providing the ``stepRange`` option:
 
 .. code-block:: python
 
@@ -51,15 +52,16 @@ previous hour as so,
 
 The default behavior for xarray+cfgrib (which ufs2arco uses internally) appears
 to grab the accumulation over the full forecast period.
-However, to provide a specific start time for the ``stepRange`` argument, add
-the ``accum_start`` to the yaml recipe. For example with accumulated
+However, to provide a different accumulation period for the ``stepRange`` argument, add
+the ``accum_hrs`` to the yaml recipe. For example with accumulated
 total precipitation,
 
 .. code-block:: yaml
 
-    accum_start:
-      accum_tp: 5
+    accum_hrs:
+      accum_tp: 1
 
-this is the same as ``{"stepRange":"5-6"}`` above.
-Note that the "end" argument to ``stepRange`` is always the forecast
-hour that is currently being read.
+This would grab the total precipitation averaged over the most recent forecast
+hour.
+So, at forecast hour 6, this is the same as providing ``{"stepRange":"5-6"}``
+when reading a single grib file.
