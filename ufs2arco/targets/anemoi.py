@@ -517,8 +517,6 @@ class Anemoi(Target):
             self.calc_temporal_residual_stats(topo)
             logger.info(f"Done computing temporal residual statistics\n")
 
-        super().finalize(topo=topo)
-
 
     def add_dates(self, topo) -> None:
         """Deal with the dates issue
