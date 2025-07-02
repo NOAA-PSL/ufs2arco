@@ -253,7 +253,8 @@ class Target:
 
     def finalize(self, topo) -> None:
         """Any last minute operations"""
-        self.compute_valid_time(topo)
+        if self._has_fhr:
+            self.compute_valid_time(topo)
 
     def handle_missing_data(self, missing_data: list[dict]) -> None:
         """Take a list of dicts, with dimensions of missing data, and store it in the zarr
