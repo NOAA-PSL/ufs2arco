@@ -56,7 +56,16 @@ class NOAAGribForecastData:
         )
         with open(path, "r") as f:
             self._varmeta = yaml.safe_load(f)
+
+        # for accumulated variables
+        if accum_start is not None:
+            min_fhr = self.fhr.min()
+            for key, val in accum_start.items():
+                if val < min_fhr:
+                    raise ValueError(f"{self.name}: Cannot pass 'accum_start' value that is smaller than the smallest desired forecast hour (fhr). Found accum_start['{key}'] = {val} which is greater than min(fhr) = {min_fhr}")
+
         self._accum_start = accum_start
+
         super().__init__(
             variables=variables,
             levels=levels,
@@ -214,6 +223,9 @@ class NOAAGribForecastData:
             full = fbk["typeOfLevel"].replace("CloudLayer", "")
             new = f"{full[0]}cc"
             xda.attrs["long_name"] = xda.long_name.replace("Total", full.capitalize())
+
+        if self._accum_start is not None and varname in self._accum_start:
+            xda.attrs["accumulation_start"] = f"fhr = {self._accum_start[varname]}"
 
 
         for v in [fbk["typeOfLevel"], "number"]:
