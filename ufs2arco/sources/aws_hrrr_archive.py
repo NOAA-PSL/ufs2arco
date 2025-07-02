@@ -53,7 +53,7 @@ class AWSHRRRArchive(NOAAGribForecastData, Source):
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
-        accum_start: Optional[dict] = None,
+        accum_hrs: Optional[dict] = None,
     ) -> None:
         """
         Args:
@@ -64,10 +64,10 @@ class AWSHRRRArchive(NOAAGribForecastData, Source):
             use_nearest_levels (bool, optional): if True, all level selection with
                 ``xarray.Dataset.sel(level=levels, method="nearest")``
             slices (dict, optional): either "sel" or "isel", with slice, passed to xarray
-            accum_start (dict, optional): start of accumulation period for accumulated variables, e.g.
-                {"accum_tp": 5}
+            accum_hrs (dict, optional): period in hours over which to accumulate accumulated variables, e.g.
+                {"accum_tp": 1}
                 would be the same as passing filter_by_keys={"stepRange": "5-6"}
-                for reading e.g. fhr 6 data using xarray and cfgrib
+                when reading fhr 6 data using xarray and cfgrib
         """
         self.t0 = pd.date_range(**t0)
         self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
@@ -76,7 +76,7 @@ class AWSHRRRArchive(NOAAGribForecastData, Source):
             levels=levels,
             use_nearest_levels=use_nearest_levels,
             slices=slices,
-            accum_start=accum_start,
+            accum_hrs=accum_hrs,
         )
 
 

@@ -109,8 +109,8 @@ class Source:
         attrslist = list(self.sample_dims) + ["variables", "levels", "use_nearest_levels", "slices"]
         for key in attrslist:
             msg += f"{key:<18s}: {getattr(self, key)}\n"
-        if hasattr(self, "_accum_start"):
-            key = "_accum_start"
+        if hasattr(self, "_accum_hrs"):
+            key = "_accum_hrs"
             msg += f"{key:<18s}: {getattr(self, key)}\n"
         return msg
 

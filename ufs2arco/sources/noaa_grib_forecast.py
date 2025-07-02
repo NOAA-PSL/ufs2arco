@@ -48,7 +48,7 @@ class NOAAGribForecastData:
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
-        accum_start: Optional[dict] = None,
+        accum_hrs: Optional[dict] = None,
     ) -> None:
         path = os.path.join(
             os.path.dirname(__file__),
@@ -58,13 +58,18 @@ class NOAAGribForecastData:
             self._varmeta = yaml.safe_load(f)
 
         # for accumulated variables
-        if accum_start is not None:
-            min_fhr = self.fhr.min()
-            for key, val in accum_start.items():
-                if val < min_fhr:
-                    raise ValueError(f"{self.name}: Cannot pass 'accum_start' value that is smaller than the smallest desired forecast hour (fhr). Found accum_start['{key}'] = {val} which is greater than min(fhr) = {min_fhr}")
+        if accum_hrs is not None:
+            if len(self.fhr) > 1:
+                dfhr = int(self.fhr[1] - self.fhr[0])
+                for key, val in accum_hrs.items():
+                    if val > dfhr:
+                        raise ValueError(f"{self.name}: Cannot request 'accum_hrs' value that is greater than the forecast hour step (fhr: 'step'). Found accum_hrs['{key}'] = {val} which is greater than fhr['step'] = {dfhr}")
+            else:
+                for key, val in accum_hrs.items():
+                    if val > self.fhr[0]:
+                        raise ValueError(f"{self.name}: Cannot request 'accum_hrs' value that is greater than the forecast hour when asking for a single valued fhr. Found accum_hrs['{key}'] = {val} which is greater than fhr['start'] = {self.fhr[0]}")
 
-        self._accum_start = accum_start
+        self._accum_hrs = accum_hrs
 
         super().__init__(
             variables=variables,
@@ -179,8 +184,11 @@ class NOAAGribForecastData:
             xr.DataArray: The extracted variable as an xarray DataArray.
         """
         fbk = self._varmeta[varname]["filter_by_keys"].copy()
-        if self._accum_start is not None and varname in self._accum_start and dims["fhr"]>0:
-            stepRange = f"{self._accum_start[varname]}-{dims['fhr']}"
+        if self._accum_hrs is not None and varname in self._accum_hrs and dims["fhr"]>0:
+            ahr = int(self._accum_hrs[varname])
+            end = int(dims["fhr"])
+            start = end - ahr
+            stepRange = f"{start}-{end}"
             fbk.update({"stepRange": stepRange})
         try:
             xds = xr.open_dataset(
@@ -214,7 +222,11 @@ class NOAAGribForecastData:
                 xda.attrs["long_name"] += " at surface"
 
             if xda.attrs["GRIB_stepType"] == "accum":
-                xda.attrs["long_name"] += " accumulated over forecast"
+                long_name_suffix = " accumulated over forecast"
+                if self._accum_hrs is not None and varname in self._accum_hrs:
+                    xda.attrs["accumulation_hours"] = int(self._accum_hrs[varname])
+                    long_name_suffix = f" accumulated during previous {int(self._accum_hrs[varname])} hours of the forecast"
+                xda.attrs["long_name"] += long_name_suffix
 
             elif xda.attrs["GRIB_stepType"] == "avg":
                 xda.attrs["long_name"] = "Time-mean " + xda.attrs["long_name"]
@@ -223,10 +235,6 @@ class NOAAGribForecastData:
             full = fbk["typeOfLevel"].replace("CloudLayer", "")
             new = f"{full[0]}cc"
             xda.attrs["long_name"] = xda.long_name.replace("Total", full.capitalize())
-
-        if self._accum_start is not None and varname in self._accum_start:
-            xda.attrs["accumulation_start"] = f"fhr = {self._accum_start[varname]}"
-
 
         for v in [fbk["typeOfLevel"], "number"]:
             if v in xda.coords and v not in xda.dims:

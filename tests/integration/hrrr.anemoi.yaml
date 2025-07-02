@@ -44,9 +44,6 @@ source:
     - v10
     - accum_tp
 
-  accum_start:
-    accum_tp: 0
-
   levels:
     - 100
     - 500

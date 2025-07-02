@@ -42,8 +42,8 @@ source:
     - v10
     - accum_tp
 
-  accum_start:
-    accum_tp: 0
+  accum_hrs:
+    accum_tp: 6
 
   levels:
     - 100
