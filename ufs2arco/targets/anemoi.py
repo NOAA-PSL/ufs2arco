@@ -176,6 +176,7 @@ class Anemoi(Target):
     ) -> xr.Dataset:
 
         if self._has_fhr:
+            xds["valid_time"] = xds["t0"] + xds["lead_time"].compute()
             xds = xds.squeeze("fhr", drop=True)
             xds = xds.swap_dims({"t0": "valid_time"})
 
