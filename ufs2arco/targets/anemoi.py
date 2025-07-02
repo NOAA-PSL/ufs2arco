@@ -176,6 +176,7 @@ class Anemoi(Target):
     ) -> xr.Dataset:
 
         if self._has_fhr:
+            xds["valid_time"] = xds["t0"] + xds["lead_time"].compute()
             xds = xds.squeeze("fhr", drop=True)
             xds = xds.swap_dims({"t0": "valid_time"})
 
@@ -516,8 +517,6 @@ class Anemoi(Target):
             logger.info(f"Computing temporal residual statistics")
             self.calc_temporal_residual_stats(topo)
             logger.info(f"Done computing temporal residual statistics\n")
-
-        super().finalize(topo=topo)
 
 
     def add_dates(self, topo) -> None:

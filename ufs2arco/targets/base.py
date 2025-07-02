@@ -221,9 +221,40 @@ class Target:
         xds = self.source.add_full_extra_coords(xds)
         return xds
 
+    def compute_valid_time(self, topo) -> None:
+        """Deal with the dates issue
+
+        for some reason, it is a challenge to get the datetime64 dtype to open
+        consistently between zarr and xarray, and
+        it is much easier to deal with this all at once here
+        than in the create_container and incrementally fill workflow.
+        """
+
+        if topo.is_root:
+            xds = xr.open_zarr(self.store_path, decode_timedelta=True)
+            attrs = xds.attrs.copy()
+
+            # recreate valid_time, since it's not always there
+            valid_time = xds["t0"] + xds["lead_time"].compute()
+            valid_time.encoding = {
+                "dtype": "datetime64[s]",
+                "units": "seconds since 1970-01-01",
+            }
+
+            nds = xr.Dataset()
+            nds["valid_time"] = valid_time
+            nds = nds.drop_vars("lead_time")
+            nds = nds.set_coords("valid_time")
+
+            # store it, first copying the attributes over
+            nds.attrs = attrs
+            nds.to_zarr(self.store_path, mode="a")
+            logger.info(f"{self.name}.compute_valid_time: dates appended to the dataset\n")
+
     def finalize(self, topo) -> None:
         """Any last minute operations"""
-        pass
+        if self._has_fhr:
+            self.compute_valid_time(topo)
 
     def handle_missing_data(self, missing_data: list[dict]) -> None:
         """Take a list of dicts, with dimensions of missing data, and store it in the zarr

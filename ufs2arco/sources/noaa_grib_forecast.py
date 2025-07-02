@@ -245,8 +245,12 @@ class NOAAGribForecastData:
             if key in xds:
                 xds = xds.rename({key: val})
 
+        # always delete valid_time, since it's easier to just add it at the very end
+        if "valid_time" in xds:
+            xds = xds.drop_vars("valid_time")
+
         if varname in self.static_vars:
-            for key in ["lead_time", "valid_time"]:
+            for key in ["lead_time"]:
                 if key in xds:
                     xds = xds.drop_vars(key)
 
@@ -289,16 +293,6 @@ class NOAAGribForecastData:
                 },
             )
             xds = xds.swap_dims({"lead_time": "fhr"})
-
-            # recreate valid_time, since it's not always there
-            valid_time = xds["t0"] + xds["lead_time"]
-            if "valid_time" in xds:
-                xds["valid_time"] = xds["valid_time"].expand_dims(["t0", "fhr"])
-                assert valid_time.squeeze() == xds.valid_time.squeeze()
-                xds = xds.drop_vars("valid_time")
-
-            xds["valid_time"] = valid_time
-            xds = xds.set_coords("valid_time")
 
         return xds[varname]
 
