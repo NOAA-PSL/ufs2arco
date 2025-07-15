@@ -29,3 +29,13 @@ Data Targets
 
    ufs2arco.targets.Target
    ufs2arco.targets.Anemoi
+
+
+Utilities
+---------
+
+.. autosummary::
+   :toctree: generated/
+
+   ufs2arco.utils.expand_anemoi_dataset
+   ufs2arco.utils.convert_anemoi_inference_dataset
