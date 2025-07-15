@@ -26,7 +26,8 @@ def batched(iterable, n):
 
 
 def expand_anemoi_dataset(ads: xr.Dataset, name: str, variable_names: list[str]) -> xr.Dataset:
-    """
+    """Expand the anemoi dataset "variable" dimension to individual variables.
+
     Converts a DataArray within the anemoi dataset,
     with any subset of dimensions [time, variable, ensemble, cell] into an xarray.Dataset
     where each variable has dimensions [time, cell] for 2D variables, or [time, level, cell] for 3D variables.
@@ -100,8 +101,9 @@ def expand_anemoi_dataset(ads: xr.Dataset, name: str, variable_names: list[str])
 
 
 def convert_anemoi_inference_dataset(xds: xr.Dataset):
-    """Convert the output from anemoi-inference to a multivariate xarray dataset,
-    converting each variable separated by vertical level to a single variable with a level dimension
+    """Convert the output from anemoi-inference to a multivariate xarray dataset.
+
+    Stack each variable separated by vertical level to a single variable with a level dimension
 
     Note that this also renames dimension names "values" -> "cell" so that it is consistent with
     the anemoi dataset naming convention, and to avoid issues with xarray.DataArray.values.
