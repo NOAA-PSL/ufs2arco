@@ -46,6 +46,13 @@ class Transformer:
             if len(unrecognized) > 0:
                 raise NotImplementedError(f"Transformer.__init__: the following mappings are not recognized or not implemented: {unrecognized}")
 
+        # if we want to do horizontal regridding, check if xesmf is installed
+        if "horizontal_regrid" in names:
+            try:
+                import xesmf
+            except ImportError:
+                raise ImportError(f"Transformer.__init__: Could not 'import xesmf', but this is needed for 'horizontal_grid' transformations. Install xesmf with\n'conda install -c conda-forge xesmf'")
+
         self.names = names
         self.options = options
         logger.info(str(self))
