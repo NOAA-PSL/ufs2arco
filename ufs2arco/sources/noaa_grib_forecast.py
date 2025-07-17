@@ -5,7 +5,6 @@ from typing import Optional
 import fsspec
 
 import xarray as xr
-import gribapi
 
 logger = logging.getLogger("ufs2arco")
 
@@ -197,8 +196,8 @@ class NOAAGribForecastData:
                 filter_by_keys=fbk,
                 decode_timedelta=True,
             )
-        except gribapi.errors.WrongLengthError:
-            logger.warning(f"{self.name}: gribapi.errors.WrongLengthError for varname = {varname} at dims = {dims}")
+        except:
+            logger.warning(f"{self.name}._open_single_variable: unable to read varname = {varname} at dims = {dims}")
             return None
 
         if "original_name" in self._varmeta[varname]:
