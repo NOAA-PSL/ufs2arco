@@ -7,8 +7,14 @@ import dask
 import pandas as pd
 import xarray as xr
 
-import xesmf
 import cf_xarray as cfxr
+
+try:
+    import xesmf
+
+    _has_xesmf = True
+except ImportError:
+    _has_xesmf = False
 
 from ufs2arco.regrid.gaussian_grid import gaussian_latitudes
 
