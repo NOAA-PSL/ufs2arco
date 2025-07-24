@@ -715,3 +715,45 @@ class Anemoi(Target):
 
         zds.attrs["missing_dates"] = missing_dates
         zarr.consolidate_metadata(self.store_path)
+
+
+    def merge_multisource(self, dslist: list[xr.Dataset]) -> xr.Dataset:
+        """Take a list of datasets, each from their own source, and merge them"""
+
+        attrs_list = [xds.attrs.copy() for xds in dslist]
+
+        result = xr.concat(dslist, dim="variable", combine_attrs="drop")
+
+        # create a new variable, to not have [0, 1, 2, 3, 0, 1] or whatever
+        result["new_variable"] = xr.DataArray(np.arange(len(result.variable)), coords=result.variable.coords)
+        result = result.swap_dims({"variable": "new_variable"}).drop_vars("variable").rename({"new_variable": "variable"})
+
+        result.attrs = _merge_attrs(attrs_list)
+
+        # TODO: resort variable?
+        return result
+
+
+def _merge_attrs(list_of_dicts):
+    merged_dict = {}
+    for d in list_of_dicts:
+        for key, value in d.items():
+            if key not in ["variables", "variables_metadata", "latest_write_timestamp"]:
+                if key in merged_dict and merged_dict[key] != value:
+                    raise ValueError(
+                        f"Conflict for common key '{key}': "
+                        f"Existing value '{merged_dict[key]}' "
+                        f"differs from new value '{value}'."
+                    )
+                merged_dict[key] = value
+
+    # handle these separately
+    lists_of_variables = [attrs["variables"] for attrs in list_of_dicts]
+    merged_dict["variables"] = [item for sublist in lists_of_variables for item in sublist]
+
+    vmetadata = dict()
+    for attrs in list_of_dicts:
+        vmetadata.update(attrs["variables_metadata"].copy())
+
+    merged_dict["variables_metadata"] = {key: vmetadata[key] for key in merged_dict["variables"]}
+    return merged_dict
