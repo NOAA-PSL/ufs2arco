@@ -59,7 +59,7 @@ class MultiDriver(Driver):
         "mover",
         "directories",
         "multisource",
-        # TODO: common transforms
+        "transforms",
         "target",
         "attrs",
     )
@@ -119,13 +119,13 @@ class MultiDriver(Driver):
         For the multi source, we need a transformer for each object.
         """
 
-        # TODO: common_transformers = list()
-        # This is made complicated by the fact that the mover takes one transformer currently
-        # actually, this is easy. Just modify the unique transforms kwargs with common transforms kwargs
         self.transformers = list()
+        common_transforms = self.config.get("transforms", {})
         for local_config in self.config["multisource"]:
-            if "transforms" in local_config.keys():
-                transformer = Transformer(options=local_config["transforms"])
+            unique_transforms = local_config.get("transforms", {})
+            all_transforms = {**unique_transforms.copy(), **common_transforms.copy()}
+            if len(all_transforms) > 0:
+                transformer = Transformer(options=all_transforms)
             else:
                 transformer = None
             self.transformers.append(transformer)
