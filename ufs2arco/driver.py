@@ -15,9 +15,9 @@ import zarr
 
 from ufs2arco.log import setup_simple_log
 from ufs2arco.mpi import MPITopology, SerialTopology
-from ufs2arco import sources
+import ufs2arco.sources
 from ufs2arco.transforms import Transformer
-from ufs2arco import targets
+import ufs2arco.targets
 from ufs2arco.datamover import DataMover, MPIDataMover
 
 logger = logging.getLogger("ufs2arco")
@@ -55,10 +55,11 @@ class Driver:
         "attrs",
     )
 
-
-
     def __init__(self, config_filename: str):
         """Initializes the Driver object with configuration from the specified YAML file.
+
+        Note:
+            Initialization does very little, since we need to start the run in order to setup the MPI or Serial Topology that orchestrates everything. This is used for logging. After that, we can initialize the source, target, etc.
 
         Args:
             config_filename (str): Path to the YAML configuration file.
@@ -67,6 +68,7 @@ class Driver:
             AssertionError: If required sections or keys are missing in the configuration.
             NotImplementedError: If a source, target, or mover is not recognized.
         """
+
         with open(config_filename, "r") as f:
             self.config = yaml.safe_load(f)
 
@@ -82,44 +84,86 @@ class Driver:
             raise KeyError(
                 f"Driver.__init__: Unrecognized config sections: {unrecognized}. The following are recognized: {self.recognized_sections}")
 
-        # the source dataset
-        name = self.config["source"]["name"].lower()
-        if name not in sources._recognized:
-            raise NotImplementedError(f"Driver.__init__: unrecognized data source {name}. Must be one of {sources._recognized}")
-        self.SourceDataset = getattr(sources, sources._recognized[name])
-
-        # the target
-        name = self.config["target"].get("name", "base")
-        name = name.lower()
-        if name in ("forecast", "analysis", "base"):
-            self.TargetDataset = targets.Target
-        elif name == "anemoi":
-            self.TargetDataset = targets.Anemoi
-        else:
-            raise NotImplementedError(f"Driver.__init__: only 'base' and 'anemoi' are implemented")
-
-        for key in ["chunks"]:
-            assert key in self.config["target"], \
-                f"Driver.__init__: could not find '{key}' in 'target' section of yaml"
-
-        # the mover
-        name = self.config["mover"]["name"].lower()
-        if name == "datamover":
-            self.Mover = DataMover
-        elif name == "mpidatamover":
-            self.Mover = MPIDataMover
-        else:
-            raise NotImplementedError(f"Driver.__init__: don't recognize mover = {name}")
-
-        for key in ["cache_dir"]:
-            assert key not in self.config["mover"], \
-                f"Driver.__init__: '{key}' not allowed in 'mover' section of yaml"
-
         # directories
         dirs = self.config["directories"]
         for key in ["zarr", "cache"]:
             assert key in dirs, \
                 f"Driver.__init__: could not find '{key}' in 'directories' section in yaml"
+
+        for key in ["cache_dir"]:
+            assert key not in self.config["mover"], \
+                f"Driver.__init__: '{key}' not allowed in 'mover' section of yaml"
+
+        # make sure chunks are here
+        for key in ["chunks"]:
+            assert key in self.config["target"], \
+                f"Driver.__init__: could not find '{key}' in 'target' section of yaml"
+
+
+    def _init_topo(self, runtype: str):
+        """Initialize MPITopology or SerialTopology, which sets up the logging"""
+
+        mover_kwargs = self.mover_kwargs.copy()
+
+        log_dir = os.path.expandvars(self.config["directories"]["logs"])
+
+        if runtype != "create":
+            if log_dir.endswith("/"):
+                log_dir = log_dir[:-1]
+            log_dir += f"-{runtype}"
+
+        if self.use_mpi:
+            self.topo = MPITopology(log_dir=log_dir)
+
+        else:
+            self.topo = SerialTopology(log_dir=log_dir)
+
+
+    def _init_source(self):
+        """Check and Initialize the Source Dataset and Transformer"""
+
+        name = self.config["source"]["name"].lower()
+        if name not in ufs2arco.sources._recognized:
+            raise NotImplementedError(f"Driver._init_source_and_transforms: unrecognized data source {name}. Must be one of {ufs2arco.sources._recognized}")
+        SourceDataset = getattr(ufs2arco.sources, ufs2arco.sources._recognized[name])
+
+        self.source = SourceDataset(**self.source_kwargs)
+
+    def _init_transformer(self):
+        """create the transformer"""
+
+        if "transforms" in self.config.keys():
+            self.transformer = Transformer(options=self.config["transforms"])
+        else:
+            self.transformer = None
+
+
+    def _init_target(self):
+        """Check and Initialize the Target Dataset format"""
+
+        name = self.config["target"].get("name", "base").lower()
+        if name in ("forecast", "analysis", "base"):
+            TargetDataset = ufs2arco.targets.Target
+        elif name == "anemoi":
+            TargetDataset = ufs2arco.targets.Anemoi
+        else:
+            raise NotImplementedError(f"Driver._init_targets: only 'base' and 'anemoi' are implemented")
+
+        self.target = TargetDataset(source=self.source, **self.target_kwargs)
+
+
+    def _init_mover(self):
+        """Initialize the DataMover"""
+
+        kwargs = self.mover_kwargs.copy()
+        if self.use_mpi:
+            Mover = MPIDataMover
+            kwargs["mpi_topo"] = self.topo
+        else:
+            Mover = DataMover
+
+        self.mover = Mover(source=self.source, target=self.target, transformer=self.transformer, **kwargs)
+
 
     @property
     def use_mpi(self) -> bool:
@@ -168,44 +212,32 @@ class Driver:
         kw["cache_dir"] = os.path.expandvars(self.config["directories"]["cache"])
         return kw
 
-    def setup(self, runtype):
-        # MPI requires some extra setup
-        mover_kwargs = self.mover_kwargs.copy()
 
-        log_dir = os.path.expandvars(self.config["directories"]["logs"])
+    @property
+    def store_path(self) -> str:
+        return self.target.store_path
 
-        if runtype != "create":
-            if log_dir.endswith("/"):
-                log_dir = log_dir[:-1]
-            log_dir += f"-{runtype}"
 
-        if self.use_mpi:
-            topo = MPITopology(log_dir=log_dir)
-            mover_kwargs["mpi_topo"] = topo
+    def setup(self, runtype: str):
+        self._init_topo(runtype)
+        self._init_source()
+        self._init_transformer()
+        self._init_target()
+        self._init_mover()
 
-        else:
-            topo = SerialTopology(log_dir=log_dir)
 
-        source = self.SourceDataset(**self.source_kwargs)
-        # create the transformer
-        if "transforms" in self.config.keys():
-            self.transformer = Transformer(options=self.config["transforms"])
-        else:
-            self.transformer = None
-        target = self.TargetDataset(source=source, **self.target_kwargs)
-        mover = self.Mover(source=source, target=target, transformer=self.transformer, **mover_kwargs)
-        return topo, mover, source, target
+    def write_container(self, overwrite):
+        """Write empty zarr store, to be filled with data"""
 
-    def write_container(self, target, mover, overwrite):
+        if self.topo.is_root:
+            cds = self.mover.create_container()
 
-        if mover.topo.is_root:
-            cds = mover.create_container()
+            kwargs = {"mode": "w"} if overwrite else {}
+            logger.info(f"Driver.write_container: storing container at {self.store_path}\n{cds}\n")
+            cds.to_zarr(self.store_path, compute=False, **kwargs)
+            logger.info(f"Driver.write_container: stored container at {self.store_path}\n{cds}\n")
 
-            container_kwargs = {"mode": "w"} if overwrite else {}
-            cds.to_zarr(target.store_path, compute=False, **container_kwargs)
-            logger.info(f"Driver.write_container: stored container at {target.store_path}\n{cds}\n")
-
-        mover.topo.barrier()
+        self.topo.barrier()
 
 
     def run(self, overwrite: bool = False):
@@ -218,18 +250,18 @@ class Driver:
             overwrite (bool, optional): Whether to overwrite the existing container.
                 Defaults to False.
         """
-        topo, mover, source, target = self.setup(runtype="create")
+        self.setup(runtype="create")
 
         # create container, only if mover start is not 0
-        if mover.start == 0:
-            self.write_container(target=target, mover=mover, overwrite=overwrite)
+        if self.mover.start == 0:
+            self.write_container(overwrite=overwrite)
 
         # loop through batches
-        n_batches = len(mover)
+        n_batches = len(self.mover)
         missing_dims = []
-        for batch_idx in range(mover.start, n_batches):
+        for batch_idx in range(self.mover.start, n_batches):
 
-            xds = next(mover)
+            xds = next(self.mover)
 
 
             # xds is None if MPI rank looks for non existent indices (i.e., last batch scenario)
@@ -238,40 +270,40 @@ class Driver:
             if has_content:
 
                 xds = xds.reset_coords(drop=True)
-                region = mover.find_my_region(xds)
-                xds.to_zarr(target.store_path, region=region)
-                mover.clear_cache(batch_idx)
+                region = self.mover.find_my_region(xds)
+                xds.to_zarr(self.store_path, region=region)
+                self.mover.clear_cache(batch_idx)
 
             elif xds is not None:
 
                 # we couldn't find the file, keep track of it
-                batch_indices = mover.get_batch_indices(batch_idx)
+                batch_indices = self.mover.get_batch_indices(batch_idx)
                 for these_dims in batch_indices:
                     missing_dims.append(these_dims)
 
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
 
-        topo.barrier()
+        self.topo.barrier()
         logger.info(f"Done moving the data\n")
 
-        self.report_missing_data(topo, source, target, missing_dims)
-        target.finalize(topo)
-        self.finalize_attributes(topo, target)
+        self.report_missing_data(missing_dims)
+        self.target.finalize(self.topo)
+        self.finalize_attributes()
 
     def patch(self):
 
-        topo, mover, source, target = self.setup(runtype="patch")
-        missing_dims = _open_patch_yaml(self.get_missing_data_path(target.store_path))
+        self.setup(runtype="patch")
+        missing_dims = _open_patch_yaml(self.get_missing_data_path(self.store_path))
 
         logger.info(f"Starting patch workflow with missing_dims\n{missing_dims}\n")
 
         # hacky for now, reset the mover's sample_indices to be the missing dims
-        mover.sample_indices = missing_dims
-        mover.restart(idx=0)
+        self.mover.sample_indices = missing_dims
+        self.mover.restart(idx=0)
 
         missing_again = list()
-        n_batches = len(mover)
-        for batch_idx, xds in enumerate(mover):
+        n_batches = len(self.mover)
+        for batch_idx, xds in enumerate(self.mover):
 
             # xds is None if MPI rank looks for non existent indices (i.e., last batch scenario)
             # len(xds) == 0 if we couldn't find the file we were looking for
@@ -279,31 +311,31 @@ class Driver:
             if has_content:
 
                 xds = xds.reset_coords(drop=True)
-                region = mover.find_my_region(xds)
-                xds.to_zarr(target.store_path, region=region)
-                mover.clear_cache(batch_idx)
+                region = self.mover.find_my_region(xds)
+                xds.to_zarr(self.store_path, region=region)
+                self.mover.clear_cache(batch_idx)
 
             elif xds is not None:
 
-                batch_indices = mover.get_batch_indices(batch_idx)
+                batch_indices = self.mover.get_batch_indices(batch_idx)
                 for these_dims in batch_indices:
                     missing_again.append(these_dims)
 
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
 
-        topo.barrier()
+        self.topo.barrier()
         logger.info(f"Done moving the data\n")
 
-        self.report_missing_data(topo, source, target, missing_again)
-        target.finalize(topo)
-        self.finalize_attributes(topo, target)
+        self.report_missing_data(missing_again)
+        self.target.finalize(self.topo)
+        self.finalize_attributes()
 
 
-    def finalize_attributes(self, topo, target):
+    def finalize_attributes(self):
 
         logger.info(f"Storing the recipe and anything from the 'attrs' section in zarr store attributes")
-        if topo.is_root:
-            zds = zarr.open(target.store_path, mode="a")
+        if self.topo.is_root:
+            zds = zarr.open(self.store_path, mode="a")
             zds.attrs["recipe"] = self.config
             if "attrs" in self.config.keys():
                 for key, val in self.config["attrs"].items():
@@ -311,20 +343,20 @@ class Driver:
 
             zds.attrs["latest_write_timestamp"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
             # just in case
-            zarr.consolidate_metadata(target.store_path)
-        topo.barrier()
-        logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {target.store_path}")
+            zarr.consolidate_metadata(self.store_path)
+        self.topo.barrier()
+        logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {self.store_path}")
 
 
     def get_missing_data_path(self, store_path) -> str:
         directory, zstore = os.path.split(store_path)
         return f"{directory}/missing.{zstore}.yaml"
 
-    def report_missing_data(self, topo, source, target, missing_dims):
+    def report_missing_data(self, missing_dims):
 
-        missing_dims = topo.gather(missing_dims)
+        missing_dims = self.topo.gather(missing_dims)
 
-        if topo.is_root:
+        if self.topo.is_root:
             # collect the list of lists into one list of dicts
             missing_dims = [item for sublist in missing_dims for item in sublist]
 
@@ -334,14 +366,14 @@ class Driver:
                 missing_dims = sorted(missing_dims, key=_get_time)
                 missing_dims = [_convert_types_to_yaml(d) for d in missing_dims]
 
-                target.handle_missing_data(missing_dims)
+                self.target.handle_missing_data(missing_dims)
 
-                missing_data_yaml = self.get_missing_data_path(target.store_path)
+                missing_data_yaml = self.get_missing_data_path(self.store_path)
                 with open(missing_data_yaml, "w") as f:
                     yaml.dump(missing_dims, stream=f)
 
                 logger.warning(f"⚠️  Some data are missing.")
-                logger.warning(f"⚠️  The missing dimension combos, i.e., {source.sample_dims}")
+                logger.warning(f"⚠️  The missing dimension combos, i.e., {self.source.sample_dims}")
                 logger.warning(f"⚠️  were written to: {missing_data_yaml}")
                 logger.warning(f"If you know the files are actually available, You can run")
                 logger.warning(f"\tpython -c 'import ufs2arco; ufs2arco.Driver(\"/path/to/your/original/recipe.yaml\").patch()'")
