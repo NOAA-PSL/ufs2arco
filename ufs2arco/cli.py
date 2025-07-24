@@ -1,6 +1,7 @@
-"""Thanks to ChatGPT"""
 import argparse
+import yaml
 from ufs2arco.driver import Driver
+from ufs2arco.multidriver import MultiDriver
 
 def main():
     parser = argparse.ArgumentParser(
@@ -19,7 +20,13 @@ def main():
     )
     args = parser.parse_args()
 
-    Driver(args.yaml_file).run(overwrite=args.overwrite)
+    with open(args.yaml_file, "r") as f:
+        config = yaml.safe_load(f)
+
+    if "multisource" in config.keys():
+        MultiDriver(args.yaml_file).run(overwrite=args.overwrite)
+    else:
+        Driver(args.yaml_file).run(overwrite=args.overwrite)
 
 if __name__ == "__main__":
     main()

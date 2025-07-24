@@ -196,6 +196,18 @@ class Driver:
         mover = self.Mover(source=source, target=target, transformer=self.transformer, **mover_kwargs)
         return topo, mover, source, target
 
+    def write_container(self, target, mover, overwrite):
+
+        if mover.topo.is_root:
+            cds = mover.create_container()
+
+            container_kwargs = {"mode": "w"} if overwrite else {}
+            cds.to_zarr(target.store_path, compute=False, **container_kwargs)
+            logger.info(f"Driver.write_container: stored container at {target.store_path}\n{cds}\n")
+
+        mover.topo.barrier()
+
+
     def run(self, overwrite: bool = False):
         """Runs the data movement process, managing the datasets and mover.
 
@@ -210,8 +222,7 @@ class Driver:
 
         # create container, only if mover start is not 0
         if mover.start == 0:
-            container_kwargs = {"mode": "w"} if overwrite else {}
-            mover.create_container(**container_kwargs)
+            self.write_container(target=target, mover=mover, overwrite=overwrite)
 
         # loop through batches
         n_batches = len(mover)

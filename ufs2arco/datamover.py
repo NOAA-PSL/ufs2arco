@@ -157,12 +157,9 @@ class DataMover():
         self.data_counter = idx
 
 
-    def create_container(self, **kwargs) -> None:
+    def create_container(self) -> None:
         """
         Create a Zarr container to store the dataset.
-
-        Args:
-            **kwargs: Additional arguments passed to `xr.Dataset.to_zarr`.
 
         Logs:
             The created container is stored at `self.target.store_path`.
@@ -176,7 +173,7 @@ class DataMover():
         xds = self.source.open_sample_dataset(
             dims=first_sample_dim_args,
             open_static_vars=True,
-            cache_dir=self.get_cache_dir("container"),
+            cache_dir=self.get_cache_dir(0),
         )
 
         # perform any transformations like regridding
@@ -225,10 +222,7 @@ class DataMover():
                 attrs=xds[varname].attrs.copy(),
             )
 
-        nds.to_zarr(self.target.store_path, compute=False, **kwargs)
-        logger.info(f"{self.name}.create_container: stored container at {self.target.store_path}\n{nds}\n")
-
-        self.clear_cache("container")
+        return nds
 
 
     def find_my_region(self, xds):
@@ -303,8 +297,3 @@ class MPIDataMover(DataMover):
         st = (batch_idx * self.batch_size) + self.local_batch_index
         ed = st + self.data_per_process
         return self.sample_indices[st:ed]
-
-    def create_container(self, **kwargs) -> None:
-        if self.topo.is_root:
-            super().create_container(**kwargs)
-        self.topo.barrier()
