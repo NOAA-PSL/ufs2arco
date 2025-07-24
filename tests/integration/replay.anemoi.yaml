@@ -22,28 +22,52 @@ directories:
   cache: cache
   logs: logs
 
-source:
-  name: gcs_replay_atmosphere
-  uri: gs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree-subsampled/03h-freq/zarr/fv3.zarr
-  time:
-    start: 2017-01-01T00
-    end: 2017-01-02T18
-    freq: 6h
+multisource:
+  - source:
+      name: gcs_replay_atmosphere
+      uri: gs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree-subsampled/03h-freq/zarr/fv3.zarr
+      time:
+        start: 2017-01-01T00
+        end: 2017-01-02T18
+        freq: 6h
 
-  variables:
-    - delz
-    - land_static
-    - hgtsfc_static
-    - pressfc
-    - tmp2m
-    - tmp
-    - spfh
-    - spfh2m
+      variables:
+        - delz
+        - land_static
+        - hgtsfc_static
+        - pressfc
+        - tmp2m
+        - tmp
 
-  slices:
-    sel:
-      level: [200, 1000]
+      slices:
+        sel:
+          level: [200, 1000]
 
+  - source:
+      name: gcs_replay_atmosphere
+      uri: gs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree-subsampled/03h-freq/zarr/fv3.zarr
+      time:
+        start: 2017-01-01T00
+        end: 2017-01-02T18
+        freq: 6h
+
+      variables:
+        - delz
+        - spfh
+        - spfh2m
+
+      slices:
+        sel:
+          level: [200, 1000]
+
+    # Unique transforms to this source
+    transforms:
+      mappings:
+        log:
+          - spfh
+          - spfh2m
+
+# Common transforms performed on all sources
 transforms:
   fv_vertical_regrid:
     weight_var: delz
@@ -55,11 +79,6 @@ transforms:
       - 1000
     use_nearest_interfaces: True
     keep_weight_var: True
-
-  mappings:
-    log:
-      - spfh
-      - spfh2m
 
 target:
   name: anemoi

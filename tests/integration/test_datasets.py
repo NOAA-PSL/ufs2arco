@@ -8,6 +8,7 @@ import xarray as xr
 import pytest
 
 from ufs2arco.driver import Driver
+from ufs2arco.multidriver import MultiDriver
 from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
@@ -80,7 +81,10 @@ def run_test(source, target):
         yaml.dump(config, stream=f)
 
     # run driver
-    driver = Driver(config_filename)
+    if "multisource" in config.keys():
+        driver = MultiDriver(config_filename)
+    else:
+        driver = Driver(config_filename)
     driver.run(overwrite=True)
 
     # read & print last line of log
