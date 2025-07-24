@@ -731,6 +731,7 @@ class Anemoi(Target):
         result.attrs = _merge_attrs(attrs_list)
 
         # TODO: resort variable?
+        # Or maybe it's more straightforward to leave the order as is, same as concatenating multiple datasets
         return result
 
 
