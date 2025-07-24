@@ -31,7 +31,7 @@ class MultiDriver(Driver):
         For now, all "sources" must come from the same dataset, e.g. we can't mix and match GFS and ERA5.
         There are several reasons for this:
             * Right now, this is baked into how the caching is done. We only clear one data mover's cache, and all movers use the same cache directory.
-            * It's not clear how different source types (e.g. reanalysis and forecast, or deterministic and ensemble) would combine, given the different coordinates
+            * It's not clear how different source types (e.g. reanalysis and forecast, or deterministic and ensemble) would combine, given the different coordinates. This would make combining the datasets, and finding the specific spot in the zarr dataset (Mover.find_my_region) much more complicated.
 
 
     Attributes:
@@ -229,11 +229,7 @@ class MultiDriver(Driver):
 
                 xds = self.target.merge_multisource(dslist)
 
-                # Note that the find_my_region clearly works using any of the movers
-                # for an anemoi target, and with deterministic data
-                # With ensemble data, all sources need the same number of ensemble members
-                # and this becomes way less clear with the base style
-                region = self.mover.find_my_region(xds) # k
+                region = self.mover.find_my_region(xds)
                 xds.to_zarr(self.target.store_path, region=region)
                 self.mover.clear_cache(batch_idx)
 
