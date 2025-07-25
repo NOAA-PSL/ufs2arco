@@ -805,6 +805,10 @@ class Anemoi(Target):
 
         result = xr.concat(dslist, dim="variable", combine_attrs="drop")
 
+        # these should not have a variable dimension
+        for key in ["latitudes", "longitudes"]:
+            result[key] = result[key].isel(variable=0, drop=True)
+
         # create a new variable, to not have [0, 1, 2, 3, 0, 1] or whatever
         result["new_variable"] = xr.DataArray(np.arange(len(result.variable)), coords=result.variable.coords)
         result = result.swap_dims({"variable": "new_variable"}).drop_vars("variable").rename({"new_variable": "variable"})
