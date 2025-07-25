@@ -507,7 +507,10 @@ class Anemoi(Target):
         * temporal stats (if specified)
         """
 
-        self.add_dates(topo)
+        if topo.is_root:
+            self.add_dates()
+            self.reconcile_missing_and_nans()
+        topo.barrier()
 
         logger.info(f"Aggregating statistics")
         self.aggregate_stats(topo)
@@ -519,7 +522,7 @@ class Anemoi(Target):
             logger.info(f"Done computing temporal residual statistics\n")
 
 
-    def add_dates(self, topo) -> None:
+    def add_dates(self) -> None:
         """Deal with the dates issue
 
         for some reason, it is a challenge to get the datetime64 dtype to open
@@ -528,24 +531,77 @@ class Anemoi(Target):
         than in the create_container and incrementally fill workflow.
         """
 
-        if topo.is_root:
-            xds = xr.open_zarr(self.store_path)
-            attrs = xds.attrs.copy()
+        xds = xr.open_zarr(self.store_path)
+        attrs = xds.attrs.copy()
 
-            nds = xr.Dataset()
-            nds["dates"] = xr.DataArray(
-                self.datetime,
-                coords=xds["time"].coords,
-            )
-            nds["dates"].encoding = {
-                "dtype": "datetime64[s]",
-                "units": "seconds since 1970-01-01",
-            }
+        nds = xr.Dataset()
+        nds["dates"] = xr.DataArray(
+            self.datetime,
+            coords=xds["time"].coords,
+        )
+        nds["dates"].encoding = {
+            "dtype": "datetime64[s]",
+            "units": "seconds since 1970-01-01",
+        }
 
-            # store it, first copying the attributes over
+        # store it, first copying the attributes over
+        nds.attrs = attrs
+        nds.to_zarr(self.store_path, mode="a")
+        logger.info(f"{self.name}.add_dates: dates appended to the dataset\n")
+
+    def reconcile_missing_and_nans(self) -> None:
+        """This has to happen after :meth:`add_dates` is called.
+
+        Here we do two things:
+            1. Make sure missing_dates show up as True in the ``has_nans_array``
+               (which propagates to ``has_nans``, since :meth:`aggregate_stats: is called right after this.)
+            2. If we have NaNs that we should not have, report it as a missing date
+        """
+
+        logger.info(f"{self.name}.reconcile_missing_and_nans: Starting...")
+
+        something_happened = False
+        xds = xr.open_zarr(self.store_path)
+        xds = xds.swap_dims({"time": "dates"})
+        xds["has_nans_array"].load()
+        missing_dates = xds.attrs.get("missing_dates", [])
+        attrs = xds.attrs.copy()
+
+        nds = xr.Dataset()
+        nds["has_nans_array"] = xds["has_nans_array"]
+
+        logger.info("Checking that has_nans_array = True at each missing_date")
+        for mdate in missing_dates:
+            this_one = xds.sel(dates=mdate)
+            is_actually_nan = np.isnan(thisone["data"]).any().values
+            has_nan = thisone["has_nans_array"].any().values
+            if is_actually_nan and not has_nan:
+                something_happened = True
+
+                logger.info(f" ... setting the date in has_nans_array to True: {mdate}")
+                nds["has_nans_array"].loc[{"dates": mdate}] = True
+
+        logger.info("Checking that missing_dates contains all instances of has_nans_array = True (as desired per variable)")
+        nanidx = xds["has_nans_array"].any(["variable", "ensemble"]).values
+        nandates = [str(pd.Timestamp(ndate)) for ndate in xds["dates"][nanidx].values]
+        new_missing_dates = list()
+        for ndate in nandates:
+            is_missing = ndate in missing_dates
+            if not is_missing:
+                something_happened = True
+                logger.info(f" ... adding date where has_nans_array = True to missing_dates: {ndate}")
+                new_missing_dates.append(ndate)
+
+        if len(new_missing_dates) > 0:
+            attrs["missing_dates"] = sorted(missing_dates + new_missing_dates)
+
+
+        if something_happened:
+            nds["time"] = xds["time"]
+            nds = nds.swap_dims({"dates": "time"}).drop_vars("dates")
             nds.attrs = attrs
             nds.to_zarr(self.store_path, mode="a")
-            logger.info(f"{self.name}.add_dates: dates appended to the dataset\n")
+            logger.info(f"{self.name}.reconcile_missing_and_nans: Updated zarr with missing_dates and has_nans_array")
 
 
     def aggregate_stats(self, topo) -> None:
