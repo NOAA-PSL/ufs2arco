@@ -235,7 +235,7 @@ class Driver:
             kwargs = {"mode": "w"} if overwrite else {}
             logger.info(f"Driver.write_container: storing container at {self.store_path}\n{cds}\n")
             cds.to_zarr(self.store_path, compute=False, **kwargs)
-            logger.info(f"Driver.write_container: stored container at {self.store_path}\n{cds}\n")
+            logger.info("Driver.write_container: Done storing container.\n")
 
         self.topo.barrier()
 
