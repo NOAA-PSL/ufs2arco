@@ -182,6 +182,8 @@ class Anemoi(Target):
             xds["valid_time"] = xds["t0"] + xds["lead_time"].compute()
             xds = xds.squeeze("fhr", drop=True)
             xds = xds.swap_dims({"t0": "valid_time"})
+            if "t0" in xds.coords:
+                xds = xds.drop_vars("t0")
 
         if not self._has_member:
             xds = xds.expand_dims({"ensemble": self.ensemble})
@@ -808,6 +810,10 @@ class Anemoi(Target):
         result = result.swap_dims({"variable": "new_variable"}).drop_vars("variable").rename({"new_variable": "variable"})
 
         result.attrs = _merge_attrs(attrs_list)
+
+        # Rechunk along variable, otherwise this is not worth it!
+        result = result.chunk({"variable": self.chunks["variable"]})
+
 
         # TODO: resort variable?
         # Or maybe it's more straightforward to leave the order as is, same as concatenating multiple datasets
