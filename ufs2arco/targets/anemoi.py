@@ -139,6 +139,7 @@ class Anemoi(Target):
         statistics_period: Optional[dict] = None,
         compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
+        variables_with_nans: Optional[list] = None,
     ) -> None:
 
         super().__init__(
@@ -163,6 +164,8 @@ class Anemoi(Target):
             if key in protected or self.rename[key] in protected:
                 logger.info(f"{self.name}.__init__: can't rename {key} -> {self.rename[key]}, either key or val is in a protected list. I'll drop it and forget about it.")
                 self.rename.pop(key)
+
+        self.variables_with_nans = variables_with_nans
 
 
     def get_expanded_dim_order(self, xds):
@@ -570,6 +573,7 @@ class Anemoi(Target):
         nds = xr.Dataset()
         nds["has_nans_array"] = xds["has_nans_array"]
 
+        # 1. Make sure has_nans_array is True at missing_dates
         logger.info("Checking that has_nans_array = True at each missing_date")
         for mdate in missing_dates:
             this_one = xds.sel(dates=mdate)
@@ -581,8 +585,27 @@ class Anemoi(Target):
                 logger.info(f" ... setting the date in has_nans_array to True: {mdate}")
                 nds["has_nans_array"].loc[{"dates": mdate}] = True
 
+
+        # 2. Make sure dates with unexpected NaNs get added to missing_dates
         logger.info("Checking that missing_dates contains all instances of has_nans_array = True (as desired per variable)")
-        nanidx = xds["has_nans_array"].any(["variable", "ensemble"]).values
+        ignore_idx = []
+        if self.variables_with_nans is not None:
+
+            ignoreme = list()
+            for ignore_this in self.variables_with_nans:
+                if ignore_this in xds.attrs["variables"]:
+                    ignoreme.append(ignore_this)
+                else:
+                    all_instances = [entry for entry in xds.attrs["variables"] if ignore_this in entry]
+                    for entry in all_instances:
+                        ignoreme.append(entry)
+
+            logger.info(f"Will ignore the following fields if they have NaNs\n{ignoreme}")
+            ignore_idx = [xds.attrs["variables"].index(varname) for varname in ignoreme]
+
+        keep_idx = [idx for idx in xds["variable"].values if idx not in ignore_idx]
+
+        nanidx = xds["has_nans_array"].sel(variable=keep_idx).any(["variable", "ensemble"]).values
         nandates = [str(pd.Timestamp(ndate)) for ndate in xds["dates"][nanidx].values]
         new_missing_dates = list()
         for ndate in nandates:
