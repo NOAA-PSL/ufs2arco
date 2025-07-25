@@ -220,15 +220,14 @@ class MultiDriver(Driver):
                     dslist.append(xds.reset_coords(drop=True))
 
                 elif xds is not None:
-                    # exit, no need to check the other sources
-                    # we don't continue with partial data
-                    dslist = list()
+
                     foundit.append(False)
                     batch_indices = mover.get_batch_indices(batch_idx)
                     for these_dims in batch_indices:
                         missing_dims.append(these_dims)
 
-            if all(foundit):
+            # we need both conditionals, since all([]) == True
+            if all(foundit) and len(foundit) == len(self.movers):
 
                 mds = self.target.merge_multisource(dslist)
 
