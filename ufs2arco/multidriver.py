@@ -207,6 +207,7 @@ class MultiDriver(Driver):
         for batch_idx in range(self.mover.start, n_batches):
 
             dslist = list()
+            foundit = list()
             for mover in self.movers:
 
                 xds = next(mover)
@@ -215,23 +216,26 @@ class MultiDriver(Driver):
                 # len(xds) == 0 if we couldn't find the file we were looking for
                 has_content = xds is not None and len(xds) > 0
                 if has_content:
+                    foundit.append(True)
                     dslist.append(xds.reset_coords(drop=True))
 
                 elif xds is not None:
                     # exit, no need to check the other sources
                     # we don't continue with partial data
+                    dslist = list()
+                    foundit.append(False)
                     batch_indices = mover.get_batch_indices(batch_idx)
                     for these_dims in batch_indices:
                         missing_dims.append(these_dims)
-                    break
 
-            if len(dslist) == len(self.movers):
+            if all(foundit):
 
-                xds = self.target.merge_multisource(dslist)
+                mds = self.target.merge_multisource(dslist)
 
-                region = self.mover.find_my_region(xds)
-                xds.to_zarr(self.target.store_path, region=region)
-                self.mover.clear_cache(batch_idx)
+                region = self.mover.find_my_region(mds)
+                mds.to_zarr(self.target.store_path, region=region)
+
+            self.mover.clear_cache(batch_idx)
 
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
 
