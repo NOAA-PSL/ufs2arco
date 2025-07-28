@@ -579,8 +579,8 @@ class Anemoi(Target):
         logger.info("Checking that has_nans_array = True at each missing_date")
         for mdate in missing_dates:
             this_one = xds.sel(dates=mdate)
-            is_actually_nan = np.isnan(thisone["data"]).any().values
-            has_nan = thisone["has_nans_array"].any().values
+            is_actually_nan = np.isnan(this_one["data"]).any().values
+            has_nan = this_one["has_nans_array"].any().values
             if is_actually_nan and not has_nan:
                 something_happened = True
 
@@ -790,9 +790,14 @@ class Anemoi(Target):
         for missing_sample in missing_data:
             if self._has_fhr:
                 valid_time = pd.Timestamp(missing_sample["t0"]) + pd.Timedelta(hours=missing_sample["fhr"])
-                missing_dates.append(str(valid_time))
+                valid_time = str(valid_time)
             else:
-                missing_dates.append(missing_sample["time"])
+                valid_time = missing_sample["time"]
+
+            # in multisource case, we could have repeats
+            if valid_time not in missing_dates:
+                missing_dates.append(valid_time)
+
 
         zds.attrs["missing_dates"] = missing_dates
         zarr.consolidate_metadata(self.store_path)
