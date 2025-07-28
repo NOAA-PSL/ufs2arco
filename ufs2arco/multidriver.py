@@ -246,4 +246,4 @@ class MultiDriver(Driver):
         self.finalize_attributes()
 
     def patch(self):
-        raise NotImplemented
+        raise NotImplementedError
