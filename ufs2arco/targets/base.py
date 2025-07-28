@@ -193,7 +193,7 @@ class Target:
 
     def compute_forcings(self, xds: xr.Dataset) -> xr.Dataset:
 
-        time = "t0" if self._has_fhr else "time"
+        time = "valid_time" if self._has_fhr else "time"
         mappings = fmod.get_mappings(time=time)
         for key in self.forcings:
 

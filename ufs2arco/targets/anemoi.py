@@ -182,6 +182,8 @@ class Anemoi(Target):
             xds["valid_time"] = xds["t0"] + xds["lead_time"].compute()
             xds = xds.squeeze("fhr", drop=True)
             xds = xds.swap_dims({"t0": "valid_time"})
+            if "t0" in xds.coords:
+                xds = xds.drop_vars("t0")
 
         if not self._has_member:
             xds = xds.expand_dims({"ensemble": self.ensemble})
@@ -577,8 +579,8 @@ class Anemoi(Target):
         logger.info("Checking that has_nans_array = True at each missing_date")
         for mdate in missing_dates:
             this_one = xds.sel(dates=mdate)
-            is_actually_nan = np.isnan(thisone["data"]).any().values
-            has_nan = thisone["has_nans_array"].any().values
+            is_actually_nan = np.isnan(this_one["data"]).any().values
+            has_nan = this_one["has_nans_array"].any().values
             if is_actually_nan and not has_nan:
                 something_happened = True
 
@@ -788,9 +790,14 @@ class Anemoi(Target):
         for missing_sample in missing_data:
             if self._has_fhr:
                 valid_time = pd.Timestamp(missing_sample["t0"]) + pd.Timedelta(hours=missing_sample["fhr"])
-                missing_dates.append(str(valid_time))
+                valid_time = str(valid_time)
             else:
-                missing_dates.append(missing_sample["time"])
+                valid_time = missing_sample["time"]
+
+            # in multisource case, we could have repeats
+            if valid_time not in missing_dates:
+                missing_dates.append(valid_time)
+
 
         zds.attrs["missing_dates"] = missing_dates
         zarr.consolidate_metadata(self.store_path)
@@ -803,11 +810,19 @@ class Anemoi(Target):
 
         result = xr.concat(dslist, dim="variable", combine_attrs="drop")
 
+        # these should not have a variable dimension
+        for key in ["latitudes", "longitudes"]:
+            result[key] = result[key].isel(variable=0, drop=True)
+
         # create a new variable, to not have [0, 1, 2, 3, 0, 1] or whatever
         result["new_variable"] = xr.DataArray(np.arange(len(result.variable)), coords=result.variable.coords)
         result = result.swap_dims({"variable": "new_variable"}).drop_vars("variable").rename({"new_variable": "variable"})
 
         result.attrs = _merge_attrs(attrs_list)
+
+        # Rechunk along variable, otherwise this is not worth it!
+        result = result.chunk({"variable": self.chunks["variable"]})
+
 
         # TODO: resort variable?
         # Or maybe it's more straightforward to leave the order as is, same as concatenating multiple datasets
