@@ -25,13 +25,14 @@ in the exact same way as directed in
 Install from conda-forge without MPI
 ====================================
 
-In order to install and use MPI that is prebuilt on your system, for example on
-an HPC machine, then it is recommended to install the ``ufs2arco-nompi`` build on
+If you do not want to install MPI through conda-forge, for instance if you want
+to use an MPI distribution that is already built on a system you're using, then
+it is recommended to install the ``nompi`` build on
 conda forge as follows::
 
-    conda install -c conda-forge ufs2arco-nompi
+    conda install -c conda-forge ufs2arco=*=nompi*
 
-Then, install mpi4py from pip using
+Then, one can install mpi4py from pip using
 `these instructions <https://mpi4py.readthedocs.io/en/latest/install.html#building-from-sources>`_,
 or following instructions specific to your machine.
 
@@ -43,25 +44,10 @@ It is possible to install ufs2arco from pypi via::
 
     pip install ufs2arco
 
-However, this will not come with the MPI or xesmf dependencies, since these need
-to be installed via conda-forge.
+However, this will not come with the MPI or
+`xesmf <https://xesmf.readthedocs.io/en/stable/>`_
+dependencies, since these need to be installed from conda-forge.
 
-Install from GitHub
-===================
-
-To obtain the latest development version, clone
-`the repository <https://github.com/NOAA-PSL/ufs2arco>`_.
-and install it as follows::
-
-    git clone https://github.com/NOAA-PSL/ufs2arco.git
-    cd ufs2arco
-    pip install -e .
-
-Users are encourged to `fork <https://help.github.com/articles/fork-a-repo/>`_
-the project and submit 
-`issues <https://github.com/NOAA-PSL/ufs2arco/issues>`_
-and
-`pull requests <https://github.com/NOAA-PSL/ufs2arco/pulls>`_.
 
 Running Example Notebooks or Building the Documentation Locally
 ===============================================================
