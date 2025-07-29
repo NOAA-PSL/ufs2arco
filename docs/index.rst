@@ -6,18 +6,24 @@
 ufs2arco
 ========
 
-ufs2arco is designed to make `NOAA <https://www.noaa.gov/>`_
+ufs2arco is a python package that is designed to make `NOAA <https://www.noaa.gov/>`_
 forecast, reanalysis, and reforecast datasets
 more accessible for scientific analysis and machine learning model development.
-The name stems from its original intent, which was to be able to transform
+The name stems from its original intent, which was to transform output from the
 `Unified Forecast System (UFS) <https://www.ufs.epic.noaa.gov/>`_
-data into
+into
 Analysis Ready, Cloud Optimized (ARCO;
 `Abernathey et al., (2021) <https://doi.ieeecomputersociety.org/10.1109/MCSE.2021.3059437>`_)
 format.
 However, the package now pulls data from a number of non-UFS sources, including GFS/GEFS
 before UFS was created, and even
 `ECMWF's ERA5 dataset <https://www.ecmwf.int/en/forecasts/dataset/ecmwf-reanalysis-v5>`_.
+
+.. warning::
+    The documentation is very much a work in progress.
+    If you have any questions, feel free to raise an issue on the GitHub repo
+    (see "Getting Support" in the Table of Contents).
+
 
 Capability Overview
 ###################
@@ -55,13 +61,8 @@ The capabilities and datasets available are illustrated by the schematic below:
    :align: center
 
 
-Documentation
-#############
-
-.. warning::
-    The documentation is very much a work in progress.
-    If you have any questions, feel free to raise an issue on the GitHub repo
-    (see "Getting Support" below).
+Table of Contents
+#################
 
 
 .. toctree::
