@@ -1,0 +1,55 @@
+# Features tested
+# Datamover:
+# - serial
+# Source:
+# - analysis template
+# - level selection
+# - static variables
+# - latitude slicing
+# Transform:
+# - divide
+# - round mapping, with variables as str
+# Target:
+# - base workflow for analysis
+# - rename
+mover:
+  name: datamover
+  batch_size: 2
+
+directories:
+  zarr: dataset.zarr
+  cache: cache
+  logs: logs
+
+source:
+  name: aws_aorc
+  time:
+    start: 2017-01-01T00
+    end: 2017-01-01T18
+    freq: 6h
+
+  variables:
+    - APCP_surface
+    - PRES_surface
+
+target:
+  name: anemoi
+  sort_channels_by_levels: True
+
+  forcings:
+    - cos_latitude
+    - sin_latitude
+    - cos_longitude
+    - sin_longitude
+    - cos_julian_day
+    - sin_julian_day
+    - cos_local_time
+    - sin_local_time
+    - cos_solar_zenith_angle
+    - insolation
+
+  chunks:
+    time: 1
+    variable: -1
+    ensemble: 1
+    cell: -1

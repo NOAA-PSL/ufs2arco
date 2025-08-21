@@ -2,6 +2,7 @@ from .base import Source
 from .cloud_zarr import CloudZarrData
 from .noaa_grib_forecast import NOAAGribForecastData
 
+from .aws_aorc import AWSAORC
 from .aws_gefs_archive import AWSGEFSArchive
 from .aws_hrrr_archive import AWSHRRRArchive
 from .gcs_era5_1degree import GCSERA5OneDegree
@@ -17,4 +18,5 @@ _recognized = {
     "gcs_era5_1degree": "GCSERA5OneDegree",
     "gcs_replay_atmosphere": "GCSReplayAtmosphere",
     "gfs_archive": "GFSArchive",
+    "aws_aorc": "AWSAORC",
 }

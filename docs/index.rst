@@ -76,6 +76,7 @@ Table of Contents
    :maxdepth: 1
    :caption: Data Sources
 
+   aorc
    gefs_archive
    gfs_archive
    hrrr_archive
