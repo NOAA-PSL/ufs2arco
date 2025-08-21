@@ -13,7 +13,8 @@
 # - base workflow for analysis
 # - rename
 mover:
-  name: mpidatamover
+  name: datamover
+  batch_size: 2
 
 directories:
   zarr: dataset.zarr
