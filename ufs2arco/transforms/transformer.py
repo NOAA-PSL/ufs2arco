@@ -16,10 +16,11 @@ class Transformer:
         return (
             "multiply",
             "divide",
+            "rotate_vectors",
+            "xarray_coarsen",
             "fv_vertical_regrid",
             "horizontal_regrid",
             "mappings",
-            "rotate_vectors",
         )
 
     def __init__(self, options):
@@ -85,6 +86,9 @@ class Transformer:
         if "rotate_vectors" in self.names:
             xds = rotate_vectors(xds, **self.options["rotate_vectors"])
 
+        if "xarray_coarsen" in self.names:
+            xds = xarray_coarsen(xds, **self.options["xarray_coarsen"])
+
         if "fv_vertical_regrid" in self.names:
             xds = fv_vertical_regrid(xds, **self.options["fv_vertical_regrid"])
 
@@ -135,3 +139,20 @@ def divide(xds, config):
         if varname in xds:
             xds[varname] = xds[varname] / scalar
     return xds
+
+
+def xarray_coarsen(xds: xr.Dataset, reduction: str, **kwargs) -> xr.Dataset:
+    """
+    Apply ``xarray.coarsen`` to the dataset
+
+    Args:
+        xds (xr.Dataset):
+
+    """
+    cds = xds.coarsen(**kwargs)
+    try:
+        reduce_method = getattr(cds, reduction)
+    except AttributeError:
+        raise AttributeError(f"ufs2arco.transforms.xarray_coarsen: '{reduction}' is not a valid method on the coarsened dataset.")
+    cds = reduce_method()
+    return cds
