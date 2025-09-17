@@ -721,6 +721,7 @@ class Anemoi(Target):
 
         xds = xr.open_zarr(self.store_path)
         attrs = xds.attrs.copy()
+        freqstr = self.dates.freqstr
 
         # get the start/end times for computing statistics
         # in terms of logical time index values
@@ -728,41 +729,54 @@ class Anemoi(Target):
         end_idx = list(self.datetime).index(pd.Timestamp(self.statistics_end_date))
         xds = xds.sel(time=slice(start_idx, end_idx))
 
-        stdev = xds["stdev"].load()
-        mean = xds["mean"].load()
-
-        data_norm = (xds["data"] - mean)/stdev
-        data_diff = data_norm.diff("time")
+        data_diff = xds["data"].diff("time")
         n_time = len(data_diff["time"])
+        count = xds["count"].load()/len(xds["time"])*n_time
+        count = count.values.astype(np.float64)
         time_indices = np.array_split(np.arange(n_time), topo.size)
         local_indices = time_indices[topo.rank]
 
-        residual_variance = np.zeros_like(xds["variable"].values, dtype=np.float64)
+        residual_avg = np.zeros_like(xds["variable"].values, dtype=np.float64)
+        residual_var = np.zeros_like(xds["variable"].values, dtype=np.float64)
+        residual_max = np.zeros_like(xds["variable"].values, dtype=np.float64)
+        residual_min = np.zeros_like(xds["variable"].values, dtype=np.float64)
 
         logger.info(f"{self.name}.calc_temporal_residual_stats: Performing local computations")
         if local_indices.size > 0:
-            mdims = [d for d in xds["data"].dims if d not in ("variable", "time")]
+            dims = [d for d in xds["data"].dims if d != "variable"]
             local_data_diff = data_diff.isel(time=local_indices).astype(np.float64)
-            local_residual_variance = (local_data_diff**2).mean(mdims).sum("time").compute().values
-            local_residual_variance /= n_time
+            local_residual_avg = local_data_diff.sum(dims).compute().values
+            local_residual_var = (local_data_diff**2).sum(dims).compute().values
+            local_residual_max = local_data_diff.max(dims).compute().values
+            local_residual_min = local_data_diff.min(dims).compute().values
+
         else:
-            local_residual_variance = residual_variance.copy()
+            local_residual_var = residual_var.copy()
+            local_residual_avg = residual_avg.copy()
+            local_residual_max = residual_max.copy()
+            local_residual_min = residual_min.copy()
 
         logger.info(f"{self.name}.calc_temporal_residual_stats: Communicating results to root")
-        topo.sum(local_residual_variance, residual_variance)
-
+        topo.sum(local_residual_avg, residual_avg)
+        topo.sum(local_residual_var, residual_var)
+        topo.max(local_residual_max, residual_max)
+        topo.min(local_residual_min, residual_min)
         logger.info(f"{self.name}.calc_temporal_residual_stats: ... done communicating")
+
 
         if topo.is_root:
             nds = xr.Dataset()
             nds.attrs = attrs
-            nds["residual_stdev"] = xr.DataArray(np.sqrt(residual_variance), coords=xds["variable"].coords)
 
-            # compute geomtric mean by log-exp trick (since scipy isn't a dependency to ufs2arco)
-            # ignore 0 values, since this is probably from static variables
-            rstdev = nds["residual_stdev"].where(nds["residual_stdev"] > 0)
-            denominator = np.exp(np.log(rstdev).mean("variable").values)
-            nds["gmean_residual_stdev"] = nds["residual_stdev"] / denominator
+            # some corrections
+            residual_avg /= count
+            residual_var = residual_var / count - residual_avg**2
+
+            ckw = {"coords": xds["variable"].coords}
+            nds[f"statistics_tendencies_{freqstr}_mean"] = xr.DataArray(residual_avg, **ckw)
+            nds[f"statistics_tendencies_{freqstr}_stdev"] = xr.DataArray(np.sqrt(residual_var), **ckw)
+            nds[f"statistics_tendencies_{freqstr}_maximum"] = xr.DataArray(residual_max, **ckw)
+            nds[f"statistics_tendencies_{freqstr}_minimum"] = xr.DataArray(residual_min, **ckw)
 
             nds.to_zarr(self.store_path, mode="a")
             logger.info(f"{self.name}.calc_temporal_residual_stats: Stored temporal residual stats")
