@@ -72,10 +72,11 @@ class MPITopology:
 
         logger.setLevel(level=level)
         formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)-7s] %(message)s")
-        handler = logging.FileHandler(self.logfile, mode="w+")
-        handler.setLevel(level=level)
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        self.file_handler = logging.FileHandler(self.logfile, mode="w+")
+        self.file_handler.setLevel(level=level)
+        self.file_handler.setFormatter(formatter)
+        logger.addHandler(self.file_handler)
+
 
 
     @property
