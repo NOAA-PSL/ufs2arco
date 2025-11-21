@@ -32,7 +32,10 @@ def horizontal_regrid(
     ds_out = xr.open_dataset(os.path.expandvars(target_grid_path), **kw)
 
     # required for xesmf
-    xds = xds.rename({"longitude": "lon", "latitude": "lat"})
+    rename = {"longitude": "lon", "latitude": "lat"}
+    for key, val in rename.items():
+        if key in xds:
+            xds = xds.rename({key: val})
 
     # for the first time, we have to compute the regridder weights no matter what
     # so, figure out if we have the file or not

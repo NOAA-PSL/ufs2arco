@@ -153,6 +153,8 @@ class SerialTopology:
         self.log_dir = log_dir
 
         logger.setLevel(level=level)
+        logger.handlers.clear()
+        logger.propagate = False
         formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)-7s] %(message)s")
         if log_dir is None:
             # if no dir is provided, flush to stdout
