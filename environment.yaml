@@ -2,7 +2,7 @@ name: ufs2arco
 channels:
     - conda-forge
 dependencies:
-    - python=3.11
+    - python=3.12
 # Base dependencies
     - numpy<2.3
     - xarray
