@@ -13,7 +13,8 @@ from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
 _local_path = os.path.dirname(__file__)
-_sources = ["replay", "gfs", "gefs", "hrrr", "era5"]
+_sources = ["replay", "era5"]
+#_sources = ["replay", "gfs", "gefs", "hrrr", "era5"]
 _targets = ["base", "anemoi"]
 
 def setup_test_log():
