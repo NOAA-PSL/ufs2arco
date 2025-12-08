@@ -22,7 +22,7 @@ dependencies = [
     "dask[complete]",
     "fsspec",
     "s3fs",
-    "gcsfs",
+    "gcsfs>=2025.10.0",
 ]
 
 [project.optional-dependencies]
