@@ -29,6 +29,9 @@ jobs:
         python-version: ["3.12"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
       - name: Create conda environment
         uses: mamba-org/setup-micromamba@v1
         with:
@@ -38,8 +41,6 @@ jobs:
           environment-file: environment.yaml
           create-args: python=${{ matrix.python-version }}
           init-shell: bash
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
       - name: Install ufs2arco & Check Versions
         shell: bash -l {0}
         run: |
