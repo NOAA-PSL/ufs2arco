@@ -17,7 +17,7 @@ dependencies:
     - dask[complete]
     - fsspec
     - s3fs
-    - gcsfs
+    - gcsfs>=2025.12.0
 # jupyter & documentation stuff
     - jupyter
     - matplotlib
