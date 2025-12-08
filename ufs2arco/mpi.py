@@ -1,4 +1,5 @@
 import os
+import sys
 import logging
 import warnings
 from typing import Optional, Any, List
@@ -72,11 +73,10 @@ class MPITopology:
 
         logger.setLevel(level=level)
         formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)-7s] %(message)s")
-        self.file_handler = logging.FileHandler(self.logfile, mode="w+")
-        self.file_handler.setLevel(level=level)
-        self.file_handler.setFormatter(formatter)
-        logger.addHandler(self.file_handler)
-
+        self.log_handler = logging.FileHandler(self.logfile, mode="w+")
+        self.log_handler.setLevel(level=level)
+        self.log_handler.setFormatter(formatter)
+        logger.addHandler(self.log_handler)
 
 
     @property
@@ -150,17 +150,29 @@ class SerialTopology:
 
 
     def _init_log(self, log_dir, level=logging.INFO):
-        self.log_dir = "./" if log_dir is None else log_dir
-        if not os.path.isdir(self.log_dir):
-            os.makedirs(self.log_dir)
-        self.logfile = f"{self.log_dir}/log.serial.out"
+        self.log_dir = log_dir
 
         logger.setLevel(level=level)
         formatter = SimpleFormatter(fmt="[%(relativeCreated)d s] [%(levelname)-7s] %(message)s")
-        handler = logging.FileHandler(self.logfile, mode="w+")
-        handler.setLevel(level=level)
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        if log_dir is None:
+            # if no dir is provided, flush to stdout
+            self.logfile = "none"
+
+            self.log_handler = logging.StreamHandler(stream=sys.stdout)
+            self.log_handler.setLevel(level=level)
+            self.log_handler.setFormatter(formatter)
+            logger.addHandler(self.log_handler)
+
+        else:
+            # otherwise go to a file
+            if not os.path.isdir(self.log_dir):
+                os.makedirs(self.log_dir)
+            self.logfile = f"{self.log_dir}/log.serial.out"
+
+            self.log_handler = logging.FileHandler(self.logfile, mode="w+")
+            self.log_handler.setLevel(level=level)
+            self.log_handler.setFormatter(formatter)
+            logger.addHandler(self.log_handler)
 
     @property
     def is_root(self) -> bool:
