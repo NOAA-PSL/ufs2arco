@@ -120,6 +120,14 @@ max_10si:
     paramId: 237207
     typeOfLevel: heightAboveGround
   long_name: Time-maximum 10 metre wind speed
+mslma:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260323
+    typeOfLevel: meanSea
+  long_name: MSLP (MAPS System Reduction)
+  original_name: prsml
 orog:
   file_suffixes:
   - prs

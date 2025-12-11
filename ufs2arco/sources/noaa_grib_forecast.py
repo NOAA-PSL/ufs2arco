@@ -202,8 +202,10 @@ class NOAAGribForecastData:
 
         if "original_name" in self._varmeta[varname]:
             og = self._varmeta[varname]["original_name"]
-            xds = xds.rename({og: varname})
-            xds[varname].attrs["original_name"] = og
+            if og in xds:
+                xds = xds.rename({og: varname})
+                xds[varname].attrs["original_name"] = og
+
         xda = xds[varname]
 
         if "isobaricInhPa" in xds.coords:
@@ -234,6 +236,26 @@ class NOAAGribForecastData:
             full = fbk["typeOfLevel"].replace("CloudLayer", "")
             new = f"{full[0]}cc"
             xda.attrs["long_name"] = xda.long_name.replace("Total", full.capitalize())
+
+        elif fbk["typeOfLevel"] == "meanSea":
+
+            # check for the time periods where HRRR mslp is named prmsl not mslma
+            # for these time periods, we will have the "original_name" key in the attributes
+            if "original_name" in xda.attrs:
+                xda.attrs.update(
+                    {
+                        "GRIB_paramId": 260323,
+                        "GRIB_shortName": "mslma",
+                        "GRIB_cfVarName": "mslma",
+                        "GRIB_name": "MSLP (MAPS System Reduction)",
+                        "long_name": "MSLP (MAPS System Reduction)",
+                    }
+                )
+                msg = f"Variable mslma has been requested, but for this timestamp HRRR dataset only has prmsl\n" +\
+                    "In this case, it is assumed that the two are equal, so all GRIB attributes have been modified\n" +\
+                    "to reflect the new, more clear MSLP variable attributes"
+                logging.warning(msg)
+
 
         for v in [fbk["typeOfLevel"], "number"]:
             if v in xda.coords and v not in xda.dims:
