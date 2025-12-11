@@ -116,11 +116,17 @@
    * - ``lsm``
      - Land-sea mask
      - False
+   * - ``mslet``
+     - MSLP (Eta model reduction)
+     - False
    * - ``orog``
      - Orography
      - False
    * - ``pres80``
      - 80 metre Pressure
+     - False
+   * - ``prmsl``
+     - Pressure reduced to MSL
      - False
    * - ``q``
      - Specific humidity

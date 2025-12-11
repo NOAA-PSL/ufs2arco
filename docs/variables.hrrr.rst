@@ -34,12 +34,18 @@
      - Land-sea mask
    * - ``max_10si``
      - Time-maximum 10 metre wind speed
+   * - ``mslma``
+     - MSLP (MAPS System Reduction)
    * - ``orog``
      - Orography
    * - ``prate``
      - Precipitation rate
+   * - ``prmsl``
+     - Pressure reduced to MSL
    * - ``q``
      - Specific humidity
+   * - ``refc``
+     - Maximum/Composite radar reflectivity
    * - ``refd1000``
      - 1000 metre Derived radar reflectivity
    * - ``refd4000``
@@ -62,6 +68,8 @@
      - Temperature
    * - ``t2m``
      - 2 metre temperature
+   * - ``tcc``
+     - Total Cloud Cover
    * - ``t_surface``
      - Temperature at surface
    * - ``u``
@@ -76,6 +84,8 @@
      - 10 metre V wind component
    * - ``v80``
      - 80 metre V component of wind
+   * - ``veril``
+     - Vertically-integrated liquid
    * - ``vgtyp``
      - Vegetation Type
    * - ``vis``
