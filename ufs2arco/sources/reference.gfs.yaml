@@ -350,6 +350,14 @@ lsm:
     typeOfLevel: surface
   forecast_only: false
   long_name: Land-sea mask
+mslet:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260317
+    typeOfLevel: meanSea
+  forecast_only: false
+  long_name: MSLP (Eta model reduction)
 orog:
   file_suffixes:
   - ''
@@ -369,6 +377,14 @@ pres80:
   forecast_only: false
   long_name: 80 metre Pressure
   original_name: pres
+prmsl:
+  file_suffixes:
+  - ''
+  filter_by_keys:
+    paramId: 260074
+    typeOfLevel: meanSea
+  forecast_only: false
+  long_name: Pressure reduced to MSL
 q:
   file_suffixes:
   - ''
