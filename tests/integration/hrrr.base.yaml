@@ -41,6 +41,8 @@ source:
     - u10
     - v10
     - accum_tp
+    - refc
+    - mslma
 
   accum_hrs:
     accum_tp: 6
