@@ -143,6 +143,13 @@ q:
     paramId: 133
     typeOfLevel: isobaricInhPa
   long_name: Specific humidity
+refc:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260390
+    typeOfLevel: atmosphere
+  long_name: Maximum/Composite radar reflectivity
 refd1000:
   file_suffixes:
   - prs
@@ -241,6 +248,13 @@ t_surface:
     typeOfLevel: surface
   long_name: Temperature at surface
   original_name: t
+tcc:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 228164
+    typeOfLevel: atmosphere
+  long_name: Total Cloud Cover
 u:
   file_suffixes:
   - prs
@@ -289,6 +303,13 @@ v80:
     typeOfLevel: heightAboveGround
   long_name: 80 metre V component of wind
   original_name: v
+veril:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260136
+    typeOfLevel: atmosphere
+  long_name: Vertically-integrated liquid
 vgtyp:
   file_suffixes:
   - prs
