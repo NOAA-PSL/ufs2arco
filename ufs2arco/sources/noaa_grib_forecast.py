@@ -71,6 +71,32 @@ class NOAAGribForecastData:
 
         self._accum_hrs = accum_hrs
 
+        # looks for variables with any time bounds
+        for varname in variables:
+            tbds = self._varmeta[varname].get("time_bounds", None)
+            altname = self._varmeta[varname].get("alternative_name", None)
+            if tbds is not None:
+                in_bounds = [
+                    _is_within_datetime_bounds(t0, tbds)
+                    for t0 in self.t0
+                ]
+                if altname is None and not all(in_bounds):
+                    msg = "\n".join([f"{t0}: {ib}" for t0, ib in zip(self.t0, in_bounds)])
+                    logger.error(f"Found in_bounds for the following t0\n{msg}")
+                    raise ValueError(f"Cannot get variable {varname} for all t0 requested, check log for valid t0s")
+
+                if altname is not None:
+                    abds = self._varmeta[altname]["time_bounds"]
+                    alt_in_bounds = [
+                        _is_within_datetime_bounds(t0, abds)
+                        for t0 in self.t0
+                    ]
+                    if not all(ab or ib for ib, ab in zip(in_bounds, alt_in_bounds)):
+                        msg = "\n".join([f"{t0}: {ib} {ab}" for t0, ib, ab in zip(self.t0, in_bounds, alt_in_bounds)])
+                        logger.error(f"Found in_bounds for the following t0\n{msg}")
+                        raise ValueError(f"Cannot get variable {varname} for all t0 requested, check log for valid t0s")
+
+
         super().__init__(
             variables=variables,
             levels=levels,
