@@ -43,6 +43,7 @@ source:
     - u10
     - v10
     - accum_tp
+    - refc
 
   levels:
     - 100
