@@ -121,13 +121,16 @@ max_10si:
     typeOfLevel: heightAboveGround
   long_name: Time-maximum 10 metre wind speed
 mslma:
+  alternative_name: prmsl
   file_suffixes:
   - prs
   filter_by_keys:
     paramId: 260323
     typeOfLevel: meanSea
   long_name: MSLP (MAPS System Reduction)
-  original_name: prsml
+  time_bounds:
+  - 2016-08-22T18
+  - null
 orog:
   file_suffixes:
   - prs
@@ -144,6 +147,16 @@ prate:
     stepType: instant
     typeOfLevel: surface
   long_name: Precipitation rate
+prmsl:
+  file_suffixes:
+  - prs
+  filter_by_keys:
+    paramId: 260074
+    typeOfLevel: meanSea
+  long_name: Pressure reduced to MSL
+  time_bounds:
+  - null
+  - 2016-08-22T17
 q:
   file_suffixes:
   - prs

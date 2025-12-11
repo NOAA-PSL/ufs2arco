@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 import fsspec
 
+import pandas as pd
 import xarray as xr
 
 logger = logging.getLogger("ufs2arco")
@@ -189,6 +190,20 @@ class NOAAGribForecastData:
             start = end - ahr
             stepRange = f"{start}-{end}"
             fbk.update({"stepRange": stepRange})
+
+
+        altname = self._varmeta[varname].get("alternative_name", None)
+        use_altname = False
+        if altname is not None:
+
+            in_var = _is_within_datetime_bounds(dims["t0"], self._varmeta[varname]["time_bounds"])
+            in_alt = _is_within_datetime_bounds(dims["t0"], self._varmeta[altname]["time_bounds"])
+            assert in_var or in_alt, "Found a timestamp that is in neither variable nor alternative variable time bounds"
+
+            if in_alt:
+                use_altname = True
+                fbk = self._varmeta[altname]["filter_by_keys"].copy()
+
         try:
             xds = xr.open_dataset(
                 file,
@@ -200,11 +215,31 @@ class NOAAGribForecastData:
             logger.warning(f"{self.name}._open_single_variable: unable to read varname = {varname} at dims = {dims}")
             return None
 
+        if use_altname:
+            vmeta = self._varmeta[varname]
+            ameta = self._varmeta[altname]
+            msg = f"Found variable with alternative name which we are in time bounds for: {altname}\n" +\
+                f"\t- renaming {altname} -> {varname}\n" +\
+                f"\t- updating paramId {ameta['filter_by_keys']['paramId']} -> {vmeta['filter_by_keys']['paramId']}\n" +\
+                f"\t- updating GRIB_shortName, GRIB_cfVarName {altname} -> {varname}\n" +\
+                f"\t- updating GRIB_name, long_name {ameta['long_name']} -> {vmeta['long_name']}"
+            logger.warning(msg)
+
+            xds = xds.rename({altname: varname})
+            xds[varname].attrs.update(
+                {
+                    "GRIB_paramId": vmeta["filter_by_keys"]["paramId"],
+                    "GRIB_shortName": varname,
+                    "GRIB_cfVarName": varname,
+                    "GRIB_name": vmeta["long_name"],
+                    "long_name": vmeta["long_name"],
+                }
+            )
+
         if "original_name" in self._varmeta[varname]:
             og = self._varmeta[varname]["original_name"]
-            if og in xds:
-                xds = xds.rename({og: varname})
-                xds[varname].attrs["original_name"] = og
+            xds = xds.rename({og: varname})
+            xds[varname].attrs["original_name"] = og
 
         xda = xds[varname]
 
@@ -236,25 +271,6 @@ class NOAAGribForecastData:
             full = fbk["typeOfLevel"].replace("CloudLayer", "")
             new = f"{full[0]}cc"
             xda.attrs["long_name"] = xda.long_name.replace("Total", full.capitalize())
-
-        elif fbk["typeOfLevel"] == "meanSea":
-
-            # check for the time periods where HRRR mslp is named prmsl not mslma
-            # for these time periods, we will have the "original_name" key in the attributes
-            if "original_name" in xda.attrs:
-                xda.attrs.update(
-                    {
-                        "GRIB_paramId": 260323,
-                        "GRIB_shortName": "mslma",
-                        "GRIB_cfVarName": "mslma",
-                        "GRIB_name": "MSLP (MAPS System Reduction)",
-                        "long_name": "MSLP (MAPS System Reduction)",
-                    }
-                )
-                msg = f"Variable mslma has been requested, but for this timestamp HRRR dataset only has prmsl\n" +\
-                    "In this case, it is assumed that the two are equal, so all GRIB attributes have been modified\n" +\
-                    "to reflect the new, more clear MSLP variable attributes"
-                logging.warning(msg)
 
 
         for v in [fbk["typeOfLevel"], "number"]:
@@ -398,3 +414,26 @@ class NOAAGribForecastData:
         xds = xds.set_coords("valid_time")
 
         return xds
+
+def _is_within_datetime_bounds(current_ts, bounds):
+
+    start_str = bounds[0]
+    end_str = bounds[1]
+
+    # 1. Process Start (Handle None as negative infinity)
+    if start_str is None:
+        is_after_start = True
+    else:
+        is_after_start = current_ts >= pd.Timestamp(start_str)
+
+    # 2. Process End (Handle None as positive infinity)
+    if end_str is None:
+        is_before_end = True
+    else:
+        is_before_end = current_ts <= pd.Timestamp(end_str)
+
+    # 3. Return True immediately if we find a match
+    if is_after_start and is_before_end:
+        return True
+
+    return False
