@@ -418,26 +418,28 @@ class NOAAGribForecastData:
             )
 
         # handle lead_time/fhr coordinates
-        xds = xds.expand_dims(["t0", "lead_time"])
-        xds["fhr"] = xr.DataArray(
-            [int(lt / 1e9 / 3600) for lt in xds["lead_time"].values],
-            coords=xds["lead_time"].coords,
-            attrs={
-                "long_name": "hours since initial time",
-                "units": "integer hours",
-            },
-        )
-        xds = xds.swap_dims({"lead_time": "fhr"})
+        xds = xds.expand_dims("t0")
+        if "lead_time" in xds:
+            xds = xds.expand_dims("lead_time")
+            xds["fhr"] = xr.DataArray(
+                [int(lt / 1e9 / 3600) for lt in xds["lead_time"].values],
+                coords=xds["lead_time"].coords,
+                attrs={
+                    "long_name": "hours since initial time",
+                    "units": "integer hours",
+                },
+            )
+            xds = xds.swap_dims({"lead_time": "fhr"})
 
-        # recreate valid_time, since it's not always there
-        valid_time = xds["t0"] + xds["lead_time"]
-        if "valid_time" in xds:
-            xds["valid_time"] = xds["valid_time"].expand_dims(["t0", "fhr"])
-            assert valid_time.squeeze() == xds.valid_time.squeeze()
-            xds = xds.drop_vars("valid_time")
+            # recreate valid_time, since it's not always there
+            valid_time = xds["t0"] + xds["lead_time"]
+            if "valid_time" in xds:
+                xds["valid_time"] = xds["valid_time"].expand_dims(["t0", "fhr"])
+                assert valid_time.squeeze() == xds.valid_time.squeeze()
+                xds = xds.drop_vars("valid_time")
 
-        xds["valid_time"] = valid_time
-        xds = xds.set_coords("valid_time")
+            xds["valid_time"] = valid_time
+            xds = xds.set_coords("valid_time")
 
         return xds
 
