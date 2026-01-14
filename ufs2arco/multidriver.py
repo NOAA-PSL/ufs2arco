@@ -60,6 +60,7 @@ class MultiDriver(Driver):
         "directories",
         "multisource",
         "transforms",
+        "merged_transforms",
         "target",
         "attrs",
     )
@@ -131,6 +132,13 @@ class MultiDriver(Driver):
             self.transformers.append(transformer)
 
 
+    def _init_merged_transformer(self):
+        """Define operations to be performed on the merged dataset, for example temporal aggregation"""
+        self.merged_transformer = None
+        if "merged_transforms" in self.config:
+            self.merged_transformer = Transformer(options=self.config.get("merged_transforms"))
+
+
     def _init_target(self):
         """Make a copy of the same target format for each source
 
@@ -138,15 +146,18 @@ class MultiDriver(Driver):
         """
 
         name = self.config["target"].get("name", "base").lower()
-        try:
-            assert name == "anemoi"
-        except:
-            raise NotImplementedError("Driver._init_target: multisource workflows currently only work with Anemoi Targets.")
+        if name in ("forecast", "analysis", "base"):
+            TargetDataset = ufs2arco.targets.Target
+        elif name == "anemoi":
+            TargetDataset = ufs2arco.targets.Anemoi
+        else:
+            raise NotImplementedError(f"MultiDriver._init_targets: only 'base' and 'anemoi' are implemented")
+
         self.targets = list()
         kwargs = self.target_kwargs.copy()
         for source in self.sources:
             self.targets.append(
-                ufs2arco.targets.Anemoi(
+                TargetDataset(
                     source=source,
                     **kwargs,
                 )
@@ -169,6 +180,10 @@ class MultiDriver(Driver):
             for source, target, transformer in zip(self.sources, self.targets, self.transformers)
         ]
 
+    def setup(self, runtype: str):
+        super().setup(runtype=runtype)
+        self._init_merged_transformer()
+
 
     def write_container(self, overwrite):
         """Write empty zarr store, to be filled with data"""
@@ -176,6 +191,9 @@ class MultiDriver(Driver):
         if self.topo.is_root:
             dslist = [mover.create_container() for mover in self.movers]
             cds = self.target.merge_multisource(dslist)
+            if self.merged_transformer is not None:
+                with xr.set_options(keep_attrs=True):
+                    cds = self.merged_transformer(cds)
 
             kwargs = {"mode": "w"} if overwrite else {}
             logger.info(f"Driver.write_container: storing container at {self.store_path}\n{cds}\n")
@@ -200,6 +218,9 @@ class MultiDriver(Driver):
         # create container, only if mover start is not 0
         if self.mover.start == 0:
             self.write_container(overwrite=overwrite)
+
+        # is this bad? open target dataset to get the dimensions
+        tds = xr.open_zarr(self.store_path, decode_timedelta=True).coords.to_dataset()
 
         # loop through batches
         n_batches = len(self.mover)
@@ -230,8 +251,11 @@ class MultiDriver(Driver):
             if all(foundit) and len(foundit) == len(self.movers):
 
                 mds = self.target.merge_multisource(dslist)
+                if self.merged_transformer is not None:
+                    with xr.set_options(keep_attrs=True):
+                        mds = self.merged_transformer(mds)
 
-                region = self.mover.find_my_region(mds)
+                region = self.mover.find_my_region(mds, tds)
                 mds.to_zarr(self.target.store_path, region=region)
 
             self.mover.clear_cache(batch_idx)

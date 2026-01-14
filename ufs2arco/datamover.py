@@ -115,6 +115,7 @@ class DataMover():
                         open_static_vars=self.target.always_open_static_vars,
                         cache_dir=cache_dir,
                     )
+
                     if len(fds) > 0:
                         fds = self.transformer(fds)
                         fds = self.target.apply_transforms_to_sample(fds)
@@ -225,7 +226,7 @@ class DataMover():
         return nds
 
 
-    def find_my_region(self, xds):
+    def find_my_region(self, xds, tds=None):
         """Given a dataset, that's assumed to be a subset of the initial dataset,
         find the logical index values where this should be stored in the final zarr store
 
@@ -236,10 +237,16 @@ class DataMover():
             region (dict): indicating the zarr region to store in, based on the initial condition indices
         """
         region = {k: slice(None, None) for k in xds.dims}
-        for key in self.target.renamed_sample_dims:
-            full_array = getattr(self.target, key) # e.g. all of the initial conditions
-            batch_indices = [list(full_array).index(value) for value in xds[key].values]
-            region[key] = slice(batch_indices[0], batch_indices[-1]+1)
+        if tds is None:
+            for key in self.target.renamed_sample_dims:
+                full_array = getattr(self.target, key) # e.g. all of the initial conditions
+                batch_indices = [list(full_array).index(value) for value in xds[key].values]
+                region[key] = slice(batch_indices[0], batch_indices[-1]+1)
+        else:
+            for key in tds.dims:
+                full_array = tds[key].values
+                batch_indices = [list(full_array).index(value) for value in xds[key].values]
+                region[key] = slice(batch_indices[0], batch_indices[-1]+1)
         return region
 
 

@@ -268,3 +268,9 @@ class Target:
         zds = zarr.open(self.store_path, mode="a")
         zds.attrs["missing_data"] = missing_data
         zarr.consolidate_metadata(self.store_path)
+
+
+    def merge_multisource(self, dslist: list[xr.Dataset]) -> xr.Dataset:
+        """Take a list of datasets, each from their own source, and merge them"""
+        result = xr.merge(dslist)
+        return result
