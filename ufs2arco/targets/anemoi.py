@@ -886,7 +886,7 @@ class AnemoiInferenceWithForcings(Anemoi):
         compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
         variables_with_nans: Optional[list] = None,
-        save_additional_step: Optional[bool] = False,
+        multistep_input: Optional[int] = 1,
     ) -> None:
 
         super().__init__(
@@ -901,29 +901,29 @@ class AnemoiInferenceWithForcings(Anemoi):
             variables_with_nans=variables_with_nans,
         )
 
-        self.save_additional_step = save_additional_step
+        self.multistep_input = multistep_input
+
+
+    @property
+    def dates_with_data(self):
+        return [
+            self.datetime[0] + i*pd.Timedelta(self.datetime.freqstr)
+            for i in range(self.multistep_input)
+        ]
+
 
     def load_data_flag(self, dims: dict) -> bool:
         """
         Determine if timestep is initial conditions or not.
         If not, we will not pull all data and simply create a dataset structure to later compute forcings.
         """
-        t0_val = dims.get("t0")
+        timecoord = "t0" if self._has_fhr else "time"
+        t0_val = dims.get(timecoord)
 
         # depending on how you trained your model you may need to load in a timestep prior to initialization
         # this helps facilitate that as an option
-        if self.save_additional_step:
-            from datetime import timedelta
-            load_data = (
-                t0_val == self.source.t0[0]
-                or t0_val == self.source.t0[0] + timedelta(hours=6)
-            )
+        return t0_val in self.dates_with_data
 
-        # otherwise, only initial conditions saved out
-        else:
-            load_data = t0_val == self.source.t0[0]
-
-        return load_data
 
     def save_ds_structure(self, ds):
         """
