@@ -870,11 +870,11 @@ def _merge_attrs(list_of_dicts):
 
 class AnemoiInferenceWithForcings(Anemoi):
     """
-    Augmented "anemoi" target to be used for creating datasets for inference. 
-    THis facilitiates everything the anemoi target does, 
+    Augmented "anemoi" target to be used for creating datasets for inference.
+    THis facilitiates everything the anemoi target does,
     but only loads initial conditions, and then calculates forcings for the entire requested forecast.
     """
-    
+
     def __init__(
         self,
         source: Source,
@@ -909,7 +909,7 @@ class AnemoiInferenceWithForcings(Anemoi):
         If not, we will not pull all data and simply create a dataset structure to later compute forcings.
         """
         t0_val = dims.get("t0")
-        
+
         # depending on how you trained your model you may need to load in a timestep prior to initialization
         # this helps facilitate that as an option
         if self.save_additional_step:
@@ -918,20 +918,20 @@ class AnemoiInferenceWithForcings(Anemoi):
                 t0_val == self.source.t0[0]
                 or t0_val == self.source.t0[0] + timedelta(hours=6)
             )
-            
+
         # otherwise, only initial conditions saved out
         else:
             load_data = t0_val == self.source.t0[0]
-        
+
         return load_data
-    
+
     def save_ds_structure(self, ds):
         """
         Utility to save structure of our ds.
         We do this to have coords (time/lat/lon/etc.) readily available later for computing forcings.
         """
         coords = {c: ds.coords[c].copy(deep=True) for c in ds.coords}
-        
+
         # keep static vars, as they don't change over time
         keep_vars = {"lsm", "orog"}
 
@@ -982,7 +982,7 @@ class AnemoiInferenceWithForcings(Anemoi):
         xds = xds.reset_coords()
         xds = xds[sorted(xds.data_vars)]
         return xds
-    
+
     def reconcile_missing_and_nans(self) -> None:
-        logger.info(f"{self.name}.reconcile_missing_and_nans: Will not run... we expect nans after initial conditinos")
+        logger.info(f"{self.name}.reconcile_missing_and_nans: Not necessary for this target, we expect nans after initial conditinos")
         # todo - add logic to just check initial conditions and forcings
