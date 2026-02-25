@@ -951,38 +951,6 @@ class AnemoiInferenceWithForcings(Anemoi):
                 coords=coords, data_vars=data_vars, attrs=dict(ds.attrs)
             )
 
-    def apply_transforms_to_sample(
-        self,
-        xds: xr.Dataset,
-    ) -> xr.Dataset:
-        """
-        Slightly augmented version of apply_transform function to work better with this inference class.
-        """
-        if self._has_fhr:
-            xds["valid_time"] = xds.coords["t0"] + xds.coords["lead_time"].compute()
-            xds = xds.squeeze("fhr", drop=True)
-            xds = xds.swap_dims({"t0": "valid_time"})
-            if "t0" in xds.coords:
-                xds = xds.drop_vars("t0")
-
-        if not self._has_member:
-            xds = xds.expand_dims({"ensemble": self.ensemble})
-
-        xds = self.compute_forcings(xds)
-        xds = self.rename_dataset(xds)
-        xds = self._map_datetime_to_index(xds)
-        xds = self._map_levels_to_suffixes(xds)
-        xds = self._map_static_to_expanded(xds)
-        xds = xds.transpose(*(("time", "ensemble") + tuple(xds.attrs["stack_order"])))
-        xds = self._stackit(xds)
-        xds = self._calc_sample_stats(xds)
-        if self.do_flatten_grid:
-            xds = self._flatten_grid(xds)
-        xds = xds.transpose(*self.dim_order)
-        xds = xds.reset_coords()
-        xds = xds[sorted(xds.data_vars)]
-        return xds
-
     def reconcile_missing_and_nans(self) -> None:
         logger.info(f"{self.name}.reconcile_missing_and_nans: Not necessary for this target, we expect nans after initial conditinos")
         # todo - add logic to just check initial conditions and forcings
