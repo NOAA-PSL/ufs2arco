@@ -141,10 +141,10 @@ class MultiDriver(Driver):
         if name == "anemoi":
             TargetDataset = ufs2arco.targets.Anemoi
         elif name == "anemoi_inference_with_forcings":
-            TargetDataset = ufs2arco.targets.Anemoi_Inference_With_Forcings
+            TargetDataset = ufs2arco.targets.AnemoiInferenceWithForcings
         else:
             raise NotImplementedError(
-                f"Driver._init_target: multisource workflows currently only work with Anemoi and Anemoi_Inference_With_Forcings Targets. Got {name}"
+                f"Driver._init_target: multisource workflows currently only work with Anemoi and AnemoiInferenceWithForcings Targets. Got {name}"
             )
 
         self.targets = list()

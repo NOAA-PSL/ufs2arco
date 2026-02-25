@@ -147,7 +147,7 @@ class Driver:
         elif name == "anemoi":
             TargetDataset = ufs2arco.targets.Anemoi
         elif name == "anemoi_inference_with_forcings":
-            TargetDataset = ufs2arco.targets.Anemoi_Inference_With_Forcings
+            TargetDataset = ufs2arco.targets.AnemoiInferenceWithForcings
         else:
             raise NotImplementedError(
                 f"Driver._init_targets: only 'base', 'anemoi', and 'anemoi_inference_with_forcings' are implemented"

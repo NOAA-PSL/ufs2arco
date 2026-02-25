@@ -868,13 +868,13 @@ def _merge_attrs(list_of_dicts):
     return merged_dict
 
 
-class Anemoi_Inference_With_Forcings(Anemoi):
+class AnemoiInferenceWithForcings(Anemoi):
     """
-    Augmented "anemoi" target to be used for creating datasets for inference. 
-    THis facilitiates everything the anemoi target does, 
+    Augmented "anemoi" target to be used for creating datasets for inference.
+    THis facilitiates everything the anemoi target does,
     but only loads initial conditions, and then calculates forcings for the entire requested forecast.
     """
-    
+
     def __init__(
         self,
         source: Source,
@@ -886,7 +886,7 @@ class Anemoi_Inference_With_Forcings(Anemoi):
         compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
         variables_with_nans: Optional[list] = None,
-        save_additional_step: Optional[bool] = False,
+        multistep_input: Optional[int] = 1,
     ) -> None:
 
         super().__init__(
@@ -901,37 +901,37 @@ class Anemoi_Inference_With_Forcings(Anemoi):
             variables_with_nans=variables_with_nans,
         )
 
-        self.save_additional_step = save_additional_step
+        self.multistep_input = multistep_input
+
+
+    @property
+    def dates_with_data(self):
+        return [
+            self.datetime[0] + i*pd.Timedelta(self.datetime.freqstr)
+            for i in range(self.multistep_input)
+        ]
+
 
     def load_data_flag(self, dims: dict) -> bool:
         """
         Determine if timestep is initial conditions or not.
         If not, we will not pull all data and simply create a dataset structure to later compute forcings.
         """
-        t0_val = dims.get("t0")
-        
+        timecoord = "t0" if self._has_fhr else "time"
+        t0_val = dims.get(timecoord)
+
         # depending on how you trained your model you may need to load in a timestep prior to initialization
         # this helps facilitate that as an option
-        if self.save_additional_step:
-            from datetime import timedelta
-            load_data = (
-                t0_val == self.source.t0[0]
-                or t0_val == self.source.t0[0] + timedelta(hours=6)
-            )
-            
-        # otherwise, only initial conditions saved out
-        else:
-            load_data = t0_val == self.source.t0[0]
-        
-        return load_data
-    
+        return t0_val in self.dates_with_data
+
+
     def save_ds_structure(self, ds):
         """
         Utility to save structure of our ds.
         We do this to have coords (time/lat/lon/etc.) readily available later for computing forcings.
         """
         coords = {c: ds.coords[c].copy(deep=True) for c in ds.coords}
-        
+
         # keep static vars, as they don't change over time
         keep_vars = {"lsm", "orog"}
 
@@ -951,38 +951,6 @@ class Anemoi_Inference_With_Forcings(Anemoi):
                 coords=coords, data_vars=data_vars, attrs=dict(ds.attrs)
             )
 
-    def apply_transforms_to_sample(
-        self,
-        xds: xr.Dataset,
-    ) -> xr.Dataset:
-        """
-        Slightly augmented version of apply_transform function to work better with this inference class.
-        """
-        if self._has_fhr:
-            xds["valid_time"] = xds.coords["t0"] + xds.coords["lead_time"].compute()
-            xds = xds.squeeze("fhr", drop=True)
-            xds = xds.swap_dims({"t0": "valid_time"})
-            if "t0" in xds.coords:
-                xds = xds.drop_vars("t0")
-
-        if not self._has_member:
-            xds = xds.expand_dims({"ensemble": self.ensemble})
-
-        xds = self.compute_forcings(xds)
-        xds = self.rename_dataset(xds)
-        xds = self._map_datetime_to_index(xds)
-        xds = self._map_levels_to_suffixes(xds)
-        xds = self._map_static_to_expanded(xds)
-        xds = xds.transpose(*(("time", "ensemble") + tuple(xds.attrs["stack_order"])))
-        xds = self._stackit(xds)
-        xds = self._calc_sample_stats(xds)
-        if self.do_flatten_grid:
-            xds = self._flatten_grid(xds)
-        xds = xds.transpose(*self.dim_order)
-        xds = xds.reset_coords()
-        xds = xds[sorted(xds.data_vars)]
-        return xds
-    
     def reconcile_missing_and_nans(self) -> None:
-        logger.info(f"{self.name}.reconcile_missing_and_nans: Will not run... we expect nans after initial conditinos")
+        logger.info(f"{self.name}.reconcile_missing_and_nans: Not necessary for this target, we expect nans after initial conditinos")
         # todo - add logic to just check initial conditions and forcings
