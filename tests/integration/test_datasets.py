@@ -16,6 +16,10 @@ _local_path = os.path.dirname(__file__)
 _sources = ["replay", "gfs", "gefs", "hrrr", "era5"]
 _targets = ["base", "anemoi"]
 
+# keep these separate, as we do not need NRT with reanalysis datasets.
+_nrt_sources = ["hrrr", "gfs"]
+_nrt_targets = ["anemoi_inference_with_forcings"]
+
 def setup_test_log():
     logger.setLevel(logging.INFO)
 
@@ -125,7 +129,7 @@ def _test_static_vars(source, target, store):
 
     # test land sea mask
     for varname in [lsm, orog]:
-        if target == "anemoi":
+        if target in ("anemoi", "anemoi_inference_with_forcings"):
             idx = ds.attrs["variables"].index(varname)
             xda = ds["data"].sel(variable=idx)
         else:
@@ -206,3 +210,43 @@ def test_flattened_base_equals_anemoi(source):
                         xda.squeeze().values.flatten(),
                         ads["data"].sel(variable=idx, time=itime, ensemble=imember).squeeze().values.flatten(),
                     )
+                    
+@pytest.mark.dependency()
+@pytest.mark.parametrize("target", _nrt_targets)
+@pytest.mark.parametrize("source", _nrt_sources)
+def test_this_combo_nrt(source, target):
+    run_test(source, target)
+
+@pytest.mark.dependency(
+    depends=[
+        f"test_this_combo_nrt[{source}-{target}]"
+        for source in _nrt_sources
+        for target in _nrt_targets
+    ]
+)
+@pytest.mark.parametrize("source", _nrt_sources)
+def test_forcings_logic_anemoi_inference(source):
+    ds = xr.open_zarr(
+        os.path.join(_local_path, source, "anemoi_inference_with_forcings", "dataset.zarr"), decode_timedelta=True
+    )
+    
+    # test that there are no nans in forcings for whole length of dataset
+    # don't need to test them all
+    forcings_to_test = ["cos_latitude","sin_latitude","lsm"]
+    for varname in forcings_to_test:
+        idx = ds.attrs["variables"].index(varname)
+        xda = ds["data"].sel(variable=idx)
+        # should be no nans in the array
+        assert not xda.isnull().any(), "NaNs found in forcings"
+        
+    # SHOULD be nans after inital conditions for prognostics
+    # t2m is almost certainly always going to be in our datasets?
+    variables_to_test = ["t2m"]
+    for varname in variables_to_test:
+        idx = ds.attrs["variables"].index(varname)
+        xda_ic = ds["data"].sel(variable=idx, time=0)
+        # should be no nans in the initial conditions
+        assert not xda_ic.isnull().any(), f"NaNs found in {varname}"
+        xda_forcast = ds["data"].sel(variable=idx, time=slice(1, None))
+        # SHOULD be nans after initial conditions
+        assert xda_forcast.isnull().any(), f"NaNs expected in {varname}, but actual data found."

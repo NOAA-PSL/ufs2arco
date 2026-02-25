@@ -83,6 +83,13 @@ Table of Contents
 
 .. toctree::
    :maxdepth: 1
+   :caption: Targets
+
+   base_target
+   anemoi_target
+
+.. toctree::
+   :maxdepth: 1
    :caption: Examples
 
    Interpolate FV3 to Pressure Levels <example_pressure_interpolation>

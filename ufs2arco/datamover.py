@@ -110,11 +110,32 @@ class DataMover():
                 dlist = []
 
                 for these_dims in batch_indices:
-                    fds = self.source.open_sample_dataset(
-                        dims=these_dims,
-                        open_static_vars=self.target.always_open_static_vars,
-                        cache_dir=cache_dir,
-                    )
+                    
+                    if type(self.target).__name__ == "AnemoiInferenceWithForcings":
+                        is_t0 = getattr(self.target, "load_data_flag", lambda dims: False)(these_dims)
+                        if is_t0:
+                            # if t0 then we want all data for initial conditions, so proceed as "normal"
+                            fds = self.source.open_sample_dataset(
+                                dims=these_dims,
+                                open_static_vars=self.target.always_open_static_vars,
+                                cache_dir=cache_dir,
+                            )
+                            # but, save the structure of the dataset to use for later timesteps to calculate forcings
+                            self.target.save_ds_structure(fds)
+                        else:
+                            # no longer dealing with IC's, and only need to calculate forcings
+                            # we simply take ds structure and get it ready to go through those calcs
+                            fds = self.target.ds_structure.copy()
+                            fds = fds.assign_coords(t0=("t0", [these_dims["t0"]]))
+                        
+                    else:
+                        # everything other than inference target should go here
+                        fds = self.source.open_sample_dataset(
+                            dims=these_dims,
+                            open_static_vars=self.target.always_open_static_vars,
+                            cache_dir=cache_dir,
+                        )
+                        
                     if len(fds) > 0:
                         fds = self.transformer(fds)
                         fds = self.target.apply_transforms_to_sample(fds)
