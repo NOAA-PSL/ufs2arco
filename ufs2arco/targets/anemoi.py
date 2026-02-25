@@ -868,7 +868,7 @@ def _merge_attrs(list_of_dicts):
     return merged_dict
 
 
-class Anemoi_Inference_With_Forcings(Anemoi):
+class AnemoiInferenceWithForcings(Anemoi):
     """
     Augmented "anemoi" target to be used for creating datasets for inference. 
     THis facilitiates everything the anemoi target does, 

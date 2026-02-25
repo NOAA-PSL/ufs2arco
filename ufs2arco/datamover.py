@@ -111,7 +111,7 @@ class DataMover():
 
                 for these_dims in batch_indices:
                     
-                    if type(self.target).__name__ == "Anemoi_Inference_With_Forcings":
+                    if type(self.target).__name__ == "AnemoiInferenceWithForcings":
                         is_t0 = getattr(self.target, "load_data_flag", lambda dims: False)(these_dims)
                         if is_t0:
                             # if t0 then we want all data for initial conditions, so proceed as "normal"
