@@ -43,13 +43,12 @@ source:
     - t2m
     - t
     - gh
-    - q
     - prmsl
 
   levels:
     - 100
     - 500
-    - 1000
+    - 875
 
   slices:
     sel:

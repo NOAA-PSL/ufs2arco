@@ -172,12 +172,13 @@ class NOAAGribForecastData:
                         )
                     except:
                         thisvar = None
-                    dslist.append(thisvar)
-                dslist = [xds for xds in dslist if xds is not None]
+
+                    if thisvar is not None:
+                        dslist.append(thisvar)
                 if len(dslist) == 1:
                     dsdict[varname] = dslist[0]
                 elif len(dslist) > 1:
-                    dsdict[varname] = xr.merge(dslist)
+                    dsdict[varname] = xr.merge(dslist)[varname]
                 else:
                     logger.warning(
                         f"{self.name}: Could not find {varname}, will stop reading variables for this sample\n\t" +
