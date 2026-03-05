@@ -119,8 +119,8 @@ class GFSArchive(NOAAGribForecastData, Source):
         """
         if t0 < pd.Timestamp("2021-01-01T00"):
 
-            bucket = f"https://data.rda.ucar.edu/d084001" if file_suffix == "" else \
-                    f"https://data.rda.ucar.edu/d084003"
+            prefix = f"https://osdf-director.osg-htc.org/ncar/gdex"
+            bucket = f"{prefix}/d084001" if file_suffix == "" else f"{prefix}/d084003"
             outer = f"{t0.year:04d}/{t0.year:04d}{t0.month:02d}{t0.day:02d}"
             fname = f"gfs.0p25{file_suffix}.{t0.year:04d}{t0.month:02d}{t0.day:02d}{t0.hour:02d}.f{fhr:03d}.grib2"
 
