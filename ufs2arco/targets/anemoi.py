@@ -359,6 +359,12 @@ class Anemoi(Target):
                     stack_order = list(d for d in xds[name].dims if d in self.expanded_horizontal_dims)
                     nds.attrs["stack_order"] = stack_order
                     nds.attrs["field_shape"] = list(len(xds[d]) for d in stack_order)
+                elif not any(d in xds[name].dims for d in self.expanded_horizontal_dims):
+                    msg = f"Could not find any expected horizontal dimensions {self.expanded_horizontal_dims} within the dataset\n"
+                    msg += f"if regridding was performed and the horizontal dimensions are renamed (e.g., latitude -> y or longitude -> x)\n"
+                    msg += f"then provide this information as a dictionary in the 'target' section of the configuration yaml\n"
+                    msg += "e.g. {'latitude': 'y', 'longitude': 'x'}"
+                    raise KeyError(msg)
 
         return nds
 
