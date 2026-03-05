@@ -110,7 +110,7 @@ class DataMover():
                 dlist = []
 
                 for these_dims in batch_indices:
-                    
+
                     if type(self.target).__name__ == "AnemoiInferenceWithForcings":
                         is_t0 = getattr(self.target, "load_data_flag", lambda dims: False)(these_dims)
                         if is_t0:
@@ -127,7 +127,7 @@ class DataMover():
                             # we simply take ds structure and get it ready to go through those calcs
                             fds = self.target.ds_structure.copy()
                             fds = fds.assign_coords(t0=("t0", [these_dims["t0"]]))
-                        
+
                     else:
                         # everything other than inference target should go here
                         fds = self.source.open_sample_dataset(
@@ -135,7 +135,7 @@ class DataMover():
                             open_static_vars=self.target.always_open_static_vars,
                             cache_dir=cache_dir,
                         )
-                        
+
                     if len(fds) > 0:
                         fds = self.transformer(fds)
                         fds = self.target.apply_transforms_to_sample(fds)
@@ -144,7 +144,7 @@ class DataMover():
                     xds = dlist[0]
                 else:
                     # if len(dlist) == 0, this returns an empty dataset
-                    xds = xr.merge(dlist)
+                    xds = xr.merge(dlist, join="outer")
                 return xds
 
             else:
