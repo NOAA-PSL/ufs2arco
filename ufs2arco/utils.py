@@ -80,7 +80,7 @@ def expand_anemoi_dataset(ads: xr.Dataset, name: str, variable_names: list[str])
             this_2d_array = this_2d_array.expand_dims({"level": [level]})
             dalist.append(this_2d_array)
 
-        dsdict[base] = xr.concat(dalist, dim="level")
+        dsdict[base] = xr.concat(dalist, dim="level", data_vars="all")
 
     # Add flat variables
     for name in flat_vars:
@@ -146,7 +146,7 @@ def convert_anemoi_inference_dataset(xds: xr.Dataset):
             attrs = xds[level_name].attrs.copy()
             dalist.append(this_2d_array)
 
-        dsdict[base] = xr.concat(dalist, dim="level")
+        dsdict[base] = xr.concat(dalist, dim="level", data_vars="all")
         dsdict[base].attrs = attrs
 
     # Add flat variables

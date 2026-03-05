@@ -251,7 +251,7 @@ class Layers2Pressure():
         dz = dz.swap_dims({self.level_name: "kp1"}).drop_vars(self.level_name)
         dz = dz.reset_coords(drop=True)
 
-        phii = xr.concat([dz,phi0], dim="kp1")
+        phii = xr.concat([dz,phi0], dim="kp1", data_vars="all")
 
         phii = phii.sortby("kp1", ascending=False)
         phii = phii.cumsum("kp1")

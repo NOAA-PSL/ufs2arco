@@ -445,6 +445,7 @@ class Anemoi(Target):
                 for this_channel, name in zip(channel, varlist)
             ],
             dim="variable",
+            data_vars="all",
             combine_attrs="drop",
         )
         nds = data_vars.to_dataset(name="data")
@@ -822,7 +823,7 @@ class Anemoi(Target):
 
         attrs_list = [xds.attrs.copy() for xds in dslist]
 
-        result = xr.concat(dslist, dim="variable", combine_attrs="drop")
+        result = xr.concat(dslist, dim="variable", data_vars="all", combine_attrs="drop")
 
         # these should not have a variable dimension
         for key in ["latitudes", "longitudes"]:
