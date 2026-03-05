@@ -51,7 +51,12 @@ class Anemoi(Target):
 
     @property
     def expanded_horizontal_dims(self):
-        return tuple(self.protected_rename.get(d, d) for d in self.source.horizontal_dims)
+        # First, get the original source dimensions, with any renaming due to regridding, or other transformation operations
+        # based on explicit user provided information
+        ehd = tuple(self.transformed_dims.get(d, d) for d in self.source.horizontal_dims)
+
+        # Now do the protected renaming, which manages anemoi specific stuff
+        return tuple(self.protected_rename.get(d, d) for d in ehd)
 
     @property
     def horizontal_dims(self):
@@ -140,7 +145,14 @@ class Anemoi(Target):
         compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
         variables_with_nans: Optional[list] = None,
+        transformed_dims: Optional[dict] = None,
     ) -> None:
+        """
+
+        Args:
+            ... the rest of the docs ...
+            transformed_dims (dict, optional): if your dataset gets regridded to have new dimension names, e.g. from latitude/longitude to a curvilinear grid with y/x coordinates (in the case of GFS -> HRRR grid), we need to explicitly tell the target class about this transformation, so it knows how to handle horizontal dimensions, since horizontal dimensions are always different. So this would be based on dimension order e.g. {'latitude': 'y', 'longitude': 'x'}
+        """
 
         super().__init__(
             source=source,
@@ -166,11 +178,7 @@ class Anemoi(Target):
                 self.rename.pop(key)
 
         self.variables_with_nans = variables_with_nans
-
-
-    def get_expanded_dim_order(self, xds):
-        """this is used in :meth:`map_static_to_expanded`"""
-        return ("time", "ensemble") + tuple(xds.attrs["stack_order"])
+        self.transformed_dims = transformed_dims if transformed_dims else {}
 
 
     def apply_transforms_to_sample(
