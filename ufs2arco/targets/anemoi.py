@@ -178,7 +178,7 @@ class Anemoi(Target):
                 self.rename.pop(key)
 
         self.variables_with_nans = variables_with_nans
-        self.transformed_dims = transformed_dims
+        self.transformed_dims = transformed_dims if transformed_dims else {}
 
 
     def apply_transforms_to_sample(
