@@ -144,7 +144,7 @@ class DataMover():
                     xds = dlist[0]
                 else:
                     # if len(dlist) == 0, this returns an empty dataset
-                    xds = xr.merge(dlist, join="outer")
+                    xds = xr.merge(dlist, join="outer", compat="no_conflicts")
                 return xds
 
             else:
