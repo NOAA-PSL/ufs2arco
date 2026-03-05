@@ -177,7 +177,7 @@ class NOAAGribForecastData:
                 if len(dslist) == 1:
                     dsdict[varname] = dslist[0]
                 elif len(dslist) > 1:
-                    dsdict[varname] = xr.merge(dslist)
+                    dsdict[varname] = xr.merge(dslist, join="outer")
                 else:
                     logger.warning(
                         f"{self.name}: Could not find {varname}, will stop reading variables for this sample\n\t" +
