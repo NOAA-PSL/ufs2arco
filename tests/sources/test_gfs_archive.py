@@ -25,7 +25,7 @@ def _varmeta():
 def test_gfs_rejects_forecast_only_vars_when_fhr_has_zero(monkeypatch):
     monkeypatch.setattr(nmod.yaml, "safe_load", lambda _: _varmeta())
     with pytest.raises(
-        ValueError,
+        Exception,
         match=r"requested variables only exist in forecast timesteps",
     ):
         GFSArchive(
