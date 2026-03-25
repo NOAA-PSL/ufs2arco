@@ -98,7 +98,7 @@ class GFSArchive(NOAAGribForecastData, Source):
                 msg = f"{self.name}.__init__: the following requested variables only exist in forecast timesteps"
                 msg += f"\n\n{requested_vars_not_in_analysis}\n\n"
                 msg += "these should be requested separately with only fhr > 0 (i.e., fhr start >0 in your yaml)"
-                raise Exception(msg)
+                raise ValueError(msg)
 
     def _build_path(
         self,
