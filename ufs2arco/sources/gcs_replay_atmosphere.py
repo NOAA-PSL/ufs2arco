@@ -35,6 +35,7 @@ class GCSReplayAtmosphere(CloudZarrData, Source):
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
+        local: Optional[bool] = False,
     ) -> None:
 
         self.time = pd.date_range(**time)
@@ -45,6 +46,7 @@ class GCSReplayAtmosphere(CloudZarrData, Source):
             levels=levels,
             use_nearest_levels=use_nearest_levels,
             slices=slices,
+            local=local,
         )
         # drop these because cftime gives trouble no matter what
         self._xds = self._xds.drop_vars(["cftime", "ftime"])
