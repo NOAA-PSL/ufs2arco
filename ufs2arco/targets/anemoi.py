@@ -144,8 +144,10 @@ class Anemoi(Target):
         statistics_period: Optional[dict] = None,
         compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
+        use_level_index: Optional[bool] = False,
         variables_with_nans: Optional[list] = None,
         transformed_dims: Optional[dict] = None,
+        multisource_masks: Optional[list | dict] = None,
     ) -> None:
         """
 
@@ -165,6 +167,7 @@ class Anemoi(Target):
         )
 
         self.sort_channels_by_levels = sort_channels_by_levels
+        self.use_level_index = use_level_index
         # additional checks
         if self._has_fhr:
             assert len(self.source.fhr) == 1, \
@@ -179,6 +182,12 @@ class Anemoi(Target):
 
         self.variables_with_nans = variables_with_nans
         self.transformed_dims = transformed_dims if transformed_dims else {}
+        if multisource_masks is None:
+            self.multisource_masks = list()
+        elif isinstance(multisource_masks, dict):
+            self.multisource_masks = [multisource_masks]
+        else:
+            self.multisource_masks = multisource_masks
 
 
     def apply_transforms_to_sample(
@@ -603,12 +612,20 @@ class Anemoi(Target):
         if self.variables_with_nans is not None:
 
             ignoreme = list()
+            variable_names = list(xds.attrs["variables"])
             for ignore_this in self.variables_with_nans:
-                if ignore_this in xds.attrs["variables"]:
-                    ignoreme.append(ignore_this)
+                if ignore_this in variable_names:
+                    all_instances = [ignore_this]
                 else:
-                    all_instances = [entry for entry in xds.attrs["variables"] if ignore_this in entry]
-                    for entry in all_instances:
+                    ignore_this_lower = ignore_this.lower()
+                    all_instances = [
+                        entry
+                        for entry in variable_names
+                        if ignore_this_lower in entry.lower()
+                    ]
+
+                for entry in all_instances:
+                    if entry not in ignoreme:
                         ignoreme.append(entry)
 
             logger.info(f"Will ignore the following fields if they have NaNs\n{ignoreme}")
@@ -616,14 +633,21 @@ class Anemoi(Target):
 
         keep_idx = [idx for idx in xds["variable"].values if idx not in ignore_idx]
 
-        nanidx = xds["has_nans_array"].sel(variable=keep_idx).any(["variable", "ensemble"]).values
+        unexpected_nans = xds["has_nans_array"].sel(variable=keep_idx).any("ensemble")
+        nanidx = unexpected_nans.any("variable").values
         nandates = [str(pd.Timestamp(ndate)) for ndate in xds["dates"][nanidx].values]
         new_missing_dates = list()
         for ndate in nandates:
             is_missing = ndate in missing_dates
             if not is_missing:
                 something_happened = True
-                logger.info(f" ... adding date where has_nans_array = True to missing_dates: {ndate}")
+                these_nan_vars = unexpected_nans.sel(dates=ndate)
+                these_nan_vars = these_nan_vars["variable"].where(these_nan_vars, drop=True).values
+                these_nan_vars = [xds.attrs["variables"][int(idx)] for idx in these_nan_vars]
+                logger.info(
+                    " ... adding date where has_nans_array = True to missing_dates: "
+                    f"{ndate}; offending variables: {these_nan_vars}"
+                )
                 new_missing_dates.append(ndate)
 
         if len(new_missing_dates) > 0:
@@ -843,6 +867,8 @@ class Anemoi(Target):
 
         result.attrs = _merge_attrs(attrs_list)
 
+        result = self._apply_multisource_masks(result)
+
         # Rechunk along variable, otherwise this is not worth it!
         result = result.chunk({"variable": self.chunks["variable"]})
 
@@ -850,6 +876,92 @@ class Anemoi(Target):
         # TODO: resort variable?
         # Or maybe it's more straightforward to leave the order as is, same as concatenating multiple datasets
         return result
+
+
+    def _apply_multisource_masks(self, xds: xr.Dataset) -> xr.Dataset:
+        """Apply post-merge masks that need variables from multiple sources."""
+
+        for config in self.multisource_masks:
+            mask_from = config["mask_from"]
+            mask_idx = _find_variable_index(xds, mask_from)
+            mask = xds["data"].isel(variable=mask_idx).isnull()
+
+            for variable in config.get("mask_variables", []):
+                variable_idx = _find_variable_index(xds, variable)
+                logger.info(
+                    f"{self.name}._apply_multisource_masks: masking {variable} "
+                    f"where {mask_from} is NaN"
+                )
+                xds["data"].loc[{"variable": variable_idx}] = (
+                    xds["data"].isel(variable=variable_idx).where(~mask)
+                )
+                xds = self._refresh_packed_stats(xds, variable_idx)
+
+            output = config.get("output", None)
+            if output is not None:
+                logger.info(
+                    f"{self.name}._apply_multisource_masks: creating {output} "
+                    f"from NaN mask of {mask_from}"
+                )
+                land_value = config.get("land_value", 1)
+                ocean_value = config.get("ocean_value", 0)
+                mask_data = xr.where(mask, land_value, ocean_value).astype(self.data_dtype)
+                mask_data.attrs.update(
+                    {
+                        "computed_forcing": True,
+                        "constant_in_time": False,
+                    }
+                )
+                xds = self._append_packed_variable(xds, output, mask_data)
+
+        return xds
+
+
+    def _refresh_packed_stats(self, xds: xr.Dataset, variable_idx: int) -> xr.Dataset:
+        stats = self._packed_stats(xds["data"].isel(variable=variable_idx))
+        for name, xda in stats.items():
+            xds[name].loc[{"variable": variable_idx}] = xda
+        return xds
+
+
+    def _append_packed_variable(
+        self,
+        xds: xr.Dataset,
+        variable_name: str,
+        xda: xr.DataArray,
+    ) -> xr.Dataset:
+        variables = list(xds.attrs["variables"])
+        if variable_name in variables:
+            raise ValueError(f"{self.name}._append_packed_variable: {variable_name} already exists")
+
+        variable_idx = len(variables)
+        data = xda.expand_dims({"variable": [variable_idx]}).transpose(*xds["data"].dims)
+        xds["data"] = xr.concat([xds["data"], data], dim="variable")
+
+        stats = self._packed_stats(xda)
+        for name, stat in stats.items():
+            stat = stat.expand_dims({"variable": [variable_idx]}).transpose(*xds[name].dims)
+            xds[name] = xr.concat([xds[name], stat], dim="variable")
+
+        variables.append(variable_name)
+        xds.attrs["variables"] = variables
+        xds.attrs["variables_metadata"][variable_name] = {
+            "computed_forcing": True,
+            "constant_in_time": xda.attrs.get("constant_in_time", False),
+        }
+        return xds
+
+
+    def _packed_stats(self, xda: xr.DataArray) -> dict[str, xr.DataArray]:
+        dims = [dim for dim in xda.dims if dim not in ("time", "variable", "ensemble")]
+        return {
+            "count_array": (~np.isnan(xda)).sum(dims, skipna=self.allow_nans).astype(np.float64),
+            "has_nans_array": np.isnan(xda).any(dims),
+            "maximum_array": xda.max(dims, skipna=self.allow_nans).astype(np.float64),
+            "minimum_array": xda.min(dims, skipna=self.allow_nans).astype(np.float64),
+            "squares_array": (xda**2).sum(dims, skipna=self.allow_nans).astype(np.float64),
+            "sums_array": xda.sum(dims, skipna=self.allow_nans).astype(np.float64),
+        }
 
 
 def _merge_attrs(list_of_dicts):
@@ -877,6 +989,21 @@ def _merge_attrs(list_of_dicts):
     return merged_dict
 
 
+def _find_variable_index(xds: xr.Dataset, variable_name: str) -> int:
+    variables = list(xds.attrs["variables"])
+    if variable_name in variables:
+        return variables.index(variable_name)
+
+    variable_name_lower = variable_name.lower()
+    matches = [idx for idx, name in enumerate(variables) if name.lower() == variable_name_lower]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(f"Found multiple variables matching {variable_name}: {[variables[idx] for idx in matches]}")
+
+    raise KeyError(f"Could not find variable {variable_name}. Available variables are {variables}")
+
+
 class AnemoiInferenceWithForcings(Anemoi):
     """
     Augmented "anemoi" target to be used for creating datasets for inference.
@@ -894,7 +1021,9 @@ class AnemoiInferenceWithForcings(Anemoi):
         statistics_period: Optional[dict] = None,
         compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
+        use_level_index: Optional[bool] = False,
         variables_with_nans: Optional[list] = None,
+        multisource_masks: Optional[list | dict] = None,
         multistep_input: Optional[int] = 1,
     ) -> None:
 
@@ -907,7 +1036,9 @@ class AnemoiInferenceWithForcings(Anemoi):
             statistics_period=statistics_period,
             compute_temporal_residual_statistics=compute_temporal_residual_statistics,
             sort_channels_by_levels=sort_channels_by_levels,
+            use_level_index=use_level_index,
             variables_with_nans=variables_with_nans,
+            multisource_masks=multisource_masks,
         )
 
         self.multistep_input = multistep_input
