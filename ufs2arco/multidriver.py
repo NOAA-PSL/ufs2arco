@@ -224,7 +224,7 @@ class MultiDriver(Driver):
 
         if self.topo.is_root:
             dslist = [mover.create_container() for mover in self.movers]
-            cds = self.target.merge_multisource(dslist)
+            cds = self.target.merge_multisource(dslist, apply_masks=False)
 
             kwargs = {"mode": "w"} if overwrite else {}
             logger.info(f"Driver.write_container: storing container at {self.store_path}\n{cds}\n")
