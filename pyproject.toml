@@ -54,6 +54,3 @@ build-backend = "setuptools.build_meta"
 packages = ["ufs2arco"]
 
 [tool.setuptools_scm]
-
-[tool.coverage.run]
-source = ["ufs2arco"]
