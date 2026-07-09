@@ -3,6 +3,7 @@ from typing import Optional
 
 import xarray as xr
 import zarr
+import dask.array
 
 from ufs2arco.sources import Source
 from ufs2arco.targets import forcings as fmod # funky name because 'forcings' seems like the more natural user specified option
@@ -268,3 +269,48 @@ class Target:
         zds = zarr.open(self.store_path, mode="a")
         zds.attrs["missing_data"] = missing_data
         zarr.consolidate_metadata(self.store_path)
+
+    def container_maker(self, xds: xr.Dataset) -> xr.Dataset:
+        """Given a dataset, use target specs to turn it into a container"""
+
+        # apply any target specific transforms to change the layout etc
+        xds = self.apply_transforms_to_sample(xds)
+
+        nds = xr.Dataset(attrs=xds.attrs.copy())
+        for key in self.renamed_sample_dims:
+            array = getattr(self, key)
+            nds[key] = xr.DataArray(
+                array,
+                coords={key: array},
+                dims=key,
+                attrs=xds[key].attrs.copy(),
+            )
+
+        # these will be the the verical dim + horizontal_dims, we read these in each sample
+        for key in xds.dims:
+            if key not in self.renamed_sample_dims:
+                nds[key] = xds[key].copy()
+
+        # manage coordinates
+        # first we have to pass all existing coordinates,
+        # then manage them
+        for key in xds.coords:
+            if key not in nds:
+                nds = nds.assign_coords({key: xds[key].copy()})
+        nds = self.manage_coords(nds)
+
+        # create empty data arrays
+        for varname in xds.data_vars:
+            dims = xds[varname].dims
+            shape = tuple(len(nds[key]) for key in dims)
+            chunks = {list(dims).index(key): self.chunks[key] for key in dims}
+            nds[varname] = xr.DataArray(
+                data=dask.array.zeros(
+                    shape=shape,
+                    chunks=chunks,
+                    dtype=xds[varname].dtype,
+                ),
+                dims=dims,
+                attrs=xds[varname].attrs.copy(),
+            )
+        return nds

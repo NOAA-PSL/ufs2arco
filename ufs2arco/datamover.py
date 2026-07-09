@@ -200,49 +200,8 @@ class DataMover():
         # perform any transformations like regridding
         xds = self.transformer(xds)
 
-        # transform it to target space
-        xds = self.target.apply_transforms_to_sample(xds)
-
-        # create container
-        # start with the dimensions we haven't read yet (sample_dims)
-        nds = xr.Dataset(attrs=xds.attrs.copy())
-        for key in self.target.renamed_sample_dims:
-            array = getattr(self.target, key)
-            nds[key] = xr.DataArray(
-                array,
-                coords={key: array},
-                dims=key,
-                attrs=xds[key].attrs.copy(),
-            )
-
-        # these will be the the verical dim + horizontal_dims, we read these in each sample
-        for key in xds.dims:
-            if key not in self.target.renamed_sample_dims:
-                nds[key] = xds[key].copy()
-
-        # manage coordinates
-        # first we have to pass all existing coordinates,
-        # then let target manage them
-        for key in xds.coords:
-            if key not in nds:
-                nds = nds.assign_coords({key: xds[key].copy()})
-        nds = self.target.manage_coords(nds)
-
-        # create empty data arrays
-        for varname in xds.data_vars:
-            dims = xds[varname].dims
-            shape = tuple(len(nds[key]) for key in dims)
-            chunks = {list(dims).index(key): self.target.chunks[key] for key in dims}
-            nds[varname] = xr.DataArray(
-                data=dask.array.zeros(
-                    shape=shape,
-                    chunks=chunks,
-                    dtype=xds[varname].dtype,
-                ),
-                dims=dims,
-                attrs=xds[varname].attrs.copy(),
-            )
-
+        # Change layout, and make the full container
+        nds = self.target.container_maker(xds)
         return nds
 
 

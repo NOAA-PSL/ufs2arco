@@ -146,6 +146,7 @@ class Anemoi(Target):
         sort_channels_by_levels: Optional[bool] = False,
         variables_with_nans: Optional[list] = None,
         transformed_dims: Optional[dict] = None,
+        variable_order: Optional[list] = None,
     ) -> None:
         """
 
@@ -165,6 +166,9 @@ class Anemoi(Target):
         )
 
         self.sort_channels_by_levels = sort_channels_by_levels
+        if isinstance(variable_order, (np.ndarray, tuple)):
+            variable_order = list(variable_order)
+        self.variable_order = variable_order
         # additional checks
         if self._has_fhr:
             assert len(self.source.fhr) == 1, \
@@ -423,10 +427,15 @@ class Anemoi(Target):
         Returns:
             xds (xr.Dataset): with "data" DataArray, which has all variables/levels stacked together
         """
-        varlist = sorted(
-            list(xds.data_vars),
-            key=self._sort_channels_by_levels if self.sort_channels_by_levels else None,
-        )
+        varlist = list(xds.data_vars)
+        if self.variable_order is not None:
+            varlist = self.variable_order
+        elif self.sort_channels_by_levels:
+            varlist = sorted(
+                list(xds.data_vars),
+                key=self._sort_channels_by_levels,
+            )
+
         channel = [i for i, _ in enumerate(varlist)]
         channel = xr.DataArray(
             channel,
