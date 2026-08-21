@@ -134,12 +134,13 @@ def fv_vertical_regrid_ocean(
     variables below the last valid source layer in each horizontal column.
     """
 
+    # Resolve relative to the package, not the repo root, so this works from an
+    # installed copy. The file lives next to replay_vertical_levels.yaml, its
+    # atmospheric counterpart.
     cfg_path = os.path.abspath(
         os.path.join(
             os.path.dirname(__file__),
             "..",
-            "..",
-            "config",
             "replay_ocean_vertical_levels.yaml",
         )
     )
