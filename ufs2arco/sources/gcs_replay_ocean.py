@@ -15,7 +15,10 @@ class GCSReplayOcean(CloudZarrData, Source):
 
     sample_dims = ("time",)
     horizontal_dims = ("latitude", "longitude")
-    static_vars = ("land_static", "hgtsfc_static")
+    # The MOM6 store has no land_static / hgtsfc_static; those names were copied
+    # from the atmosphere source. The ocean equivalent would be "landsea_mask",
+    # but it is left as an ordinary variable so that a recipe has to ask for it.
+    static_vars = tuple()
 
     @property
     def rename(self) -> dict:
