@@ -4,6 +4,7 @@ import xarray as xr
 
 from ufs2arco.transforms.horizontal_regrid import horizontal_regrid
 from ufs2arco.transforms.mappings import get_available_mappings, apply_mappings
+from ufs2arco.transforms.ocean import mixed_layer_depth, ocean_density, ocean_heat_content
 from ufs2arco.transforms.rotate_vectors import rotate_vectors
 from ufs2arco.transforms.vertical_regrid import fv_vertical_regrid
 from ufs2arco.transforms.vertical_regrid import fv_vertical_regrid_ocn
@@ -19,6 +20,9 @@ class Transformer:
             "multiply",
             "divide",
             "rename",
+            "ocean_density",
+            "mixed_layer_depth",
+            "ocean_heat_content",
             "fv_vertical_regrid",
             "fv_vertical_regrid_ocn",
             "fv_vertical_regrid_ocean",
@@ -86,6 +90,18 @@ class Transformer:
 
         if "divide" in self.names:
             xds = divide(xds, self.options["divide"])
+
+        # Ocean diagnostics run here, before any vertical regridding, so they see
+        # the native water column. The mixed layer lives in the top tens of
+        # meters, so computing it on coarsened layers would flatten the field.
+        if "ocean_density" in self.names:
+            xds = ocean_density(xds, **self.options["ocean_density"])
+
+        if "mixed_layer_depth" in self.names:
+            xds = mixed_layer_depth(xds, **self.options["mixed_layer_depth"])
+
+        if "ocean_heat_content" in self.names:
+            xds = ocean_heat_content(xds, **self.options["ocean_heat_content"])
 
         if "rotate_vectors" in self.names:
             xds = rotate_vectors(xds, **self.options["rotate_vectors"])
