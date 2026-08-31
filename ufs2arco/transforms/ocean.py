@@ -35,6 +35,12 @@ from ufs2arco.ocean_diagnostics import (
 
 logger = logging.getLogger("ufs2arco")
 
+#: Ocean heat content in J m-2 is O(1e10)-O(1e11), which overflows fp16's
+#: ~65504 max finite value to inf. Storing in GJ m-2 instead keeps values in
+#: the tens-to-hundreds range, so a recipe can train an anemoi model in fp16
+#: without this channel blowing up.
+_JOULES_PER_GIGAJOULE = 1.0e9
+
 
 def _resolve_eos(eos: str) -> str:
     """Map a user facing equation of state name onto an implemented one.
@@ -380,6 +386,12 @@ def ocean_heat_content(
     As with mixed layer depth these avoid a trailing ``_<digits>``, which the
     anemoi target would read as a vertical level.
 
+    The result is stored in GJ m-2, not the J m-2 that
+    :func:`ufs2arco.ocean_diagnostics.ocean_heat_content` and MOM6 itself use.
+    Heat content in J m-2 is O(1e10)-O(1e11), which overflows fp16 to inf;
+    GJ m-2 keeps it in the tens-to-hundreds range, so it survives fp16
+    training like every other channel.
+
     Args:
         xds (xr.Dataset): with ``temperature`` on a ``level`` dim
         temperature (str, optional): potential temperature variable [degC]
@@ -440,13 +452,18 @@ def ocean_heat_content(
             dask="parallelized",
             output_dtypes=[float],
         )
+        # The kernel returns J m-2, matching MOM6. Store GJ m-2 instead: J m-2 is
+        # O(1e10)-O(1e11), which overflows fp16 (max ~65504) to inf, and GJ m-2
+        # keeps values in the tens-to-hundreds range.
+        result = result / _JOULES_PER_GIGAJOULE
         span = "the full water column" if max_depth is None else f"0 - {float(max_depth):g} m"
         result.attrs = {
             "long_name": "ocean heat content",
-            "units": "J m-2",
+            "units": "GJ m-2",
             "description": (
                 f"heat content integrated over {span} as rho0*Cp*integral(theta dz), "
-                f"with rho0={rho0:g} kg m-3 and Cp={heat_capacity:g} J kg-1 K-1"
+                f"with rho0={rho0:g} kg m-3 and Cp={heat_capacity:g} J kg-1 K-1, "
+                "stored in GJ m-2 (divided by 1e9) so it stays finite in fp16"
             ),
             "rho0": float(rho0),
             "heat_capacity": float(heat_capacity),

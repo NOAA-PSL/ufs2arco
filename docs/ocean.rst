@@ -297,10 +297,15 @@ Two deliberate departures from MOM6, both for the benefit of a training dataset:
 Ocean Heat Content
 ------------------
 
-``rho0 * Cp * integral(theta dz)`` in J m-2, evaluated as a finite volume sum
-with partial cell weighting on the layer straddling the requested depth. Layer
-interfaces are reconstructed from the ``level`` coordinate, so this works for any
-z-coordinate ocean source without a hard coded depth table.
+``rho0 * Cp * integral(theta dz)``, evaluated as a finite volume sum with partial
+cell weighting on the layer straddling the requested depth. Layer interfaces are
+reconstructed from the ``level`` coordinate, so this works for any z-coordinate
+ocean source without a hard coded depth table.
+
+Stored in **GJ m-2**, not the J m-2 that MOM6 itself uses. Heat content in
+J m-2 is O(1e10)-O(1e11), which overflows fp16 (max finite value about 65504)
+to ``inf``; GJ m-2 keeps values in the tens to hundreds, which trains fine in
+fp16 alongside every other channel.
 
 ``require_full_depth: true`` returns NaN where the water column does not reach
 the requested depth, since a shelf column is not a 0 to 700 m heat content and

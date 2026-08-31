@@ -15,7 +15,9 @@ import yaml
 from ufs2arco.ocean_diagnostics import (
     HEAT_CAPACITY,
     RHO_0,
+    interfaces_from_centers,
     mixed_layer_depth_by_density_difference,
+    ocean_heat_content as ocean_heat_content_kernel,
     wright_density,
 )
 from ufs2arco.transforms import Transformer
@@ -258,7 +260,7 @@ class TestOceanHeatContentTransform:
         for name in ("ohc700", "ohc2000", "ohc"):
             assert name in xds
             assert "level" not in xds[name].dims
-            assert xds[name].attrs["units"] == "J m-2"
+            assert xds[name].attrs["units"] == "GJ m-2"
 
     def test_deeper_integration_is_larger(self):
         xds = ocean_heat_content(make_dataset())
@@ -266,9 +268,40 @@ class TestOceanHeatContentTransform:
         assert float(xds["ohc2000"].isel(**point)) > float(xds["ohc700"].isel(**point))
 
     def test_magnitude_is_plausible(self):
+        """In GJ m-2, not the J m-2 the raw kernel returns."""
         xds = ocean_heat_content(make_dataset())
         value = float(xds["ohc700"].isel(time=0, latitude=2, longitude=2))
-        assert 1.0e10 < value < 1.0e11
+        assert 10.0 < value < 100.0
+
+    def test_matches_kernel_scaled_to_gigajoules(self):
+        """The transform is the kernel's J m-2 divided by 1e9, nothing more."""
+        ds = make_dataset()
+        point = {"time": 0, "latitude": 2, "longitude": 2}
+        transformed = ocean_heat_content(ds.copy(deep=True), depths=[700])["ohc700"]
+
+        z_i = interfaces_from_centers(ds["level"].values)
+        theta = ds["temp"].isel(**point).values
+        expected_joules = ocean_heat_content_kernel(theta, z_i, max_depth=700.0)
+
+        assert np.isclose(float(transformed.isel(**point)), expected_joules / 1.0e9)
+
+    def test_fits_in_fp16(self):
+        """The whole point of storing GJ m-2: it must not overflow fp16 to inf."""
+        xds = ocean_heat_content(make_dataset())
+        for name in ("ohc700", "ohc2000", "ohc"):
+            finite = np.isfinite(xds[name].values)
+            as_fp16 = xds[name].values.astype(np.float16)
+            assert not np.isinf(as_fp16[finite]).any()
+
+    def test_raw_joules_would_have_overflowed_fp16(self):
+        """Confirms the test above is actually exercising the fix, not a no-op."""
+        ds = make_dataset()
+        point = {"time": 0, "latitude": 2, "longitude": 2}
+        z_i = interfaces_from_centers(ds["level"].values)
+        theta = ds["temp"].isel(**point).values
+        joules = ocean_heat_content_kernel(theta, z_i, max_depth=700.0)
+        with np.errstate(over="ignore"):
+            assert np.isinf(np.float16(joules))
 
     def test_shelf_column_is_nan_for_deep_integrals(self):
         """The shelf bottoms out near 150 m, so a 0-700 m integral is undefined."""
