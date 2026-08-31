@@ -1029,8 +1029,12 @@ class Anemoi(Target):
                 mask_data = xr.where(mask, land_value, ocean_value).astype(self.data_dtype)
                 mask_data.attrs.update(
                     {
-                        "computed_forcing": True,
-                        "constant_in_time": False,
+                        # This mask is derived once from mask_from's NaN pattern and
+                        # stored as real data, like any other retrieved variable -- it
+                        # is not something anemoi-inference can compute analytically
+                        # (unlike e.g. cos_julian_day), and it does not vary in time.
+                        "computed_forcing": False,
+                        "constant_in_time": True,
                     }
                 )
                 xds = self._append_packed_variable(xds, output, mask_data)
@@ -1066,8 +1070,13 @@ class Anemoi(Target):
         variables.append(variable_name)
         xds.attrs["variables"] = variables
         xds.attrs["variables_metadata"][variable_name] = {
-            "computed_forcing": True,
-            "constant_in_time": False,
+            # Every multisource_masks output is built the same way in
+            # _apply_multisource_masks: a static 0/1 pattern from a source
+            # variable's NaN mask. It is never something anemoi-inference can
+            # compute analytically, and it never varies in time, so this
+            # placeholder should carry the same flags the real value gets.
+            "computed_forcing": False,
+            "constant_in_time": True,
         }
         xds = self._replace_packed_arrays(xds, updates)
         xds = self._reset_packed_variable_coord(xds)
@@ -1103,7 +1112,7 @@ class Anemoi(Target):
         variables.append(variable_name)
         xds.attrs["variables"] = variables
         xds.attrs["variables_metadata"][variable_name] = {
-            "computed_forcing": True,
+            "computed_forcing": xda.attrs.get("computed_forcing", True),
             "constant_in_time": xda.attrs.get("constant_in_time", False),
         }
         xds = self._replace_packed_arrays(xds, updates)
