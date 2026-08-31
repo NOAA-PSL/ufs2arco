@@ -10,6 +10,26 @@ Regridding
    ufs2arco.Layers2Pressure
 
 
+Ocean Diagnostics
+-----------------
+
+Algorithms ported from `GFDL MOM6 <https://github.com/NOAA-GFDL/MOM6>`_. The
+``transforms`` entries are what a yaml recipe reaches; the
+``ocean_diagnostics`` functions are the underlying numpy kernels.
+
+.. autosummary::
+   :toctree: generated/
+
+   ufs2arco.transforms.ocean_density
+   ufs2arco.transforms.mixed_layer_depth
+   ufs2arco.transforms.ocean_heat_content
+   ufs2arco.ocean_diagnostics.wright_density
+   ufs2arco.ocean_diagnostics.mixed_layer_depth_by_density_difference
+   ufs2arco.ocean_diagnostics.ocean_heat_content
+   ufs2arco.ocean_diagnostics.interfaces_from_centers
+   ufs2arco.ocean_diagnostics.hydrostatic_pressure
+
+
 Data Sources
 ------------
 
