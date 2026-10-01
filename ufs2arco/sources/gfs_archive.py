@@ -13,8 +13,8 @@ class GFSArchive(NOAAGribForecastData, Source):
     """
     Access 1/4 degree archives of NOAA's Global Forecast System (GFS) via:
         * if before 2021: UCAR Research Data Archive (RDA)
-            * https://rda.ucar.edu/datasets/d084001
-            * https://rda.ucar.edu/datasets/d084003
+            * https://gdex.ucar.edu/datasets/d084001/
+            * https://gdex.ucar.edu/datasets/d084003/
         * after 2021: AWS at https://registry.opendata.aws/noaa-gfs-bdp-pds/
     """
 
@@ -118,9 +118,8 @@ class GFSArchive(NOAAGribForecastData, Source):
             str: The constructed file path.
         """
         if t0 < pd.Timestamp("2021-01-01T00"):
-
-            bucket = f"https://data.rda.ucar.edu/d084001" if file_suffix == "" else \
-                    f"https://data.rda.ucar.edu/d084003"
+            dataset = "d084001" if file_suffix == "" else "d084003"
+            bucket = f"https://osdf-director.osg-htc.org/ncar/gdex/{dataset}"
             outer = f"{t0.year:04d}/{t0.year:04d}{t0.month:02d}{t0.day:02d}"
             fname = f"gfs.0p25{file_suffix}.{t0.year:04d}{t0.month:02d}{t0.day:02d}{t0.hour:02d}.f{fhr:03d}.grib2"
 

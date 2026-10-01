@@ -8,8 +8,10 @@ Archived forecasts from NOAA's
 <https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast>`_
 are available
 via NCAR's Research Data Archive (specifically from
-`the primary variable set <https://rda.ucar.edu/datasets/d084001>`_ and
-`the secondary variable set <https://rda.ucar.edu/datasets/d084003>`_.
+`the primary variable set <https://gdex.ucar.edu/datasets/d084001/>`_ and
+`the secondary variable set <https://gdex.ucar.edu/datasets/d084003/>`_).
+Pre-2021 files are downloaded from GDEX's public OSDF endpoint; newer files
+are downloaded from NOAA's public AWS archive.
 
 Currently, data from the following grib ``typeOfLevel`` filters are available:
 
