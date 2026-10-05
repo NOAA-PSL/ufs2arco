@@ -1,6 +1,7 @@
 [tool.coverage.run]
-source = ["ufs2arco"]
 omit = [
     "tests/*.py",
     "**/__init__.py",
+    "*/netCDF4/*",
+    "*.pyx",
 ]
