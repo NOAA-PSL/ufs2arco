@@ -52,3 +52,36 @@ Available Variables
 .. include:: variables.gfs.rst
 
 .. include:: variable_notes.rst
+
+
+Hourly Anemoi-Ready Data
+------------------------
+
+GFS is initialized every 6 hours, while forecast output is available hourly.
+Users may create 6-hourly datasets with initial conditions or continuous hourly
+datasets using forecast data. To create hourly data, request forecast hours 0
+through 5 from each 6-hourly initialization:
+
+.. warning::
+
+   Hourly 0.25-degree forecast files are available through the archives used
+   by ``GFSArchive`` beginning at **2021-02-26 00Z**. Earlier dates support
+   3-hourly forecast hours only (0, 3, 6, ...).
+
+.. code-block:: yaml
+
+  source:
+    name: gfs_archive
+    t0:
+      start: 2024-01-01T00
+      end: 2024-01-02T18
+      freq: 6h
+    fhr:
+      start: 0
+      end: 5
+      step: 1
+
+This selects the analysis at 00Z, forecast hours 1 through 5, the next
+analysis at 06Z, and then forecast hours 1 through 5 from that cycle.
+Forecast hour 6 must not be included because it has the same valid time as the
+next cycle's analysis. The Anemoi target rejects such duplicate valid times.

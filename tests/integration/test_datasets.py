@@ -4,6 +4,7 @@ import logging
 import yaml
 
 import numpy as np
+import pandas as pd
 import xarray as xr
 import pytest
 
@@ -129,7 +130,8 @@ def _test_static_vars(source, target, store):
 
     # test land sea mask
     for varname in [lsm, orog]:
-        if target in ("anemoi", "anemoi_inference_with_forcings"):
+        # include all anemoi targets
+        if target.startswith("anemoi"):
             idx = ds.attrs["variables"].index(varname)
             xda = ds["data"].sel(variable=idx)
         else:
@@ -210,7 +212,27 @@ def test_flattened_base_equals_anemoi(source):
                         xda.squeeze().values.flatten(),
                         ads["data"].sel(variable=idx, time=itime, ensemble=imember).squeeze().values.flatten(),
                     )
-                    
+
+
+@pytest.mark.dependency()
+def test_gfs_hourly():
+    run_test("gfs", "anemoi.hourly")
+
+
+@pytest.mark.dependency(depends=["test_gfs_hourly"])
+def test_gfs_hourly_dates():
+    ds = xr.open_zarr(
+        os.path.join(_local_path, "gfs", "anemoi.hourly", "dataset.zarr"),
+        decode_timedelta=True,
+    )
+
+    dates = pd.DatetimeIndex(ds.dates.values)
+    expected = pd.date_range("2023-08-02T00", periods=12, freq="h")
+
+    assert dates.equals(expected)
+    assert dates.is_unique
+
+
 @pytest.mark.dependency()
 @pytest.mark.parametrize("target", _nrt_targets)
 @pytest.mark.parametrize("source", _nrt_sources)
