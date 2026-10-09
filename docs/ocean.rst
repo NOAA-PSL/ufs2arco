@@ -16,6 +16,9 @@ strictly increasing, nonnegative layer-center depths in metres, positive down.
 Depth units may be omitted for Replay; when present, they must describe metres.
 Temperature and salinity must have matching dimensions and sizes.
 
+Density and OHC also support complete single-layer grids. MLD requires at least
+two levels and still applies the native-grid checks described below.
+
 Use the complete native ocean column. For Replay, do not select a subset with
 ``source.levels`` or ``source.slices.sel.level`` before these transforms.
 Diagnostics run before ``fv_vertical_regrid_ocean`` and horizontal regridding,
@@ -76,6 +79,11 @@ for ``wright_full``; ``wright_red`` selects the reduced form. Output units are
 
 Density uses each level's temperature and salinity. Averaging this diagnosed
 field generally differs from diagnosing density from averaged inputs.
+
+For direct Python calls, pass ``check_range=True`` to
+``ufs2arco.ocean_diagnostics.wright_density`` to log warnings when inputs fall
+outside the selected equation-of-state fit range. This evaluates lazy inputs;
+range checking is disabled by default.
 
 Mixed-layer depth
 -----------------

@@ -115,6 +115,85 @@ def test_wright_full_reference_values(temperature, salinity, expected):
 
 
 @pytest.mark.parametrize(
+    "eos,temperature_bounds,salinity_bounds,maximum_pressure",
+    [
+        ("wright_full", [-2.0, 40.0], [0.0, 40.0], 1.0e8),
+        ("wright_red", [-2.0, 30.0], [28.0, 38.0], 5.0e7),
+    ],
+)
+def test_wright_range_check_uses_selected_eos_bounds(
+    eos,
+    temperature_bounds,
+    salinity_bounds,
+    maximum_pressure,
+    caplog,
+):
+    temperature = np.array(temperature_bounds)
+    salinity = np.array(salinity_bounds)
+    pressure = np.array([0.0, maximum_pressure])
+    wright_density(temperature, salinity, pressure, eos=eos, check_range=True)
+    assert not caplog.records
+
+    temperature += [-1.0, 1.0]
+    salinity += [-1.0, 1.0]
+    pressure += [-1.0, 1.0]
+    result = wright_density(
+        temperature,
+        salinity,
+        pressure,
+        eos=eos,
+        check_range=True,
+    )
+
+    np.testing.assert_array_equal(
+        result,
+        wright_density(temperature, salinity, pressure, eos=eos),
+    )
+    assert len(caplog.records) == 3
+    for record, name in zip(
+        caplog.records,
+        ("potential temperature", "salinity", "pressure"),
+    ):
+        assert f"wright_density: {name} range" in record.message
+        assert f"the {eos} fit range" in record.message
+        assert "densities there are extrapolated" in record.message
+
+
+def test_wright_range_check_accepts_fifth_positional_argument(caplog):
+    result = wright_density(45.0, 35.0, 0.0, "wright_full", True)
+
+    assert result == pytest.approx(1015.8680111248782)
+    assert "potential temperature range" in caplog.text
+
+
+@pytest.mark.parametrize("kwargs", [{}, {"check_range": False}])
+def test_wright_disabled_range_check_preserves_laziness_and_silence(kwargs, caplog):
+    da = pytest.importorskip("dask.array")
+    from dask import delayed
+
+    calls = []
+
+    @delayed
+    def read_temperature():
+        calls.append(True)
+        return np.array([45.0], dtype=np.float32)
+
+    temperature = da.from_delayed(
+        read_temperature(),
+        shape=(1,),
+        dtype=np.float32,
+    )
+    result = wright_density(temperature, 35.0, 0.0, **kwargs)
+
+    assert not calls
+    assert result.dtype == np.float64
+    assert result.chunks == temperature.chunks
+    np.testing.assert_allclose(result.compute(), [1015.8680111248782])
+    assert calls == [True]
+    assert not caplog.records
+
+
+@pytest.mark.parametrize(
     "threshold,expected",
     [
         (0.03, 15.137991924763236),

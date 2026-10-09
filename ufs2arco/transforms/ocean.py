@@ -156,7 +156,11 @@ def _validate_temperature(
     return temp
 
 
-def _validate_level(xds: xr.Dataset, caller: str) -> np.ndarray:
+def _validate_level(
+    xds: xr.Dataset,
+    caller: str,
+    minimum_levels: int = 1,
+) -> np.ndarray:
     """Return finite, positive-down layer-center depths in metres."""
     if "level" not in xds.dims or "level" not in xds.coords:
         raise KeyError(
@@ -176,9 +180,10 @@ def _validate_level(xds: xr.Dataset, caller: str) -> np.ndarray:
         raise ValueError(
             f"{caller}: expected a 1D 'level' coordinate, got {level.shape}"
         )
-    if level.size < 2:
+    if level.size < minimum_levels:
         raise ValueError(
-            f"{caller}: at least two vertical levels are required, got {level.size}"
+            f"{caller}: at least {minimum_levels} vertical level(s) are required, "
+            f"got {level.size}"
         )
     if not np.all(np.isfinite(level)):
         raise ValueError(f"{caller}: 'level' must contain only finite depths")
@@ -522,7 +527,7 @@ def mixed_layer_depth(
         salinity,
         "mixed_layer_depth",
     )
-    level = _validate_level(xds, "mixed_layer_depth")
+    level = _validate_level(xds, "mixed_layer_depth", minimum_levels=2)
     grid_description = check_vertical_resolution(
         level,
         mld_search_depth=mld_search_depth,

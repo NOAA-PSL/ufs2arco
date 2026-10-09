@@ -611,6 +611,22 @@ def test_mixed_layer_depth_retains_context_for_incomplete_column():
         mixed_layer_depth(_ocean_dataset().isel(level=slice(None, -1)))
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [{}, {"expected_level_count": None, "minimum_deepest_level": None}],
+)
+def test_mixed_layer_depth_still_requires_two_levels(kwargs):
+    with pytest.raises(ValueError, match="mixed_layer_depth: at least 2"):
+        mixed_layer_depth(_ocean_dataset().isel(level=slice(0, 1)), **kwargs)
+
+
+def test_mixed_layer_depth_still_rejects_shallow_full_size_grid():
+    source = _ocean_dataset().assign_coords(level=_REPLAY_LEVELS / 2.0)
+
+    with pytest.raises(ValueError, match="native Replay grid must extend"):
+        mixed_layer_depth(source)
+
+
 def test_wright_alias_and_reduced_eos_are_supported():
     aliased = mixed_layer_depth(_ocean_dataset(), eos="wright")["mld"]
     explicit = mixed_layer_depth(_ocean_dataset(), eos="wright_full")["mld"]
@@ -668,6 +684,50 @@ def test_ocean_density_appends_native_level_potential_density():
     assert result["rho"].attrs["reference_pressure_pa"] == 0.0
     expected = wright_density(source["temp"], source["so"], 0.0)
     np.testing.assert_allclose(result["rho"], expected, equal_nan=True)
+
+
+def test_ocean_density_accepts_one_native_level():
+    source = xr.Dataset(
+        {
+            "temp": ("level", [10.0], {"units": "degC"}),
+            "so": ("level", [35.0], {"units": "psu"}),
+        },
+        coords={"level": [5.0]},
+    )
+
+    result = ocean_density(source)["rho"]
+
+    assert result.dims == ("level",)
+    np.testing.assert_allclose(result, [1026.9374762527486])
+
+
+@pytest.mark.parametrize("interfaces", [None, [0.0, 10.0]])
+def test_ocean_heat_content_accepts_one_layer_and_preserves_depth_policies(
+    interfaces,
+):
+    source = xr.Dataset(
+        {"temp": ("level", [10.0], {"units": "degC"})},
+        coords={"level": [5.0]},
+    )
+
+    result = ocean_heat_content(
+        source,
+        depths=[5.0, 10.0, 15.0, None],
+        interfaces=interfaces,
+    )
+
+    assert result["ohc10"].item() == pytest.approx(0.41315833356188164)
+    assert result["ohc5"].item() == pytest.approx(0.20657916678094082)
+    assert result["ohc"].item() == result["ohc10"].item()
+    assert np.isnan(result["ohc15"].item())
+
+
+@pytest.mark.parametrize("transform", [ocean_density, ocean_heat_content])
+def test_density_and_heat_content_reject_empty_vertical_coordinate(transform):
+    source = _ocean_dataset().isel(level=slice(0, 0))
+
+    with pytest.raises(ValueError, match="at least 1 vertical level"):
+        transform(source)
 
 
 def test_ocean_density_supports_hydrostatic_in_situ_and_sigma():

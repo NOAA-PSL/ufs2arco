@@ -48,6 +48,12 @@ _WRIGHT_COEFFICIENTS = {
     ),
 }
 
+# MOM6 fit bounds: temperature (degC), salinity (psu), and pressure (Pa).
+_WRIGHT_VALID_RANGE = {
+    "wright_full": (-2.0, 40.0, 0.0, 40.0, 0.0, 1.0e8),
+    "wright_red": (-2.0, 30.0, 28.0, 38.0, 0.0, 5.0e7),
+}
+
 DEFAULT_EOS = "wright_full"
 
 # MOM6 Boussinesq defaults: kg m-3, J kg-1 K-1, and m s-2, respectively.
@@ -233,19 +239,48 @@ def _as_float64_operand(value: Any) -> Any:
     return np.asarray(value, dtype=np.float64)
 
 
+def _warn_outside_range(theta: Any, salt: Any, pressure: Any, eos: str) -> None:
+    """Warn when input ranges exceed the selected Wright fit's bounds."""
+    tmin, tmax, smin, smax, pmin, pmax = _WRIGHT_VALID_RANGE[eos]
+    for name, values, lower, upper in (
+        ("potential temperature", theta, tmin, tmax),
+        ("salinity", salt, smin, smax),
+        ("pressure", pressure, pmin, pmax),
+    ):
+        values = np.asarray(values, dtype=np.float64)
+        if values.size == 0 or not np.isfinite(values).any():
+            continue
+        low, high = np.nanmin(values), np.nanmax(values)
+        if low < lower or high > upper:
+            logger.warning(
+                "wright_density: %s range [%.4g, %.4g] falls outside "
+                "the %s fit range [%g, %g]; densities there are extrapolated",
+                name,
+                low,
+                high,
+                eos,
+                lower,
+                upper,
+            )
+
+
 def wright_density(
     theta: Any,
     salt: Any,
     pressure: Any,
     eos: str = DEFAULT_EOS,
+    check_range: bool = False,
 ) -> Any:
     """Calculate seawater density using the Wright (1997) MOM6 expression.
 
     Pressure is in Pa. Passing zero computes potential density referenced to
     the surface, which is the density used by the MOM6 mixed-layer-depth
-    diagnostic.
+    diagnostic. Setting ``check_range=True`` logs warnings for inputs outside
+    the selected fit's range and evaluates lazy inputs to inspect their bounds.
     """
     eos = _validate_eos(eos)
+    if check_range:
+        _warn_outside_range(theta, salt, pressure, eos)
     theta = _as_float64_operand(theta)
     salt = _as_float64_operand(salt)
     pressure = _as_float64_operand(pressure)
