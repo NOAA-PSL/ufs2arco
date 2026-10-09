@@ -56,6 +56,31 @@ dataset for reforecasting.
       cell: -1
 
 
+Diagnosed Pressure-Level Fields
+-------------------------------
+
+UFS-Replay hybrid-layer fields can be diagnosed at selected isobaric levels
+with the ``layers_to_pressure`` transform. Use it in a dedicated multisource
+branch containing the complete 127-level column and all pressure support
+fields. The transform returns a variable such as
+``ugrd_pl(level=[200, 250, 850])``; Anemoi then packs it as
+``ugrd_pl_200``, ``ugrd_pl_250``, and ``ugrd_pl_850``.
+
+Do not apply finite-volume vertical regridding to the pressure branch and do
+not select or slice its source ``level`` coordinate. Below-ground and otherwise
+unbracketed targets are stored as NaN, so list the packed pressure channels in
+``variables_with_nans``. See :doc:`replay_pressure_levels` for configuration,
+interpolation behavior, and scientific limitations.
+
+For a spatial mask that is fitted once across the training period and reused
+unchanged for validation and testing, see :doc:`static_masks`. This is distinct
+from the default ``multisource_masks`` behavior, which derives a mask
+independently for each sample.
+
+Cloud Zarr stores with exact timestamp gaps and non-standard CF calendars are
+covered in :ref:`cloud-zarr-time-handling`.
+
+
 Anemoi Inference With Forcings
 ------------------------------
 

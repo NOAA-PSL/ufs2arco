@@ -15,9 +15,7 @@ class GCSReplayOcean(CloudZarrData, Source):
 
     sample_dims = ("time",)
     horizontal_dims = ("latitude", "longitude")
-    # The MOM6 store has no land_static / hgtsfc_static; those names were copied
-    # from the atmosphere source. The ocean equivalent would be "landsea_mask",
-    # but it is left as an ordinary variable so that a recipe has to ask for it.
+    # MOM6 has no atmospheric land_static or hgtsfc_static variables.
     static_vars = tuple()
 
     @property
@@ -37,6 +35,7 @@ class GCSReplayOcean(CloudZarrData, Source):
         use_nearest_levels: Optional[bool] = True,
         slices: Optional[dict] = None,
         local: Optional[bool] = False,
+        accumulate_variables: Optional[list | tuple | str] = None,
     ) -> None:
         self.time = pd.date_range(**time)
 
@@ -47,7 +46,11 @@ class GCSReplayOcean(CloudZarrData, Source):
             use_nearest_levels=use_nearest_levels,
             slices=slices,
             local=local,
+            accumulate_variables=accumulate_variables,
         )
 
         # Drop these because cftime gives trouble no matter what.
-        self._xds = self._xds.drop_vars(["cftime", "ftime"])
+        self._xds = self._xds.drop_vars(
+            ["cftime", "ftime"],
+            errors="ignore",
+        )

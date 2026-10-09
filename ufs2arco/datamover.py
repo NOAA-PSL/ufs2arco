@@ -53,6 +53,7 @@ class DataMover():
         self.counter = start
         self.data_counter = start
         self.outer_cache_dir = cache_dir
+        self.missing_sample_dims = []
 
         # construct the sample indices
         # e.g. {"t0": [date1, date2], "fhrs": [0, 6], "member": [0, 1, 2]}
@@ -103,6 +104,7 @@ class DataMover():
 
     def _next_data(self):
         logger.debug(f"{self.name}._next_data[{self.data_counter}]")
+        self.missing_sample_dims = []
         if self.data_counter < len(self):
             batch_indices = self.get_batch_indices(self.data_counter)
             cache_dir = self.get_cache_dir(self.data_counter)
@@ -136,10 +138,19 @@ class DataMover():
                             cache_dir=cache_dir,
                         )
 
-                    if len(fds) > 0:
+                    if fds is not None and len(fds) > 0:
                         fds = self.transformer(fds)
                         fds = self.target.apply_transforms_to_sample(fds)
                         dlist.append(fds)
+                    else:
+                        self.missing_sample_dims.append(these_dims.copy())
+                if self.missing_sample_dims and dlist and len(batch_indices) > 1:
+                    raise RuntimeError(
+                        f"{self.name}: batch {self.data_counter} mixes present "
+                        "and missing samples, which cannot be represented by "
+                        "one contiguous Zarr region. Use batch_size=1 or "
+                        "MPIDataMover (one sample per rank)."
+                    )
                 if len(dlist) == 1:
                     xds = dlist[0]
                 else:
@@ -186,16 +197,25 @@ class DataMover():
             The created container is stored at `self.target.store_path`.
         """
 
-        # open a minimal dataset
-        first_sample_dim_args = {
-            key: getattr(self.source, key)[0]
-            for key in self.source.sample_dims
-        }
-        xds = self.source.open_sample_dataset(
-            dims=first_sample_dim_args,
-            open_static_vars=True,
-            cache_dir=self.get_cache_dir(0),
-        )
+        # Open the first available sample to infer the container schema. The
+        # first requested sample can legitimately be absent from a gappy source.
+        xds = None
+        for sample_idx, sample_dim_args in enumerate(self.sample_indices):
+            sample = self.source.open_sample_dataset(
+                dims=sample_dim_args,
+                open_static_vars=True,
+                cache_dir=self.get_cache_dir(sample_idx // self.batch_size),
+            )
+            if sample is not None and len(sample) > 0:
+                xds = sample
+                break
+
+        if xds is None:
+            raise RuntimeError(
+                f"{self.name}.create_container: no source data were available "
+                f"for any of the {len(self.sample_indices)} requested samples; "
+                "cannot infer the container schema"
+            )
 
         # perform any transformations like regridding
         xds = self.transformer(xds)
@@ -231,6 +251,12 @@ class DataMover():
         # create empty data arrays
         for varname in xds.data_vars:
             dims = xds[varname].dims
+            if not any(dim in self.target.renamed_sample_dims for dim in dims):
+                # Grid descriptors such as packed Anemoi latitude/longitude
+                # are invariant across samples and must be present before the
+                # first regional write (including static-mask preflight).
+                nds[varname] = xds[varname].copy()
+                continue
             shape = tuple(len(nds[key]) for key in dims)
             chunks = {list(dims).index(key): self.target.chunks[key] for key in dims}
             nds[varname] = xr.DataArray(

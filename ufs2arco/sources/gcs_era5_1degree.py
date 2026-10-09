@@ -2,7 +2,6 @@ import logging
 from typing import Optional
 
 import pandas as pd
-import xarray as xr
 
 from ufs2arco.sources import CloudZarrData, Source
 
@@ -24,6 +23,7 @@ class GCSERA5OneDegree(CloudZarrData, Source):
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
         local: Optional[bool] = False,
+        accumulate_variables: Optional[list | tuple | str] = None,
     ) -> None:
 
         self.time = pd.date_range(**time)
@@ -35,4 +35,5 @@ class GCSERA5OneDegree(CloudZarrData, Source):
             use_nearest_levels=use_nearest_levels,
             slices=slices,
             local=local,
+            accumulate_variables=accumulate_variables,
         )
