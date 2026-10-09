@@ -28,10 +28,10 @@ class MultiDriver(Driver):
     """A class to manage data movement, with multiple sources.
 
     Note:
-        For now, all "sources" must come from the same dataset, e.g. we can't mix and match GFS and ERA5.
-        There are several reasons for this:
-            * Right now, this is baked into how the caching is done. We only clear one data mover's cache, and all movers use the same cache directory.
-            * It's not clear how different source types (e.g. reanalysis and forecast, or deterministic and ensemble) would combine, given the different coordinates. This would make combining the datasets, and finding the specific spot in the zarr dataset (Mover.find_my_region) much more complicated.
+        Multiple source classes can be used together as long as they share the
+        same sample dimensions and sample coordinate values. Different grids
+        are still expected to be transformed to a common target layout before
+        merging.
 
 
     Attributes:
@@ -102,15 +102,35 @@ class MultiDriver(Driver):
 
             SourceDatasets.append( getattr(ufs2arco.sources, ufs2arco.sources._recognized[name]) )
 
-        try:
-            assert all(local_config["source"]["name"].lower() == name for local_config in self.config["multisource"])
-        except:
-            raise NotImplementedError("For multisource workflows, all sources have to come from the same dataset. Can't mix and match")
-
         # Now initialize the actual objects
         self.sources = list()
         for LocalSource, local_kwargs in zip(SourceDatasets, self.source_kwargs):
             self.sources.append( LocalSource(**local_kwargs) )
+
+        self._validate_multisource_compatibility()
+
+
+    def _validate_multisource_compatibility(self):
+        """Validate that source batches can be advanced in lockstep."""
+
+        reference = self.sources[0]
+        for source in self.sources[1:]:
+            if source.sample_dims != reference.sample_dims:
+                raise NotImplementedError(
+                    "For multisource workflows, all sources must use the same "
+                    f"sample_dims. Got {reference.name}: {reference.sample_dims} "
+                    f"and {source.name}: {source.sample_dims}."
+                )
+
+            for dim in reference.sample_dims:
+                reference_values = pd.Index(getattr(reference, dim))
+                source_values = pd.Index(getattr(source, dim))
+                if not reference_values.equals(source_values):
+                    raise ValueError(
+                        "For multisource workflows, all sources must use the "
+                        f"same values for sample dimension '{dim}'. "
+                        f"{reference.name} and {source.name} differ."
+                    )
 
 
     def _init_transformer(self):
@@ -145,34 +165,58 @@ class MultiDriver(Driver):
         else:
             raise NotImplementedError(
                 f"Driver._init_target: multisource workflows currently only work with Anemoi and AnemoiInferenceWithForcings Targets. Got {name}"
-            )
+        )
 
         self.targets = list()
-        kwargs = self.target_kwargs.copy()
-        for source in self.sources:
+        common_kwargs = self.target_kwargs.copy()
+        for idx, (source, local_config) in enumerate(zip(self.sources, self.config["multisource"])):
+            local_target_kwargs = {
+                key: val
+                for key, val in local_config.get("target", {}).items()
+                if key != "name"
+            }
+            kwargs = {**common_kwargs, **local_target_kwargs}
+            if idx > 0:
+                # After the first source, no need to compute forcings again.
+                kwargs.pop("forcings", None)
+
             self.targets.append(
                 TargetDataset(
                     source=source,
                     **kwargs,
                 )
             )
-            # After the first source, drop "forcings" from target kwargs... no need to compute them more than once
-            kwargs.pop("forcings", None)
 
 
     def _init_mover(self):
 
-        kwargs = self.mover_kwargs.copy()
+        common_kwargs = self.mover_kwargs.copy()
         if self.use_mpi:
             Mover = MPIDataMover
-            kwargs["mpi_topo"] = self.topo
         else:
             Mover = DataMover
 
-        self.movers = [
-            Mover(source=source, target=target, transformer=transformer, **kwargs)
-            for source, target, transformer in zip(self.sources, self.targets, self.transformers)
-        ]
+        self.movers = list()
+        for idx, (source, target, transformer) in enumerate(
+            zip(self.sources, self.targets, self.transformers)
+        ):
+            kwargs = common_kwargs.copy()
+            kwargs["cache_dir"] = os.path.join(
+                common_kwargs["cache_dir"],
+                f"{idx:02d}-{source.name.lower()}",
+            )
+            if self.use_mpi:
+                kwargs["mpi_topo"] = self.topo
+
+            self.movers.append(
+                Mover(source=source, target=target, transformer=transformer, **kwargs)
+            )
+
+        n_batches = {len(mover) for mover in self.movers}
+        if len(n_batches) != 1:
+            raise ValueError(
+                f"All multisource movers must have the same number of batches. Got {sorted(n_batches)}."
+            )
 
 
     def write_container(self, overwrite):
@@ -180,7 +224,7 @@ class MultiDriver(Driver):
 
         if self.topo.is_root:
             dslist = [mover.create_container() for mover in self.movers]
-            cds = self.target.merge_multisource(dslist)
+            cds = self.target.merge_multisource(dslist, apply_masks=False)
 
             kwargs = {"mode": "w"} if overwrite else {}
             logger.info(f"Driver.write_container: storing container at {self.store_path}\n{cds}\n")
@@ -239,7 +283,8 @@ class MultiDriver(Driver):
                 region = self.mover.find_my_region(mds)
                 mds.to_zarr(self.target.store_path, region=region)
 
-            self.mover.clear_cache(batch_idx)
+            for mover in self.movers:
+                mover.clear_cache(batch_idx)
 
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
 

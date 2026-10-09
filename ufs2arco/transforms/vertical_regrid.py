@@ -2,7 +2,9 @@ import logging
 from typing import Optional
 
 import numpy as np
+import os
 import xarray as xr
+import yaml
 
 try:
     import flox
@@ -116,3 +118,91 @@ def fv_vertical_regrid(
     # unfortunately, cannot store the level_bins due to this issue: https://github.com/pydata/xarray/issues/2847
     xds = xds.drop_vars("level_bins")
     return xds
+
+
+def fv_vertical_regrid_ocean(
+    xds: xr.Dataset,
+    interfaces: list | np.ndarray,
+    weight_var: Optional[str] = "dz",
+    use_nearest_interfaces: Optional[bool] = True,
+    keep_weight_var: Optional[bool] = False,
+) -> xr.Dataset:
+    """Vertically regrid ocean data and mask regridded layers below bathymetry.
+
+    This computes MOM6 layer thickness from the replay ocean vertical
+    interfaces, uses that thickness as the finite-volume weight, then masks
+    variables below the last valid source layer in each horizontal column.
+    """
+
+    # Resolve relative to the package, not the repo root, so this works from an
+    # installed copy. The file lives next to replay_vertical_levels.yaml, its
+    # atmospheric counterpart.
+    cfg_path = os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "replay_ocean_vertical_levels.yaml",
+        )
+    )
+    with open(cfg_path, "r") as f:
+        cfg = yaml.safe_load(f)
+    z_i = np.array(cfg["z_i"])
+
+    if "temp" not in xds:
+        raise KeyError("fv_vertical_regrid_ocean: expected 'temp' in dataset to infer ocean bottom mask")
+
+    valid_mask = ~xds["temp"].isnull()
+    num_valid_layers = valid_mask.sum(dim="level")
+    index = (num_valid_layers - 1).clip(min=0, max=len(z_i) - 1).astype(int)
+
+    bottom_interface = xr.apply_ufunc(
+        lambda idx: z_i[idx],
+        index,
+        vectorize=True,
+        input_core_dims=[[]],
+        output_dtypes=[float],
+        dask="parallelized" if index.chunks else None,
+    )
+    bottom_interface.name = "bottom_interface"
+    bottom_interface = bottom_interface.assign_coords(
+        {
+            "latitude": xds["latitude"],
+            "longitude": xds["longitude"],
+        }
+    )
+
+    dz = np.diff(z_i)
+    if len(dz) != len(xds["level"]):
+        raise ValueError(
+            "fv_vertical_regrid_ocean: computed layer thickness length "
+            f"({len(dz)}) does not match source level length ({len(xds['level'])})"
+        )
+
+    xds[weight_var] = xr.DataArray(
+        dz,
+        coords={"level": xds["level"].values},
+        dims="level",
+        attrs={"long_name": "layer thickness"},
+    )
+
+    result = fv_vertical_regrid(
+        xds,
+        weight_var=weight_var,
+        interfaces=interfaces,
+        use_nearest_interfaces=use_nearest_interfaces,
+        keep_weight_var=keep_weight_var,
+    )
+
+    mask = result["level"] > bottom_interface
+
+    for var in result.data_vars:
+        if "level" in result[var].dims:
+            result[var] = result[var].where(~mask)
+
+    return result
+
+
+def fv_vertical_regrid_ocn(*args, **kwargs) -> xr.Dataset:
+    """Backward-compatible alias for the original ocean regrid name."""
+
+    return fv_vertical_regrid_ocean(*args, **kwargs)

@@ -80,6 +80,7 @@ Table of Contents
    gefs_archive
    gfs_archive
    hrrr_archive
+   ocean
 
 .. toctree::
    :maxdepth: 1

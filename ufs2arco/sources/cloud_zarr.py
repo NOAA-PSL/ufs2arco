@@ -30,14 +30,14 @@ class CloudZarrData(Source):
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
+        local: Optional[bool] = False,
     ) -> None:
 
         # open and rename
-        xds = xr.open_zarr(
-            uri,
-            storage_options={"token": "anon"},
-            decode_timedelta=True,
-        )
+        open_kwargs = {"decode_timedelta": True}
+        if not local:
+            open_kwargs["storage_options"] = {"token": "anon"}
+        xds = xr.open_zarr(uri, **open_kwargs)
         self._xds = xds.rename(self.rename)
 
         # parent class checks if variables and levels are legit
