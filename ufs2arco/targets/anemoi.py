@@ -477,7 +477,6 @@ class Anemoi(Target):
         nds = xds.stack(cell2d=xds.attrs["stack_order"])
         nds["cell"] = xr.DataArray(
             np.arange(len(nds["cell2d"])),
-            coords=nds["cell2d"].coords,
             dims=nds["cell2d"].dims,
             attrs={
                 "description": f"logical index for 'cell2d', which is a flattened lon x lat array",
