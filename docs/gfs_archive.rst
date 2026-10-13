@@ -15,8 +15,9 @@ Newer files are downloaded from NOAA's public AWS archive.
 
 .. warning::
 
-   To avoid overwhelming THREDDS services, we recommend using no more than 64 workers
-   when running the MPI data mover on pre-2021 GFS data.
+   To avoid overwhelming THREDDS services, we recommend using less than 64 workers
+   when running the MPI data mover on pre-2021 GFS data. Reduce worker count further
+   if missing files appear.
 
 Currently, data from the following grib ``typeOfLevel`` filters are available:
 
