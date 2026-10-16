@@ -3,8 +3,6 @@
 GFS Archive
 ###########
 
-<mckenzie test> notes
-
 Archived forecasts from NOAA's
 `Global Forecast System (GFS)
 <https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast>`_
