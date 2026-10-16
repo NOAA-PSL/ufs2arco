@@ -4,15 +4,15 @@ Moving Data
 The main way to use ufs2arco is by creating a yaml "recipe" file, which
 describes
 
-1. the data source
+1. the data source (gfs, gefs, hrrr, replay, era5)
 
-2. transforms to the data
+2. transforms to the data (regrid, log transform, etc.)
 
-3. the target data layout
+3. the target data layout (anemoi or base)
 
 4. directories specifying where to store the results
 
-5. whether or not to use MPI
+5. whether or not to use Message Passing Interface (MPI) (datamover or mpidatamover and batch size)
 
 Once that recipe is created, the following command is used to run the workflow
 serially::
