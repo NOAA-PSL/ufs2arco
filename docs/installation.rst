@@ -65,7 +65,7 @@ then create the conda environment::
     conda env create -f environment.yaml
     conda activate ufs2arco
 
-Note: After creating the environment, you should install the ufs2arco kernal to Jupyter so it appears as an available kernel::
+Note: After creating the ufs2arco environment, you should register the ufs2arco kernal to Jupyter so it appears as an available kernel::
 
     python -m ipykernel install --user --name=ufs2arco
 
