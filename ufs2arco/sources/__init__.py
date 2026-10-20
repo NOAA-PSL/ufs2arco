@@ -19,4 +19,5 @@ _recognized = {
     "gcs_replay_atmosphere": "GCSReplayAtmosphere",
     "gfs_archive": "GFSArchive",
     "aws_aorc": "AWSAORC",
+    "conus404": "CONUS404"
 }
