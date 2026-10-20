@@ -137,6 +137,7 @@ class DataMover():
                         )
 
                     if len(fds) > 0:
+                        self._mark_static_variables(fds)
                         fds = self.transformer(fds)
                         fds = self.target.apply_transforms_to_sample(fds)
                         dlist.append(fds)
@@ -178,6 +179,14 @@ class DataMover():
         self.data_counter = idx
 
 
+    def _mark_static_variables(self, xds: xr.Dataset) -> None:
+        """Let mappings carry the static-variable flag under the new name."""
+        if not getattr(self.target, "always_open_static_vars", False):
+            return
+        for name in self.source.static_vars:
+            if name in xds:
+                xds[name].attrs["constant_in_time"] = True
+
     def create_container(self) -> None:
         """
         Create a Zarr container to store the dataset.
@@ -198,6 +207,7 @@ class DataMover():
         )
 
         # perform any transformations like regridding
+        self._mark_static_variables(xds)
         xds = self.transformer(xds)
 
         # transform it to target space

@@ -27,7 +27,7 @@ class Anemoi(Target):
     Assumptions:
         * For :class:`EnsembleForecastSource` and :class:`ForecastSource` datasets, t0 gets renamed to time, and fhr is silently dropped
         * :attr:`do_flatten_grid` = ``True``
-        * resolution = None, I have no idea where this gets set in anemoi-datasets
+        * set ``resolution`` to the same text used by other datasets when those datasets will be combined (e.g. multi-datasets)
         * just setting use_level_index = False for now, but eventually it would be nice to use this flag to switch between how vertical level suffixes are labeled
         * if :attr:`sort_channels_by_level` is ``True``, then we'll make sure that channels go like variable_<level 0> -> variable_<largest level value>
     """
@@ -146,6 +146,7 @@ class Anemoi(Target):
         sort_channels_by_levels: Optional[bool] = False,
         variables_with_nans: Optional[list] = None,
         transformed_dims: Optional[dict] = None,
+        resolution: Optional[str | float] = None,
     ) -> None:
         """
 
@@ -179,6 +180,7 @@ class Anemoi(Target):
 
         self.variables_with_nans = variables_with_nans
         self.transformed_dims = transformed_dims if transformed_dims else {}
+        self.resolution = str(resolution) if resolution is not None else None
 
 
     def apply_transforms_to_sample(
@@ -216,13 +218,14 @@ class Anemoi(Target):
             "allow_nans": self.allow_nans,
             "ensemble_dimension": len(self.ensemble),
             "flatten_grid": self.do_flatten_grid,
-            "resolution": str(self.resolution),
             "start_date": self.start_date,
             "end_date": self.end_date,
             "frequency": self.datetime.freqstr,
             "statistics_start_date": self.statistics_start_date,
             "statistics_end_date": self.statistics_end_date,
         }
+        if self.resolution is not None:
+            attrs["resolution"] = self.resolution
         xds.attrs.update(attrs)
         return xds
 
@@ -305,6 +308,7 @@ class Anemoi(Target):
 
         nds = xr.Dataset()
         nds.attrs["variables_metadata"] = dict()
+        static_variables = {self.rename.get(name, name) for name in self.source.static_vars}
 
         for name in xds.data_vars:
             meta = {
@@ -317,6 +321,9 @@ class Anemoi(Target):
                     "variable": name,
                 },
             }
+            if name in static_variables or xds[name].attrs.get("constant_in_time"):
+                meta["constant_in_time"] = True
+
             if len(self.ensemble) > 1:
                 meta["mars"]["number"] = list(self.ensemble)
             if "level" in xds[name].dims:
@@ -360,6 +367,9 @@ class Anemoi(Target):
                     nds.attrs["stack_order"] = stack_order
                     nds.attrs["field_shape"] = list(len(xds[d]) for d in stack_order)
 
+        nds.attrs["constant_fields"] = sorted(
+            name for name, metadata in nds.attrs["variables_metadata"].items() if metadata.get("constant_in_time")
+        )
         return nds
 
 
@@ -855,7 +865,7 @@ def _merge_attrs(list_of_dicts):
     merged_dict = {}
     for d in list_of_dicts:
         for key, value in d.items():
-            if key not in ["variables", "variables_metadata", "latest_write_timestamp"]:
+            if key not in ["variables", "variables_metadata", "constant_fields", "latest_write_timestamp"]:
                 if key in merged_dict and merged_dict[key] != value:
                     raise ValueError(
                         f"Conflict for common key '{key}': "
@@ -873,6 +883,9 @@ def _merge_attrs(list_of_dicts):
         vmetadata.update(attrs["variables_metadata"].copy())
 
     merged_dict["variables_metadata"] = {key: vmetadata[key] for key in merged_dict["variables"]}
+    merged_dict["constant_fields"] = sorted(
+        name for name, metadata in merged_dict["variables_metadata"].items() if metadata.get("constant_in_time")
+    )
     return merged_dict
 
 
@@ -895,6 +908,7 @@ class AnemoiInferenceWithForcings(Anemoi):
         sort_channels_by_levels: Optional[bool] = False,
         variables_with_nans: Optional[list] = None,
         multistep_input: Optional[int] = 1,
+        resolution: Optional[str | float] = None,
     ) -> None:
 
         super().__init__(
@@ -907,6 +921,7 @@ class AnemoiInferenceWithForcings(Anemoi):
             compute_temporal_residual_statistics=compute_temporal_residual_statistics,
             sort_channels_by_levels=sort_channels_by_levels,
             variables_with_nans=variables_with_nans,
+            resolution=resolution,
         )
 
         self.multistep_input = multistep_input
