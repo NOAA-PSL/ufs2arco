@@ -33,6 +33,7 @@ dataset for reforecasting.
 
   target:
     name: anemoi
+    resolution: 1.0
     sort_channels_by_levels: True
     compute_temporal_residual_statistics: True
     statistics_period:
@@ -55,6 +56,7 @@ dataset for reforecasting.
       ensemble: 1
       cell: -1
 
+``resolution`` is optional. Set it explicitly for multidataset use within anemoi.
 
 Anemoi Inference With Forcings
 ------------------------------
