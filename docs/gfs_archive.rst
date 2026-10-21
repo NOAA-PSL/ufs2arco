@@ -7,11 +7,17 @@ Archived forecasts from NOAA's
 `Global Forecast System (GFS)
 <https://www.ncei.noaa.gov/products/weather-climate-models/global-forecast>`_
 are available
-via NCAR's Research Data Archive (specifically from
+via NCAR's Geoscience Data Exchange (specifically from
 `the primary variable set <https://gdex.ucar.edu/datasets/d084001/>`_ and
 `the secondary variable set <https://gdex.ucar.edu/datasets/d084003/>`_).
-Pre-2021 files are downloaded from GDEX's public OSDF endpoint; newer files
-are downloaded from NOAA's public AWS archive.
+Pre-2021 files are downloaded from the NCAR GDEX THREDDS HTTP file server.
+Newer files are downloaded from NOAA's public AWS archive.
+
+.. warning::
+
+   To avoid overwhelming THREDDS services, we recommend using less than 64 workers
+   when running the MPI data mover on pre-2021 GFS data. Reduce worker count further
+   if missing files appear.
 
 Currently, data from the following grib ``typeOfLevel`` filters are available:
 
