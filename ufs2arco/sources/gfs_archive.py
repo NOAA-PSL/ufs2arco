@@ -22,6 +22,7 @@ class GFSArchive(NOAAGribForecastData, Source):
     horizontal_dims = ("latitude", "longitude")
     file_suffixes = ("", "b")
     static_vars = ("lsm", "orog")
+    hourly_forecast_start = pd.Timestamp("2021-02-26T00")
 
     @property
     def available_levels(self) -> tuple:
@@ -56,7 +57,9 @@ class GFSArchive(NOAAGribForecastData, Source):
         """
         Args:
             t0 (dict): Dictionary with start and end times for initial conditions, and e.g. "freq=6h". All options get passed to ``pandas.date_range``.
-            fhr (dict): Dictionary with 'start', 'end', and 'step' forecast hours.
+            fhr (dict): Dictionary with 'start', 'end', and 'step' forecast
+                hours. The archive supports 3-hourly forecast hours before
+                2021-02-26 and hourly forecast hours from that date onward.
             variables (list, tuple, optional): variables to grab
             levels (list, tuple, optional): vertical levels to grab
             use_nearest_levels (bool, optional): if True, all level selection with
@@ -69,6 +72,17 @@ class GFSArchive(NOAAGribForecastData, Source):
         """
         self.t0 = pd.date_range(**t0)
         self.fhr = np.arange(fhr["start"], fhr["end"] + 1, fhr["step"])
+
+        # Catch when requested forecast hour is not valid (e.g. due to limits in archive)
+        # First, grab hourly fhrs (whatever is not 3-hours because GFS archive supports 3-hours)
+        hourly_fhr = self.fhr[self.fhr % 3 != 0]
+        # Make sure we are not trying to get hourly data before it exists in archive
+        unavailable_t0 = self.t0[self.t0 < self.hourly_forecast_start]
+        if len(hourly_fhr) > 0 and len(unavailable_t0) > 0:
+            raise ValueError(
+                f"{self.name}: hourly forecast files are only available starting {self.hourly_forecast_start}"
+            )
+
         super().__init__(
             variables=variables,
             levels=levels,

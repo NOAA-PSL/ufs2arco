@@ -25,7 +25,8 @@ class Anemoi(Target):
     so they have different names originally.
 
     Assumptions:
-        * For :class:`EnsembleForecastSource` and :class:`ForecastSource` datasets, t0 gets renamed to time, and fhr is silently dropped
+        * For forecast sources, each ``(t0, fhr)`` sample is mapped to
+          ``valid_time = t0 + fhr``; ``fhr`` is not retained as an output dimension
         * :attr:`do_flatten_grid` = ``True``
         * resolution = None, I have no idea where this gets set in anemoi-datasets
         * just setting use_level_index = False for now, but eventually it would be nice to use this flag to switch between how vertical level suffixes are labeled
@@ -65,10 +66,47 @@ class Anemoi(Target):
         else:
             return self.expanded_horizontal_dims
 
+    @staticmethod
+    def build_forecast_datetime(t0, fhr) -> pd.DatetimeIndex:
+        """Build the regular valid-time axis represented by ``t0`` and ``fhr``."""
+        t0 = pd.DatetimeIndex(t0)
+        fhr = np.asarray(fhr)
+
+        # Preserve the source frequency and existing behavior when only one lead time requested.
+        # For example, if fhr[3] was wanted (instead of [0,1,3,4,5]) to create a dataset with 0,3,6,9,12...
+        if len(fhr) == 1:
+            return t0 + pd.Timedelta(hours=int(fhr[0]))
+
+        # valid time = initialization time + forecast hour (for every combination)
+        datetime = pd.DatetimeIndex([
+            pd.Timestamp(initialization) + pd.Timedelta(hours=int(forecast_hour))
+            for initialization in t0
+            for forecast_hour in fhr
+        ])
+
+        if not datetime.is_unique:
+            duplicates = datetime[datetime.duplicated()].unique().tolist()
+            raise ValueError(
+                f"t0 and fhr produce duplicate valid times: {duplicates}. "
+                "Check to ensure you are not grabbing both initialization and forecast for a single valid time."
+            )
+
+        if len(datetime) == 2:
+            frequency = datetime[1] - datetime[0]
+        else:
+            frequency = pd.infer_freq(datetime)
+
+        if frequency is None:
+            raise ValueError(
+                "t0 and fhr must produce a regularly spaced valid-time axis."
+            )
+
+        return pd.DatetimeIndex(datetime, freq=frequency)
+
     @property
     def datetime(self):
         if self._has_fhr:
-            return self.source.t0 + pd.Timedelta(hours=self.source.fhr[0])
+            return self.build_forecast_datetime(self.source.t0, self.source.fhr)
         else:
             return self.source.time
 
@@ -167,8 +205,8 @@ class Anemoi(Target):
         self.sort_channels_by_levels = sort_channels_by_levels
         # additional checks
         if self._has_fhr:
-            assert len(self.source.fhr) == 1, \
-                f"{self.name}.__init__: Can only use this class with len(fhr)==1, no multiple lead times"
+            # ensure fhrs requested are valid.
+            _ = self.datetime
 
         renamekeys = list(self.rename.keys())
         protected = list(self.protected_rename.keys()) + list(self.protected_rename.values())

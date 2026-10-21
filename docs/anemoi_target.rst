@@ -55,6 +55,26 @@ dataset for reforecasting.
       ensemble: 1
       cell: -1
 
+Users may wish to train a model with forecast data instead of only initial
+conditions.
+When forecast data is requested, we map every ``(t0, fhr)`` sample to
+``valid_time = t0 + fhr`` and store it on the dataset's single ``time`` axis.
+This behavior is generic to forecast sources, but the available cadence depends
+on the source archive. For example:
+
+* GFS can produce hourly data with 6-hourly initializations and forecast hours
+  0 through 5 beginning **2021-02-26 00Z**; see :ref:`gfs-archive`.
+* HRRR can produce hourly data throughout its AWS archive, which begins
+  **2014-09-30**. Users will typically request hourly initializations with
+  forecast hour 0. Alternatively, 6-hourly initializations with forecast hours
+  0 through 5 can be used to train with forecast data.
+* GEFS output in the supported AWS archive is three-hourly, not hourly.
+  Six-hourly initializations and forecast hours 0 and 3 produce a continuous
+  three-hourly dataset, if desired.
+
+Do not include a forecast hour that overlaps the next initialization. For
+example, forecast hour 6 from a 00Z cycle duplicates forecast hour 0 from the
+06Z cycle and is rejected.
 
 Anemoi Inference With Forcings
 ------------------------------
