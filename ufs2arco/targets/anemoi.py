@@ -218,14 +218,13 @@ class Anemoi(Target):
             "allow_nans": self.allow_nans,
             "ensemble_dimension": len(self.ensemble),
             "flatten_grid": self.do_flatten_grid,
+            "resolution": str(self.resolution),
             "start_date": self.start_date,
             "end_date": self.end_date,
             "frequency": self.datetime.freqstr,
             "statistics_start_date": self.statistics_start_date,
             "statistics_end_date": self.statistics_end_date,
         }
-        if self.resolution is not None:
-            attrs["resolution"] = self.resolution
         xds.attrs.update(attrs)
         return xds
 
