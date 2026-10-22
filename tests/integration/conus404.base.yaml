@@ -4,20 +4,15 @@
 # Source:
 # - analysis template
 # - level selection
-# - static variables
-# - latitude slicing
-# Transform:
-# - divide
-# - round mapping, with variables as str
 # Target:
 # - base workflow for analysis
 # - rename
 mover:
   name: datamover
-  batch_size: 2
+  batch_size: 1
 
 directories:
-  zarr: dataset.zarr
+  zarr: conus404_base.zarr
   cache: cache
   logs: logs
 
@@ -30,37 +25,19 @@ source:
     freq: 1h
 
   variables:
-    - P
     - T2
-    - TK
+    - U10
+    - V10
     - Z
 
   levels:
-    - 100
-    - 150
-    - 200
-    - 250
-    - 500
-    - 850
-    - 1000
-
-  slices:
-    sel:
-      latitude: [17.647308349609375, 57.34341812133789]
-
-transforms:
-  divide:
-    geopotential_at_surface: 9.80665
-  mappings:
-    round: land_sea_mask
+    - 10
+    - 50
 
 target:
   name: analysis
-  rename:
-    level: pressure
-    geopotential_at_surface: orography
   chunks:
     time: 1
-    pressure: 1
+    level: -1
     latitude: -1
     longitude: -1
