@@ -14,6 +14,7 @@ class CloudZarrData(Source):
     """
     Generic access patterns for forecast datasets store somewhere in Zarr
     """
+    storage_options = tuple()
 
     @property
     def available_variables(self) -> tuple:
@@ -30,12 +31,13 @@ class CloudZarrData(Source):
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
+        storage_options: Optional[str] = {"token": "anon"},
     ) -> None:
 
         # open and rename
         xds = xr.open_zarr(
             uri,
-            storage_options={"token": "anon"},
+            storage_options=self.storage_options,
             decode_timedelta=True,
         )
         self._xds = xds.rename(self.rename)
