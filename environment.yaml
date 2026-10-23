@@ -18,6 +18,8 @@ dependencies:
     - fsspec
     - s3fs
     - gcsfs>=2025.10.0
+    - planetary-computer
+    - pystac-client
 # jupyter & documentation stuff
     - jupyter
     - matplotlib
