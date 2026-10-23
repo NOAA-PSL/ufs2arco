@@ -44,7 +44,7 @@ def test_gfs_build_path_switches_legacy_and_aws_branches(monkeypatch):
     )
     old_path = gfs._build_path(pd.Timestamp("2020-01-01T00"), 1, "")
     new_path = gfs._build_path(pd.Timestamp("2022-01-01T12"), 1, "")
-    assert "data.rda.ucar.edu" in old_path
+    assert "tds.gdex.ucar.edu/thredds/fileServer/files/g/d084001/" in old_path
     assert "noaa-gfs-bdp-pds" in new_path
 
 
