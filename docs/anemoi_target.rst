@@ -4,7 +4,7 @@ Anemoi Targets
 Anemoi target layouts are designed to create datasets that can work seamlessly
 with the Anemoi framework.
 For more information on Anemoi, check out the
-`anemoi documentation <https://anemoi.readthedocs.io/en/latest/>`__. 
+`anemoi documentation <https://anemoi.readthedocs.io/en/latest/>`__.
 
 In short, this layout involves collapsing data in a number of ways:
 
@@ -63,9 +63,10 @@ The main difference between this flavor of anemoi target and the standard one is
 how forcing variables are computed.
 In the previous target layout, it is assumed that we have data covering the entire
 temporal range requested, including for the forcing variables.
-In this target layout, however, the user can compute forcings that go into the future, and 
+In this target layout, however, the user can compute forcings that go into the future, and
 data is only required to cover the timestamps that are used for initial
-conditions for the model.
+conditions for the model. Ensure ``multistep_input`` matches what was used
+during training so all required timesteps are loaded.
 
 This layout is particularly useful for running a model in a near real time or
 operational environment, where we only have initial conditions for prognostic
@@ -76,7 +77,7 @@ fields, and forcings must be computed for future timestamps.
 
   target:
     name: anemoi_inference_with_forcings
-    save_additional_step: True
+    multistep_input: 2
     sort_channels_by_levels: True
     forcings:
       - cos_latitude
@@ -94,4 +95,4 @@ fields, and forcings must be computed for future timestamps.
       variable: -1
       ensemble: 1
       cell: -1
-      
+
