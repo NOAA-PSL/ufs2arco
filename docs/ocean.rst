@@ -1,500 +1,222 @@
-.. _ocean:
+Ocean transforms
+================
 
-Ocean (MOM6)
-############
+Ocean transforms calculate density, mixed-layer depth (MLD), and ocean heat
+content (OHC) from native water-column profiles, then optionally average the
+profiles onto a coarser vertical grid. In a multisource recipe, configure these
+transforms inside the ocean source entry so they are not applied to atmospheric
+fields.
 
-ufs2arco supports the ocean component of UFS, which is
-`MOM6 <https://github.com/NOAA-GFDL/MOM6>`_, through a data source, a vertical
-regridding transform that understands bathymetry, and three diagnostics computed
-from the water column.
-
-.. contents::
-   :local:
-   :depth: 1
-
-
-Data Source
-===========
-
-``gcs_replay_ocean`` reads the MOM6 component of NOAA's UFS Replay, already in
-zarr on Google Cloud Storage. Three resolutions are available, all 6 hourly:
-
-.. list-table::
-   :widths: 30 22 18 30
-   :header-rows: 1
-
-   * - URI (prefix ``gs://noaa-ufs-gefsv13replay/ufs-hr1/``)
-     - Horizontal
-     - Levels
-     - Period
-   * - ``1.00-degree/06h-freq/zarr/mom6.zarr``
-     - 192 x 384
-     - 75
-     - 1993-12-31 to 1999-06-13
-   * - ``0.25-degree/06h-freq/zarr/mom6.zarr``
-     - 768 x 1536
-     - 75
-     - 1993-12-31 to 2023-12-31
-   * - ``0.25-degree-subsampled/06h-freq/zarr/mom6.zarr``
-     - 192 x 384
-     - 75
-     - 1993-12-31 to 2023-12-31
-
-Note that the ocean is stored at 6 hourly frequency, unlike the 3 hourly
-atmosphere.
-
-Coordinates are renamed on the way in, so that recipes use the same names as
-every other source:
-
-.. list-table::
-   :widths: 20 20 60
-   :header-rows: 1
-
-   * - In the store
-     - In ufs2arco
-     - Notes
-   * - ``z_l``
-     - ``level``
-     - 75 layer centers, 0.52 m to 5902 m, positive down
-   * - ``lat``
-     - ``latitude``
-     -
-   * - ``lon``
-     - ``longitude``
-     -
-
-Available Variables
+Inputs and ordering
 -------------------
 
-.. list-table:: Variables from the Replay MOM6 store
-   :widths: 16 44 16 24
-   :header-rows: 1
+The default inputs are potential temperature ``temp`` in degrees Celsius and
+practical salinity ``so`` in psu. The ``level`` coordinate contains finite,
+strictly increasing, nonnegative layer-center depths in metres, positive down.
+Depth units may be omitted for Replay; when present, they must describe metres.
+Temperature and salinity must have matching dimensions and sizes.
 
-   * - Variable
-     - Long Name
-     - Units
-     - Dimensions
-   * - ``temp``
-     - Potential Temperature
-     - degC
-     - time, level, lat, lon
-   * - ``so``
-     - Sea Water Salinity
-     - psu
-     - time, level, lat, lon
-   * - ``uo``
-     - Sea Water X Velocity
-     - m s-1
-     - time, level, lat, lon
-   * - ``vo``
-     - Sea Water Y Velocity
-     - m s-1
-     - time, level, lat, lon
-   * - ``ho``
-     - Layer thicknesses after ALE regridding and remapping
-     - m
-     - time, level, lat, lon
-   * - ``SSH``
-     - Sea Surface Height
-     - m
-     - time, lat, lon
-   * - ``pbo``
-     - Sea Water Pressure at Sea Floor
-     - Pa
-     - time, lat, lon
-   * - ``landsea_mask``
-     - Land-Sea Mask (0 land, 1 sea)
-     -
-     - level, lat, lon
-   * - ``taux``
-     - Zonal surface stress from ocean interactions with atmos and ice
-     - Pa
-     - time, lat, lon
-   * - ``tauy``
-     - Meridional surface stress from ocean interactions with atmos and ice
-     - Pa
-     - time, lat, lon
-   * - ``SW``
-     - Shortwave radiation flux into ocean
-     - W m-2
-     - time, lat, lon
-   * - ``LW``
-     - Longwave radiation flux into ocean
-     - W m-2
-     - time, lat, lon
-   * - ``latent``
-     - Latent heat flux into ocean due to fusion and evaporation
-     - W m-2
-     - time, lat, lon
-   * - ``sensible``
-     - Sensible heat flux into ocean
-     - W m-2
-     - time, lat, lon
-   * - ``LwLatSens``
-     - Combined longwave, latent and sensible heating at ocean surface
-     - W m-2
-     - time, lat, lon
-   * - ``Heat_PmE``
-     - Heat flux into ocean from mass flux into ocean
-     - W m-2
-     - time, lat, lon
-   * - ``evap``
-     - Evaporation/condensation at ocean surface (evaporation negative)
-     - kg m-2 s-1
-     - time, lat, lon
-   * - ``lprec``
-     - Liquid precipitation into ocean
-     - kg m-2 s-1
-     - time, lat, lon
-   * - ``fprec``
-     - Frozen precipitation into ocean
-     - kg m-2 s-1
-     - time, lat, lon
-   * - ``lrunoff``
-     - Liquid runoff (rivers) into ocean
-     - kg m-2 s-1
-     - time, lat, lon
+Density and OHC also support complete single-layer grids. MLD requires at least
+two levels and still applies the native-grid checks described below.
 
-.. note::
+Use the complete native ocean column. For Replay, do not select a subset with
+``source.levels`` or ``source.slices.sel.level`` before these transforms.
+Diagnostics run before ``fv_vertical_regrid_ocean`` and horizontal regridding,
+regardless of YAML key order. MLD and OHC have no ``level`` dimension and pass
+through vertical regridding unchanged. Density retains its vertical dimension
+and is averaged if vertical regridding is enabled.
 
-    Ocean fields are NaN over land at every timestep, permanently. This is
-    normal, but it has consequences for the anemoi target, see
-    :ref:`ocean-nans` below.
+Configuration
+-------------
 
-
-Vertical Regridding
-===================
-
-``fv_vertical_regrid_ocean`` does a thickness weighted average of every 3D
-variable between the interfaces you specify, then masks the result below the sea
-floor:
+This transform block adds two MLD thresholds, OHC to 300 m, and native-level
+density before coarsening the vertical profiles. Omit diagnostics you do not
+need, especially density if only the two-dimensional diagnostics are required.
 
 .. code-block:: yaml
 
-    transforms:
-      fv_vertical_regrid_ocean:
-        interfaces: [0, 50, 200, 1000, 6000]
-        keep_weight_var: False
+   transforms:
+     ocean_density:
+       temperature: temp
+       salinity: so
+       name: rho
+       ref_pressure: 0.0
+       subtract_1000: false
+       eos: wright
+     mixed_layer_depth:
+       temperature: temp
+       salinity: so
+       thresholds: [0.03, 0.125]
+       names: [mld003, mld0125]
+     ocean_heat_content:
+       temperature: temp
+       depths: [300]
+       names: [ohc300]
+       output_units: GJ m-2
+       require_full_depth: true
+     fv_vertical_regrid_ocean:
+       interfaces: [0, 1, 21, 75, 120, 200, 350, 500]
+       use_nearest_interfaces: true
+       keep_weight_var: false
 
-The output ``level`` values are the midpoints of the interfaces you gave, so the
-example above produces levels 25, 125, 600 and 3500 m, approximately.
-
-Two things to know:
-
-* Layer thickness is taken from the native MOM6 interface depths shipped with
-  the package (``ufs2arco/replay_ocean_vertical_levels.yaml``), not from the
-  time varying ``ho``. It is the nominal z\* thickness.
-* The sea floor is inferred from NaNs in a variable named literally ``temp``,
-  so this transform requires that name even though the diagnostics below let you
-  configure it.
-
-
-Ocean Diagnostics
-=================
-
-Three transforms compute quantities from the water column and append them as
-ordinary variables. They are ported from
-`GFDL MOM6 <https://github.com/NOAA-GFDL/MOM6>`_ rather than approximated, so
-results are comparable with the model's own diagnostics.
-
-.. list-table::
-   :widths: 24 18 20 38
-   :header-rows: 1
-
-   * - Transform
-     - Requires
-     - Output
-     - Ported from
-   * - ``ocean_density``
-     - ``temp``, ``so``
-     - 3D, on ``level``
-     - Wright (1997), ``MOM_EOS_Wright_full.F90``
-   * - ``mixed_layer_depth``
-     - ``temp``, ``so``
-     - 2D
-     - ``diagnoseMLDbyDensityDifference``, ``MOM_diagnose_MLD.F90``
-   * - ``ocean_heat_content``
-     - ``temp``
-     - 2D
-     - Boussinesq integral, MOM6 ``RHO_0`` and ``C_P``
-
-Full configuration, with defaults shown:
-
-.. code-block:: yaml
-
-    transforms:
-      ocean_density:
-        temperature: temp
-        salinity: so
-        name: rho
-        ref_pressure: 0.0     # Pa. 0 gives potential density referenced to the
-                              # surface; null gives in situ density, using a
-                              # Boussinesq p = rho0*g*z
-        subtract_1000: false  # true emits sigma, i.e. density minus 1000
-        eos: wright           # alias for wright_full, MOM6's own EOS_DEFAULT.
-                              # wright_red is the restricted range fit
-
-      mixed_layer_depth:
-        temperature: temp
-        salinity: so
-        thresholds: [0.03]    # kg m-3. MOM6 uses 0.03 for MLD_003 and
-                              # 0.125 for MLD_0125
-        names: [mld]
-        ref_pressure: 0.0     # only 0 is implemented
-        pathological_to_nan: true
-        # vertical resolution guard, see below
-        mld_search_depth: 200.0
-        min_levels_in_search: 10
-        max_level_spacing: 25.0
-
-      ocean_heat_content:
-        temperature: temp
-        depths: [700, 2000, null]        # m; null means the full water column
-        names: [ohc700, ohc2000, ohc]    # these are the defaults
-        interfaces: null                 # default: derived from `level`
-        rho0: 1035.0                     # MOM6 RHO_0
-        heat_capacity: 3991.86795711963  # MOM6 C_P
-        require_full_depth: true
+Diagnostic output names must be unique, must not replace existing variables,
+and must not end with an underscore followed by digits. Use ``mld003`` and
+``ohc300`` rather than ``mld_003`` and ``ohc_300``: Anemoi interprets the latter
+suffixes as vertical levels.
 
 Density
 -------
 
-Wright (1997) as implemented in MOM6, validated against the UNESCO EOS-80 check
-values at the surface to better than 0.03 kg m-3. It takes potential temperature
-in degC and practical salinity in psu, which is exactly what ``temp`` and ``so``
-are, so no conversion is needed.
+``ocean_density`` uses the Wright equation of state. ``eos: wright`` is an alias
+for ``wright_full``; ``wright_red`` selects the reduced form. Output units are
+``kg m-3``.
 
-Density keeps the ``level`` dimension, so it flows through the rest of the
-pipeline like any other 3D field: a later ``fv_vertical_regrid_ocean``
-thickness averages and bottom masks it, and the anemoi target expands it into
-``rho_25``, ``rho_125`` and so on.
+* ``ref_pressure: 0.0`` produces surface-referenced potential density.
+  Other finite, nonnegative reference pressures are specified in Pa.
+* ``ref_pressure: null`` produces approximate in-situ density using
+  ``p = rho0 * g * level``, with ``rho0 = 1035 kg m-3`` and ``g = 9.8 m s-2``.
+* ``subtract_1000: true`` subtracts 1000 from density to produce sigma.
 
-.. note::
+Density uses each level's temperature and salinity. Averaging this diagnosed
+field generally differs from diagnosing density from averaged inputs.
 
-    MOM6 also ships ``MOM_EOS_Wright.F90``, which its own docstring describes as
-    "a poor implementation (missing parenthesis and bugs)" and whose type is
-    named ``buggy_Wright_EOS``. It is retained upstream only to reproduce old
-    results, and is deliberately not implemented here.
+For direct Python calls, pass ``check_range=True`` to
+``ufs2arco.ocean_diagnostics.wright_density`` to log warnings when inputs fall
+outside the selected equation-of-state fit range. This evaluates lazy inputs;
+range checking is disabled by default.
 
-Mixed Layer Depth
+Mixed-layer depth
 -----------------
 
-The depth at which potential density first exceeds the near surface value by a
-threshold, linearly interpolated between the bracketing layer centers. This
-reproduces MOM6's own ``MLD_003`` (threshold 0.03) and ``MLD_0125`` (0.125).
+``mixed_layer_depth`` calculates potential density at zero reference pressure
+and compares each level to the top model layer. Moving downward, it selects the
+first rising density difference that crosses the requested threshold, then
+linearly interpolates between the adjacent native layer centers. Only
+``ref_pressure: 0.0`` is supported for MLD. The default equation of state is
+``wright_full``, also selected by the alias ``wright``.
 
-Two deliberate departures from MOM6, both for the benefit of a training dataset:
+The default threshold is ``0.03 kg m-3`` with output name ``mld``. Multiple
+thresholds require one explicit output name each. Use ``thresholds: [0.125]``
+and ``names: [mld0125]`` for comparison with the archived ``MLD_0125`` field.
+MLD output is in metres.
 
-1. Land, and any column with no valid surface level, returns NaN rather than
-   falling through to MOM6's ``MLD = 0`` initialization. The downward scan also
-   stops at the first NaN, so the "mixing reached the bottom" fallback uses the
-   deepest *valid* layer center.
-2. A column that MOM6 would leave at exactly 0, which happens where the density
-   profile is non-monotonic right at the threshold, becomes NaN. Set
-   ``pathological_to_nan: false`` to reproduce MOM6 exactly. The count is logged
-   either way.
+The native-grid guard requires 75 levels, a deepest center at least 5000 m
+deep, at least 10 centers shallower than 200 m, and upper-ocean spacing no
+greater than 25 m. For another native grid, configure ``expected_level_count``
+and ``minimum_deepest_level`` appropriately, or set them to ``null``. The
+upper-ocean controls are ``mld_search_depth``, ``min_levels_in_search``, and
+``max_level_spacing``; these checks guard against diagnosing a threshold from
+an excessively coarse profile.
 
-Ocean Heat Content
+The first nonfinite temperature or salinity terminates the valid column.
+An invalid surface produces NaN. If no crossing occurs and the deepest valid
+density difference remains below the threshold, MLD is the deepest valid layer
+center. A column satisfying neither condition produces NaN by default;
+``pathological_to_nan: false`` retains a zero value for that exceptional case.
+
+Ocean heat content
 ------------------
 
-``rho0 * Cp * integral(theta dz)``, evaluated as a finite volume sum with partial
-cell weighting on the layer straddling the requested depth. Layer interfaces are
-reconstructed from the ``level`` coordinate, so this works for any z-coordinate
-ocean source without a hard coded depth table.
+For a requested depth ``D``, ``ocean_heat_content`` evaluates:
 
-Stored in **GJ m-2**, not the J m-2 that MOM6 itself uses. Heat content in
-J m-2 is O(1e10)-O(1e11), which overflows fp16 (max finite value about 65504)
-to ``inf``; GJ m-2 keeps values in the tens to hundreds, which trains fine in
-fp16 alongside every other channel.
+.. math::
 
-``require_full_depth: true`` returns NaN where the water column does not reach
-the requested depth, since a shelf column is not a 0 to 700 m heat content and
-mixing partial integrals with full ones would put a discontinuity in the field.
+   Q_D = \rho_0 C_p \sum_k T_k\,\Delta z_{k,D}.
 
-.. important::
+Here ``T`` is potential temperature in degrees Celsius and the included
+thickness ``dz`` extends from the surface to ``D``. The last layer contributes
+only its portion above ``D``; OHC therefore uses exact partial-cell integration
+at the requested depth. Defaults are ``rho0: 1035`` (kg m-3) and
+``heat_capacity: 3991.86795711963`` (J kg-1 K-1). These constants are configurable.
+The heat-capacity default follows MOM6's conservative-temperature convention,
+while Replay supplies potential temperature.
 
-    Two consequences of that masking rule that surprise people:
+The result is heat content relative to 0 degrees Celsius. Subzero water makes
+a negative contribution, so a deeper integral need not be larger. It is not
+heat potential above a 26-degree threshold or total grid-cell internal energy.
 
-    **The full column entry is never masked.** ``require_full_depth`` only
-    applies when a finite depth is requested. A full depth integral is well
-    defined for any water depth, so ``depths: null`` produces values everywhere
-    there is ocean. That means ``ohc`` has *more* valid points than ``ohc2000``,
-    and the three fields cannot be compared point for point without first
-    intersecting their masks. Comparing spatial averages taken over each
-    field's own mask will mislead you, because the deep-only fields exclude
-    the shallow, warm shelves.
+``output_units: GJ m-2`` is the default, using an exact ``1e-9`` conversion from
+joules. ``J m-2`` is also supported, but typical magnitudes overflow fp16
+storage. A uniform 10-degree column to 300 m gives approximately
+``12.39475 GJ m-2``.
 
-    **Heat content is not monotonic in integration depth.** This diagnostic is
-    heat content *relative to 0 degC*, following MOM6, so a layer colder than
-    0 degC contributes negatively. Deep and bottom water reaches roughly
-    -1 degC, so integrating deeper can lower the total. In the replay ocean
-    this is not a rare edge case: on a January field, ``ohc`` is smaller than
-    ``ohc2000`` at about 13% of the points where both are defined, wherever
-    cold deep water sits beneath a warmer upper ocean. This is the definition
-    behaving correctly, not a bug. If you need a strictly monotonic quantity,
-    integrate a temperature anomaly relative to a reference profile instead.
+The default ``depths`` are ``[700, 2000, null]``, named ``ohc700``, ``ohc2000``,
+and ``ohc``. ``null`` integrates to the local bottom. For finite depths,
+``require_full_depth: true`` produces NaN wherever the contiguous finite
+temperature column does not reach the requested depth. Setting it to ``false``
+integrates to the shallower of that depth and the local bottom; such values
+represent varying integration depths. An invalid surface produces NaN, and
+finite temperatures below the first invalid level are ignored.
 
-.. note::
+Vertical regridding
+-------------------
 
-    ``heat_capacity`` defaults to MOM6's ``C_P``, which upstream is documented as
-    the TEOS-10 conservative temperature value. Replay's ``temp`` is *potential*
-    temperature; MOM6 applies ``C_P`` regardless of which convention its
-    temperature variable follows, and so does ufs2arco. Set it explicitly if you
-    want a potential temperature value.
+``fv_vertical_regrid_ocean`` requires ``temp`` to infer the wet column. It
+resolves native interfaces from ``source_interfaces``, an input ``interface``
+or ``z_i`` coordinate, the packaged interfaces for a matching complete Replay
+grid, or interfaces reconstructed from other midpoint grids, in that order.
+Explicit interfaces describe every native source cell, start at zero, strictly
+increase, and bracket the centers. They are separate from ``interfaces``, which
+specifies the desired output boundaries.
 
+By default, ``use_nearest_interfaces: true`` snaps the requested boundaries to
+native interfaces. For Replay, ``[0, 1, 21, 75]`` resolves approximately to
+``[0, 1.0308075, 21.0937099, 73.3164215] m``. The output ``interface`` coordinate
+records the resolved boundaries; its metadata also retains the requests.
+Out-of-range requests and duplicate snapped boundaries are rejected. With
+``use_nearest_interfaces: false``, requests must match native interfaces exactly.
 
-.. _ocean-ordering:
+Regridding thickness-averages complete source cells whose centers lie in each
+resolved target bin. It does not split source cells to represent the original,
+unsnapped boundaries. For each variable, the numerator and denominator use
+only its finite values within the wet column. Thus equal-thickness values
+``[20, NaN]`` average to ``20``. All-invalid bins remain NaN; infinities are
+also excluded.
 
-Why ordering matters
-====================
+The wet column is the leading uninterrupted set of finite ``temp`` values.
+An internal temperature gap excludes every deeper cell. For ``N`` wet cells,
+the local bottom is native interface ``z_i[N]``. The bottom mask retains a
+target bin only when its midpoint is at or above this interface. A retained
+bin may straddle the bottom; only wet cells contribute to its average. This
+midpoint policy is not an exact fractional-bottom-cell calculation.
 
-The diagnostics always run **before** any vertical regridding, no matter where
-they appear in the yaml, because ``Transformer`` applies operations in an order
-fixed in code.
+``weight_var`` defaults to ``dz`` and names the calculated native thicknesses.
+With ``keep_weight_var: true``, the retained weight is the nominal full target
+bin thickness, not each variable's finite or local wet thickness.
 
-This is not a detail. The mixed layer lives in the top tens of meters, and mixed
-layer depth can never be resolved more finely than the layer spacing. Computing
-it from a handful of coarsened layers smears the pycnocline across a thick layer,
-dilutes the surface to layer density contrast, and collapses the field toward a
-few values with the seasonal cycle washed out. The result does not look broken;
-it looks smooth and is simply wrong. In the package's own test, a pycnocline at
-120 m gives 97 m from the native 75 level column and 62 m from a 5 level
-coarsened one.
+Anemoi output and masks
+-----------------------
 
-The fixed order means a recipe *cannot* express "regrid, then compute mixed layer
-depth". But coarse data can still arrive from upstream, so
-``mixed_layer_depth`` also validates the vertical grid before it computes
-anything, and refuses to run if:
-
-* there are fewer than ``min_levels_in_search`` levels above
-  ``mld_search_depth``, or
-* the spacing between consecutive levels within that range exceeds
-  ``max_level_spacing``.
-
-For calibration, the native replay grid has 30 levels above 200 m with a maximum
-spacing of 17.4 m, and a topmost center at 0.52 m.
-
-.. warning::
-
-    ``mld_search_depth`` does **not** cap the search. Mixed layer depth is
-    computed over the entire column and routinely exceeds 200 m in deep
-    convection regions; values above 2000 m occur. The parameter only sets the
-    depth range over which the *grid* is required to be well resolved.
-
-If you hit that error, the cause is almost always upstream: ``levels`` or
-``slices.sel.level`` in the ``source`` section subset the water column when the
-source is opened, before any transform runs. Ocean diagnostics need the native
-column.
-
-Channel naming
---------------
-
-The 2D outputs deliberately avoid a trailing underscore followed by digits,
-because the anemoi target reads that pattern as a vertical level. MOM6's own
-``MLD_003`` would be silently reinterpreted as "MLD at level 3". Hence ``mld``,
-``ohc700`` and ``ohc``. Override with ``names`` if you accept that.
-
-
-.. _ocean-nans:
-
-NaNs and the anemoi target
-==========================
-
-Ocean fields are NaN over land at every timestep. The anemoi target treats
-unexpected NaNs as a sign of missing data and will flag every date as missing
-unless you declare them:
+Declare channels that can contain land or shallow-water NaNs in the target:
 
 .. code-block:: yaml
 
-    target:
-      name: anemoi
-      variables_with_nans:
-        - temp
-        - so
-        - rho
-        - mld
-        - ohc
-        - ohc700
-        - ohc2000
+   target:
+     variables_with_nans: [rho, mld003, mld0125, ohc300]
 
-.. warning::
+An optional ``multisource_masks`` rule can align diagnostics with an ocean
+reference such as ``uo_0``. Its ``mask_variables`` list must use the exact packed
+channel names. A land mask does not remove valid shelf NaNs in fixed-depth OHC.
+MLD remains meaningful beneath sea ice; a land mask is not an open-water mask.
+Adding channels changes variable ordering and statistics: use fresh output and
+cache paths, with the same diagnostic definitions across all dataset splits.
 
-    These names are matched by substring, but *only* when the entry is not
-    itself a channel name. ``ohc`` is a channel here, so it matches only itself
-    and will not cover ``ohc700`` and ``ohc2000``. List every heat content
-    channel explicitly. ``temp`` and ``so`` are not channel names after level
-    suffixes are applied, so they do expand to ``temp_25``, ``so_25`` and so on.
+Geometry and operational limits
+-------------------------------
 
+These diagnostics use nominal, fixed depth coordinates rather than
+time-varying MOM6 ALE thicknesses or sea-surface height. Adding ``ho`` to the
+source variables does not change their geometry. Where interfaces are absent,
+the midpoint reconstruction is ``z_i[0] = 0`` and
+``z_i[k+1] = 2 * level[k] - z_i[k]``. Other center definitions require explicit
+interfaces: use ``ocean_heat_content.interfaces`` for integration and
+``fv_vertical_regrid_ocean.source_interfaces`` for regridding.
 
-Complete Recipe
-===============
+Diagnose MLD before temporal averaging or anomaly calculation; its nonlinear
+threshold rule does not commute with averaging or horizontal regridding.
+Archived-profile MLD need not equal an online MOM6 diagnostic using ALE geometry.
 
-.. code-block:: yaml
-
-    mover:
-      name: datamover
-      batch_size: 2
-
-    directories:
-      zarr: dataset.zarr
-      cache: cache
-      logs: logs
-
-    source:
-      name: gcs_replay_ocean
-      uri: gs://noaa-ufs-gefsv13replay/ufs-hr1/1.00-degree/06h-freq/zarr/mom6.zarr
-      time:
-        start: 1994-01-01T00
-        end: 1994-01-31T18
-        freq: 6h
-
-      variables:
-        - temp
-        - so
-
-      # NOTE: deliberately no 'levels' and no 'slices.sel.level'.
-      # Both subset the water column when the source is opened, before any
-      # transform runs, and the diagnostics need all 75 native levels.
-
-    transforms:
-      ocean_density:
-        name: rho
-
-      mixed_layer_depth:
-        thresholds: [0.03]
-        names: [mld]
-
-      ocean_heat_content:
-        depths: [700, 2000, null]
-
-      fv_vertical_regrid_ocean:
-        interfaces: [0, 50, 200, 1000, 6000]
-        keep_weight_var: False
-
-    target:
-      name: anemoi
-
-      variables_with_nans:
-        - temp
-        - so
-        - rho
-        - mld
-        - ohc
-        - ohc700
-        - ohc2000
-
-      forcings:
-        - cos_latitude
-        - sin_latitude
-        - cos_longitude
-        - sin_longitude
-
-      chunks:
-        time: 1
-        variable: -1
-        ensemble: 1
-        cell: -1
-
-Runnable versions of this are in the repository at
-``tests/integration/replay_ocean.base.yaml`` and
-``tests/integration/replay_ocean.anemoi.yaml``.
+MLD and OHC accept lazy Dask inputs but require a single complete ``level``
+chunk; rechunk with ``.chunk({'level': -1})`` before calling them if needed.
+Full Replay samples can consume several GiB per worker. Check memory and
+throughput with a small representative run before processing a full dataset.

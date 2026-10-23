@@ -1,21 +1,8 @@
-"""Dataset level wrappers for the ocean diagnostics.
-
-These are the functions the ``transforms`` section of a recipe reaches, one per
-recognized key: ``ocean_density``, ``mixed_layer_depth`` and
-``ocean_heat_content``. The physics lives in :mod:`ufs2arco.ocean_diagnostics`;
-this module handles variable lookup, the vertical grid, naming, metadata, and
-dask.
-
-All three run before any vertical regridding, because
-:meth:`ufs2arco.transforms.Transformer.__call__` applies operations in a fixed
-order rather than the order they appear in the yaml. That matters most for
-mixed layer depth: the mixed layer lives in the top tens of meters, so computing
-it on a handful of coarsened layers rather than the native column would smear
-the pycnocline and flatten out the field's spatial and seasonal structure.
-"""
+"""Dataset-level ocean diagnostic transforms."""
 
 import logging
-from typing import Optional
+import re
+from collections.abc import Sequence
 
 import numpy as np
 import xarray as xr
@@ -25,81 +12,187 @@ from ufs2arco.ocean_diagnostics import (
     GRAVITY,
     HEAT_CAPACITY,
     RHO_0,
+    _mixed_layer_depth_for_thresholds,
+    _ocean_heat_content_for_depths,
+    _validated_interfaces,
+    _validated_ohc_depths,
+    _validated_positive_constant,
     available_eos,
     hydrostatic_pressure,
     interfaces_from_centers,
-    mixed_layer_depth_by_density_difference,
-    ocean_heat_content as _ocean_heat_content_kernel,
     wright_density,
 )
 
 logger = logging.getLogger("ufs2arco")
 
-#: Ocean heat content in J m-2 is O(1e10)-O(1e11), which overflows fp16's
-#: ~65504 max finite value to inf. Storing in GJ m-2 instead keeps values in
-#: the tens-to-hundreds range, so a recipe can train an anemoi model in fp16
-#: without this channel blowing up.
+_TEMPERATURE_UNITS = {
+    "c",
+    "celsius",
+    "degc",
+    "degreec",
+    "degreecelsius",
+    "degreesc",
+    "degreescelsius",
+}
+_SALINITY_UNITS = {
+    "psu",
+    "practicalsalinityunit",
+    "practicalsalinityunits",
+}
+_DEPTH_UNITS = {"m", "meter", "meters", "metre", "metres"}
+_NUMERIC_SUFFIX = re.compile(r".+_\d+$")
 _JOULES_PER_GIGAJOULE = 1.0e9
+_OHC_OUTPUT_UNITS = {
+    "jm-2": ("J m-2", 1.0),
+    "jm2": ("J m-2", 1.0),
+    "gjm-2": ("GJ m-2", 1.0 / _JOULES_PER_GIGAJOULE),
+    "gjm2": ("GJ m-2", 1.0 / _JOULES_PER_GIGAJOULE),
+}
 
 
-def _resolve_eos(eos: str) -> str:
-    """Map a user facing equation of state name onto an implemented one.
+def _normalized_units(value: str) -> str:
+    """Normalize common unit spellings for validation."""
+    return (
+        value.strip()
+        .lower()
+        .replace(" ", "")
+        .replace("_", "")
+        .replace("°", "deg")
+    )
 
-    ``"wright"`` is accepted as an alias for MOM6's own default, which is
-    ``WRIGHT_FULL`` (``MOM_EOS.F90``, ``EOS_DEFAULT``).
-    """
+
+def _require_units(
+    xda: xr.DataArray,
+    valid: set[str],
+    description: str,
+    caller: str,
+) -> None:
+    """Require units compatible with a diagnostic input."""
+    units = xda.attrs.get("units")
+    if not isinstance(units, str) or _normalized_units(units) not in valid:
+        raise ValueError(
+            f"{caller}: {xda.name!r} must declare {description} units; "
+            f"got {units!r}"
+        )
+
+
+def _resolve_eos(eos: str | None, caller: str) -> str:
+    """Resolve the user-facing Wright alias."""
     if eos is None:
         return DEFAULT_EOS
-    key = str(eos).strip().lower()
-    if key == "wright":
+    name = str(eos).strip().lower()
+    if name == "wright":
         return DEFAULT_EOS
-    if key not in available_eos():
+    if name not in available_eos():
         raise NotImplementedError(
-            f"unrecognized equation of state {eos!r}; implemented options are "
-            f"{available_eos() + ('wright',)}, where 'wright' aliases {DEFAULT_EOS!r}"
+            f"{caller}: unrecognized equation of state {eos!r}; "
+            f"implemented options are {available_eos() + ('wright',)}"
         )
-    return key
+    return name
 
 
-def _require(xds: xr.Dataset, *names: str, caller: str) -> None:
-    """Raise a useful error when an expected input variable is absent."""
-    missing = [name for name in names if name not in xds]
+def _validate_inputs(
+    xds: xr.Dataset,
+    temperature: str,
+    salinity: str,
+    caller: str,
+) -> tuple[xr.DataArray, xr.DataArray]:
+    """Validate the temperature and salinity profile fields."""
+    if not isinstance(xds, xr.Dataset):
+        raise TypeError(f"{caller}: xds must be an xarray.Dataset")
+    missing = [name for name in (temperature, salinity) if name not in xds]
     if missing:
         raise KeyError(
-            f"{caller}: can't find {missing} in dataset, needed to compute this diagnostic. "
-            f"Available data variables are {sorted(xds.data_vars)}"
-        )
-    if "level" not in xds.dims:
-        raise KeyError(
-            f"{caller}: dataset has no 'level' dimension, so there is no vertical column to "
-            f"work with. Dimensions are {sorted(xds.dims)}"
+            f"{caller}: missing required variables {missing}; "
+            f"available data variables are {sorted(xds.data_vars)}"
         )
 
+    temp = xds[temperature]
+    salt = xds[salinity]
+    for xda in (temp, salt):
+        if "level" not in xda.dims:
+            raise ValueError(
+                f"{caller}: {xda.name!r} must have a 'level' dimension"
+            )
+        if not np.issubdtype(xda.dtype, np.floating):
+            raise TypeError(
+                f"{caller}: {xda.name!r} must contain floating-point data"
+            )
 
-def _levels(xds: xr.Dataset, caller: str) -> np.ndarray:
-    """Return the vertical coordinate as increasing depths, or explain why not."""
-    if "level" not in xds.coords:
-        raise KeyError(
-            f"{caller}: dataset has a 'level' dimension but no 'level' coordinate, so layer "
-            "depths are unknown"
-        )
-    level = np.asarray(xds["level"].values, dtype=float)
-    if level.ndim != 1:
-        raise ValueError(f"{caller}: expected a 1D 'level' coordinate, got shape {level.shape}")
-    if not np.all(np.diff(level) > 0):
+    if temp.dims != salt.dims or temp.sizes != salt.sizes:
         raise ValueError(
-            f"{caller}: 'level' must increase monotonically with depth. Got a coordinate "
-            f"running from {level[0]:g} to {level[-1]:g}"
+            f"{caller}: temperature and salinity must have identical "
+            f"dimensions and sizes; got {temp.sizes} and {salt.sizes}"
+        )
+
+    _require_units(temp, _TEMPERATURE_UNITS, "degrees Celsius", caller)
+    _require_units(salt, _SALINITY_UNITS, "practical salinity (psu)", caller)
+    return temp, salt
+
+
+def _validate_temperature(
+    xds: xr.Dataset,
+    temperature: str,
+    caller: str,
+) -> xr.DataArray:
+    """Validate one potential-temperature profile field."""
+    if not isinstance(xds, xr.Dataset):
+        raise TypeError(f"{caller}: xds must be an xarray.Dataset")
+    if temperature not in xds:
+        raise KeyError(
+            f"{caller}: missing required variable {temperature!r}; "
+            f"available data variables are {sorted(xds.data_vars)}"
+        )
+    temp = xds[temperature]
+    if "level" not in temp.dims:
+        raise ValueError(
+            f"{caller}: {temperature!r} must have a 'level' dimension"
+        )
+    if not np.issubdtype(temp.dtype, np.floating):
+        raise TypeError(
+            f"{caller}: {temperature!r} must contain floating-point data"
+        )
+    _require_units(temp, _TEMPERATURE_UNITS, "degrees Celsius", caller)
+    return temp
+
+
+def _validate_level(
+    xds: xr.Dataset,
+    caller: str,
+    minimum_levels: int = 1,
+) -> np.ndarray:
+    """Return finite, positive-down layer-center depths in metres."""
+    if "level" not in xds.dims or "level" not in xds.coords:
+        raise KeyError(
+            f"{caller}: dataset must have a 'level' dimension and coordinate"
+        )
+    level_coord = xds["level"]
+    units = level_coord.attrs.get("units")
+    if units is not None:
+        if not isinstance(units, str) or _normalized_units(units) not in _DEPTH_UNITS:
+            raise ValueError(
+                f"{caller}: 'level' must be measured in metres when units "
+                f"are present; got {units!r}"
+            )
+
+    level = np.asarray(level_coord.values, dtype=np.float64)
+    if level.ndim != 1:
+        raise ValueError(
+            f"{caller}: expected a 1D 'level' coordinate, got {level.shape}"
+        )
+    if level.size < minimum_levels:
+        raise ValueError(
+            f"{caller}: at least {minimum_levels} vertical level(s) are required, "
+            f"got {level.size}"
+        )
+    if not np.all(np.isfinite(level)):
+        raise ValueError(f"{caller}: 'level' must contain only finite depths")
+    if np.any(level < 0.0) or not np.all(np.diff(level) > 0.0):
+        raise ValueError(
+            f"{caller}: 'level' must be nonnegative and strictly increase "
+            "with depth"
         )
     return level
-
-
-def _log_grid(caller: str, level: np.ndarray) -> None:
-    """Record the vertical grid actually used, so runs are auditable from the log."""
-    logger.info(
-        f"{caller}: using {level.size} vertical levels spanning "
-        f"{level[0]:.4g} - {level[-1]:.4g} m"
-    )
 
 
 def check_vertical_resolution(
@@ -108,412 +201,671 @@ def check_vertical_resolution(
     min_levels_in_search: int = 10,
     max_level_spacing: float = 25.0,
     caller: str = "check_vertical_resolution",
+    expected_level_count: int | None = 75,
+    minimum_deepest_level: float | None = 5_000.0,
 ) -> str:
-    """Refuse a vertical grid too coarse to resolve a mixed layer.
+    """Reject an incomplete or upper-ocean grid too coarse to diagnose MLD."""
+    if not np.isfinite(mld_search_depth) or mld_search_depth <= 0.0:
+        raise ValueError(f"{caller}: mld_search_depth must be finite and positive")
+    if (
+        isinstance(min_levels_in_search, bool)
+        or not isinstance(min_levels_in_search, (int, np.integer))
+        or min_levels_in_search < 2
+    ):
+        raise ValueError(f"{caller}: min_levels_in_search must be an integer >= 2")
+    if not np.isfinite(max_level_spacing) or max_level_spacing <= 0.0:
+        raise ValueError(f"{caller}: max_level_spacing must be finite and positive")
 
-    Mixed layer depth can never be resolved more finely than the layer spacing.
-    On a grid with, say, interfaces at 0, 5, 20, 60, 100 and 200 m, a pycnocline
-    anywhere between 60 and 100 m is averaged over a 40 m layer, the surface to
-    layer density difference is diluted, and the threshold ends up crossed in the
-    same layer nearly everywhere. The result is a smooth looking field with the
-    wrong values and no seasonal cycle.
+    if expected_level_count is not None:
+        if (
+            isinstance(expected_level_count, bool)
+            or not isinstance(expected_level_count, (int, np.integer))
+            or expected_level_count < 2
+        ):
+            raise ValueError(
+                f"{caller}: expected_level_count must be an integer >= 2 "
+                "or null"
+            )
+        if level.size != int(expected_level_count):
+            raise ValueError(
+                f"{caller}: found {level.size} vertical levels, but the "
+                f"complete Replay column has {expected_level_count}. Ocean MLD "
+                "requires the full native water column; remove source.levels or "
+                "source.slices.sel.level."
+            )
 
-    Checking only that the surface is present does not catch this, since that
-    grid's topmost center is 2.5 m. The test has to be on spacing.
+    if minimum_deepest_level is not None:
+        if (
+            not np.isfinite(minimum_deepest_level)
+            or minimum_deepest_level <= 0.0
+        ):
+            raise ValueError(
+                f"{caller}: minimum_deepest_level must be finite and "
+                "positive or null"
+            )
+        if level[-1] < float(minimum_deepest_level):
+            raise ValueError(
+                f"{caller}: deepest level is {level[-1]:.4g} m, but the "
+                f"native Replay grid must extend to at least "
+                f"{minimum_deepest_level:g} m so bottom fallback is not changed "
+                "by a truncated source column."
+            )
 
-    :meth:`ufs2arco.transforms.Transformer.__call__` already makes it impossible
-    to express "regrid, then compute mixed layer depth" in a recipe. This guard
-    covers the paths ordering cannot reach: ``source.levels`` and
-    ``source.slices.sel.level`` subset the column in ``Source.__init__``, before
-    a ``Transformer`` exists, and ``source.uri`` may point at an already
-    coarsened store.
-
-    For calibration, the replay native grid has 30 levels above 200 m with a
-    maximum spacing of 17.44 m, and a topmost center at 0.52 m, so it clears the
-    defaults with room to spare. Note that the same grid coarsens to 26.55 m
-    spacing by 300 m, which is why the search depth stops at 200 m rather than
-    reaching deeper.
-
-    Args:
-        level (numpy.ndarray): layer center depths, increasing [m]
-        mld_search_depth (float, optional): the range a mixed layer is expected
-            to live in [m]
-        min_levels_in_search (int, optional): minimum levels required above
-            ``mld_search_depth``
-        max_level_spacing (float, optional): maximum tolerated spacing between
-            consecutive levels within that range [m]
-        caller (str, optional): name used in error messages
-
-    Returns:
-        str: a description of the grid that passed, for use as a variable attr
-
-    Raises:
-        ValueError: if the grid is too coarse or too shallow
-    """
+    upper_ocean = level[level < float(mld_search_depth)]
     hint = (
-        "This usually means the column was subset before any transform ran, via "
-        "'source.levels' or 'source.slices.sel.level', or that 'source.uri' points at an "
-        "already vertically coarsened store. Ocean diagnostics need the native column."
+        "Ocean MLD requires the native water column; remove source.levels or "
+        "source.slices.sel.level and do not use a pre-coarsened source store."
     )
-
-    search = level[level < mld_search_depth]
-    if search.size < min_levels_in_search:
+    if upper_ocean.size < int(min_levels_in_search):
         raise ValueError(
-            f"{caller}: found only {search.size} vertical level(s) above {mld_search_depth:g} m, "
-            f"but at least {min_levels_in_search} are needed to resolve a mixed layer. "
-            f"The full coordinate spans {level[0]:.4g} - {level[-1]:.4g} m across {level.size} "
-            f"level(s). {hint}"
+            f"{caller}: found {upper_ocean.size} levels above "
+            f"{mld_search_depth:g} m, but at least {min_levels_in_search} are "
+            f"required. {hint}"
         )
 
-    spacing = np.diff(search)
-    worst = float(spacing.max())
-    if worst > max_level_spacing:
+    spacing = np.diff(upper_ocean)
+    worst_spacing = float(spacing.max())
+    if worst_spacing > float(max_level_spacing):
         index = int(np.argmax(spacing))
         raise ValueError(
-            f"{caller}: vertical spacing reaches {worst:.4g} m (between {search[index]:.4g} m "
-            f"and {search[index + 1]:.4g} m), which exceeds the {max_level_spacing:g} m limit "
-            f"for resolving a mixed layer. Mixed layer depth cannot be resolved more finely "
-            f"than the layer spacing. {hint}"
+            f"{caller}: vertical spacing reaches {worst_spacing:.4g} m "
+            f"between {upper_ocean[index]:.4g} and "
+            f"{upper_ocean[index + 1]:.4g} m, exceeding the "
+            f"{max_level_spacing:g} m limit. {hint}"
         )
 
     return (
-        f"validated vertical grid: {search.size} levels above {mld_search_depth:g} m, "
-        f"spacing {float(spacing.min()):.4g} - {worst:.4g} m, topmost center {level[0]:.4g} m"
+        f"validated complete native grid: {level.size} levels spanning "
+        f"{level[0]:.4g}-{level[-1]:.4g} m; {upper_ocean.size} levels above "
+        f"{mld_search_depth:g} m, spacing {float(spacing.min()):.4g}-"
+        f"{worst_spacing:.4g} m"
     )
+
+
+def _validate_level_chunks(caller: str, *arrays: xr.DataArray) -> None:
+    """Reject split vertical Dask chunks rather than allowing hidden rechunking."""
+    for xda in arrays:
+        if xda.chunks is None:
+            continue
+        level_chunks = xda.chunksizes.get("level", ())
+        if len(level_chunks) > 1:
+            raise ValueError(
+                f"{caller}: {xda.name!r} has split 'level' chunks "
+                f"{level_chunks}; rechunk the native column with "
+                ".chunk({'level': -1}) before applying the transform"
+            )
+
+
+def _as_thresholds(
+    thresholds: Sequence[float] | np.ndarray | float,
+) -> np.ndarray:
+    """Normalize and validate configured density thresholds."""
+    if isinstance(thresholds, (str, bytes)):
+        raise TypeError("mixed_layer_depth: thresholds must be numeric")
+    if isinstance(thresholds, np.ndarray):
+        values = np.asarray(thresholds, dtype=np.float64)
+    elif isinstance(thresholds, Sequence):
+        values = np.asarray(list(thresholds), dtype=np.float64)
+    else:
+        values = np.asarray([thresholds], dtype=np.float64)
+    if values.ndim != 1 or values.size == 0:
+        raise ValueError("mixed_layer_depth: thresholds must be a non-empty 1D sequence")
+    if not np.all(np.isfinite(values)) or np.any(values <= 0.0):
+        raise ValueError("mixed_layer_depth: thresholds must be finite and positive")
+    if np.unique(values).size != values.size:
+        raise ValueError("mixed_layer_depth: thresholds must not contain duplicates")
+    return values
+
+
+def _resolve_names(
+    names: Sequence[str] | str | None,
+    threshold_count: int,
+    xds: xr.Dataset,
+) -> list[str]:
+    """Validate output names before the dataset is mutated."""
+    if names is None:
+        if threshold_count != 1:
+            raise ValueError(
+                "mixed_layer_depth: multiple thresholds require one explicit "
+                "output name per threshold"
+            )
+        output_names = ["mld"]
+    elif isinstance(names, str):
+        output_names = [names]
+    elif not isinstance(names, Sequence):
+        raise TypeError(
+            "mixed_layer_depth: names must be a string or sequence of strings"
+        )
+    else:
+        output_names = list(names)
+
+    return _validate_output_names(
+        output_names,
+        expected_count=threshold_count,
+        xds=xds,
+        caller="mixed_layer_depth",
+        value_description="thresholds",
+    )
+
+
+def _validate_output_names(
+    output_names: Sequence[str],
+    expected_count: int,
+    xds: xr.Dataset,
+    caller: str,
+    value_description: str,
+) -> list[str]:
+    """Validate derived channel names before mutating the dataset."""
+    output_names = list(output_names)
+    if len(output_names) != expected_count:
+        raise ValueError(
+            f"{caller}: got {len(output_names)} output names for "
+            f"{expected_count} {value_description}"
+        )
+    if not all(isinstance(name, str) and name.strip() for name in output_names):
+        raise TypeError(f"{caller}: output names must be non-empty strings")
+    padded = [name for name in output_names if name != name.strip()]
+    if padded:
+        raise ValueError(
+            f"{caller}: output names must not contain surrounding "
+            f"whitespace: {padded}"
+        )
+    if len(set(output_names)) != len(output_names):
+        raise ValueError(f"{caller}: output names must be unique")
+
+    collisions = [name for name in output_names if name in xds.variables]
+    if collisions:
+        raise ValueError(
+            f"{caller}: output variables already exist: {collisions}"
+        )
+    unsafe = [name for name in output_names if _NUMERIC_SUFFIX.fullmatch(name)]
+    if unsafe:
+        raise ValueError(
+            f"{caller}: output names must not end with an underscore "
+            f"followed by digits because Anemoi treats that as a level suffix: {unsafe}"
+        )
+    return output_names
 
 
 def ocean_density(
     xds: xr.Dataset,
-    temperature: Optional[str] = "temp",
-    salinity: Optional[str] = "so",
-    name: Optional[str] = "rho",
-    ref_pressure: Optional[float] = 0.0,
-    subtract_1000: Optional[bool] = False,
-    eos: Optional[str] = "wright",
+    temperature: str = "temp",
+    salinity: str = "so",
+    name: str = "rho",
+    ref_pressure: float | None = 0.0,
+    subtract_1000: bool = False,
+    eos: str | None = "wright",
 ) -> xr.Dataset:
-    """Add seawater density as a 3D field on the existing vertical levels.
+    """Append Wright (1997) seawater density on the native ocean levels.
 
-    Uses the Wright (1997) equation of state ported from MOM6, see
-    :func:`ufs2arco.ocean_diagnostics.wright_density`. This is elementwise, so it
-    stays lazy under dask without any special handling.
-
-    With ``ref_pressure=0`` the result is potential density referenced to the
-    surface, the same quantity mixed layer depth is defined on. With
-    ``ref_pressure=None`` it is in situ density, using a Boussinesq
-    ``p = rho0*g*z`` built from the ``level`` coordinate.
-
-    Because this keeps the ``level`` dimension, the new variable flows through the
-    rest of the pipeline exactly like temperature: a later
-    ``fv_vertical_regrid_ocean`` thickness averages and bottom masks it, and the
-    anemoi target expands it into ``rho_5``, ``rho_100`` and so on.
-
-    Args:
-        xds (xr.Dataset): with ``temperature`` and ``salinity`` on a ``level`` dim
-        temperature (str, optional): potential temperature variable [degC]
-        salinity (str, optional): practical salinity variable [psu]
-        name (str, optional): name for the new variable
-        ref_pressure (float, optional): reference pressure [Pa], or None for in situ
-        subtract_1000 (bool, optional): emit sigma, i.e. density minus 1000 kg m-3
-        eos (str, optional): equation of state, see :func:`_resolve_eos`
-
-    Returns:
-        xds (xr.Dataset): with the density variable added
+    A finite ``ref_pressure`` produces potential density referenced to that
+    pressure. ``None`` produces approximate in-situ density using the
+    Boussinesq pressure ``RHO_0 * GRAVITY * level``. Density is diagnosed before
+    finite-volume regridding and remains a three-dimensional field.
     """
     caller = "ocean_density"
-    _require(xds, temperature, salinity, caller=caller)
-    if name in xds:
-        raise ValueError(
-            f"{caller}: {name!r} is already in the dataset; choose a different 'name'"
-        )
-    eos = _resolve_eos(eos)
-    level = _levels(xds, caller)
-    _log_grid(caller, level)
+    temp, salt = _validate_inputs(xds, temperature, salinity, caller)
+    level = _validate_level(xds, caller)
+    output_name = _validate_output_names(
+        [name],
+        expected_count=1,
+        xds=xds,
+        caller=caller,
+        value_description="density fields",
+    )[0]
+    resolved_eos = _resolve_eos(eos, caller)
+    if not isinstance(subtract_1000, (bool, np.bool_)):
+        raise TypeError(f"{caller}: subtract_1000 must be a boolean")
 
     if ref_pressure is None:
         pressure = xr.DataArray(
             hydrostatic_pressure(level),
             coords={"level": xds["level"]},
-            dims="level",
+            dims=("level",),
         )
-        reference = f"in situ, hydrostatic p = {RHO_0:g}*{GRAVITY:g}*z"
+        density_kind = "in_situ"
+        pressure_description = (
+            f"hydrostatic p = {RHO_0:g} kg m-3 * {GRAVITY:g} m s-2 * level"
+        )
     else:
-        pressure = float(ref_pressure)
-        reference = f"potential density referenced to {pressure:g} Pa"
+        if isinstance(ref_pressure, (bool, np.bool_)):
+            raise TypeError(
+                f"{caller}: ref_pressure must be a real number or null"
+            )
+        try:
+            pressure = float(ref_pressure)
+        except (TypeError, ValueError) as error:
+            raise TypeError(
+                f"{caller}: ref_pressure must be a real number or null"
+            ) from error
+        if not np.isfinite(pressure) or pressure < 0.0:
+            raise ValueError(
+                f"{caller}: ref_pressure must be finite and nonnegative"
+            )
+        density_kind = "potential"
+        pressure_description = f"constant reference pressure {pressure:g} Pa"
 
-    rho = wright_density(xds[temperature], xds[salinity], pressure, eos=eos)
+    density = xr.apply_ufunc(
+        wright_density,
+        temp,
+        salt,
+        pressure,
+        kwargs={"eos": resolved_eos},
+        dask="parallelized",
+        output_dtypes=[np.float64],
+    )
     if subtract_1000:
-        rho = rho - 1000.0
+        density = density - 1000.0
 
-    rho.attrs = {
-        "long_name": "sea water sigma" if subtract_1000 else "sea water density",
+    density = density.rename(output_name)
+    density.attrs = {
+        "diagnostic": "ocean_density",
+        "long_name": (
+            "sea water sigma" if subtract_1000 else "sea water density"
+        ),
         "units": "kg m-3",
         "description": (
-            f"seawater density from the {eos} equation of state ({reference})"
+            f"{density_kind} seawater density from the {resolved_eos} equation "
+            f"of state using {pressure_description}"
             + (", minus 1000 kg m-3" if subtract_1000 else "")
-            + f", computed from {temperature} and {salinity}"
         ),
-        "equation_of_state": eos,
-        "provenance": "Wright (1997), ported from MOM6 MOM_EOS_Wright_full.F90 / _red.F90",
+        "density_kind": density_kind,
+        "equation_of_state": resolved_eos,
+        "subtract_1000": bool(subtract_1000),
+        "sigma_offset_kg_m3": 1000.0 if subtract_1000 else 0.0,
+        "source_temperature": temperature,
+        "source_salinity": salinity,
+        "vertical_coordinate": "nominal_layer_center_depth",
+        "source_vertical_level_count": int(level.size),
+        "land_policy": "NaN where temperature or salinity is invalid",
+        "missing_policy": "elementwise finite temperature and salinity",
+        "provenance": (
+            "Wright (1997), ported from MOM6 MOM_EOS_Wright_full.F90 / "
+            "MOM_EOS_Wright_red.F90"
+        ),
     }
-    xds[name] = rho
+    if ref_pressure is None:
+        density.attrs.update(
+            {
+                "pressure_approximation": "p = rho0 * gravity * nominal depth",
+                "reference_density_kg_m3": float(RHO_0),
+                "gravity_m_s2": float(GRAVITY),
+            }
+        )
+    else:
+        density.attrs["reference_pressure_pa"] = float(pressure)
+
+    xds[output_name] = density
     return xds
 
 
 def mixed_layer_depth(
     xds: xr.Dataset,
-    temperature: Optional[str] = "temp",
-    salinity: Optional[str] = "so",
-    thresholds: Optional[list | tuple | float] = (0.03,),
-    names: Optional[list | tuple | str] = None,
-    ref_pressure: Optional[float] = 0.0,
-    eos: Optional[str] = "wright",
-    pathological_to_nan: Optional[bool] = True,
-    mld_search_depth: Optional[float] = 200.0,
-    min_levels_in_search: Optional[int] = 10,
-    max_level_spacing: Optional[float] = 25.0,
+    temperature: str = "temp",
+    salinity: str = "so",
+    thresholds: Sequence[float] | np.ndarray | float = (0.03,),
+    names: Sequence[str] | str | None = None,
+    ref_pressure: float = 0.0,
+    eos: str | None = "wright",
+    pathological_to_nan: bool = True,
+    mld_search_depth: float = 200.0,
+    min_levels_in_search: int = 10,
+    max_level_spacing: float = 25.0,
+    expected_level_count: int | None = 75,
+    minimum_deepest_level: float | None = 5_000.0,
 ) -> xr.Dataset:
-    """Add mixed layer depth, from MOM6's density difference criterion.
+    """Append MOM6 density-threshold mixed layer depth fields.
 
-    See :func:`ufs2arco.ocean_diagnostics.mixed_layer_depth_by_density_difference`
-    for the algorithm and its two deliberate deviations from MOM6.
-
-    The vertical grid is validated before any data is touched, so a recipe that
-    would produce a degenerate field fails immediately with a specific message
-    rather than writing something that looks plausible. See
-    :func:`check_vertical_resolution`.
-
-    Output names deliberately avoid a trailing ``_<digits>``: the anemoi target
-    reads that pattern as a vertical level, so MOM6's own ``MLD_003`` would be
-    silently reinterpreted as "MLD at level 3". The default for a single
-    threshold is ``mld``; with several thresholds, pass ``names`` explicitly.
-
-    Args:
-        xds (xr.Dataset): with ``temperature`` and ``salinity`` on a ``level`` dim
-        temperature (str, optional): potential temperature variable [degC]
-        salinity (str, optional): practical salinity variable [psu]
-        thresholds (float or sequence, optional): density thresholds [kg m-3].
-            MOM6 uses 0.03 for ``MLD_003`` and 0.125 for ``MLD_0125``.
-        names (str or sequence, optional): output names, one per threshold
-        ref_pressure (float, optional): reference pressure [Pa]; only 0 is implemented
-        eos (str, optional): equation of state, see :func:`_resolve_eos`
-        pathological_to_nan (bool, optional): map MOM6's residual zeros to NaN
-        mld_search_depth (float, optional): guard, see :func:`check_vertical_resolution`
-        min_levels_in_search (int, optional): guard, as above
-        max_level_spacing (float, optional): guard, as above
-
-    Returns:
-        xds (xr.Dataset): with one mixed layer depth variable per threshold
+    Temperature must be potential temperature in degrees Celsius, salinity must
+    be practical salinity in psu, and ``level`` must contain native positive-down
+    layer-center depths in metres. Every requested threshold is calculated by a
+    single memory-bounded vertical pass before any later vertical regridding.
     """
-    caller = "mixed_layer_depth"
-    _require(xds, temperature, salinity, caller=caller)
-    eos = _resolve_eos(eos)
-    level = _levels(xds, caller)
-    _log_grid(caller, level)
-
+    temp, salt = _validate_inputs(
+        xds,
+        temperature,
+        salinity,
+        "mixed_layer_depth",
+    )
+    level = _validate_level(xds, "mixed_layer_depth", minimum_levels=2)
     grid_description = check_vertical_resolution(
         level,
         mld_search_depth=mld_search_depth,
         min_levels_in_search=min_levels_in_search,
         max_level_spacing=max_level_spacing,
-        caller=caller,
+        caller="mixed_layer_depth",
+        expected_level_count=expected_level_count,
+        minimum_deepest_level=minimum_deepest_level,
+    )
+    _validate_level_chunks("mixed_layer_depth", temp, salt)
+
+    density_thresholds = _as_thresholds(thresholds)
+    output_names = _resolve_names(names, density_thresholds.size, xds)
+    resolved_eos = _resolve_eos(eos, "mixed_layer_depth")
+    try:
+        reference_pressure = float(ref_pressure)
+    except (TypeError, ValueError) as error:
+        raise NotImplementedError(
+            "mixed_layer_depth: only ref_pressure=0 is implemented"
+        ) from error
+    if not np.isfinite(reference_pressure) or reference_pressure != 0.0:
+        raise NotImplementedError(
+            "mixed_layer_depth: only ref_pressure=0 is implemented; "
+            f"got {ref_pressure!r}"
+        )
+    if not isinstance(pathological_to_nan, (bool, np.bool_)):
+        raise TypeError("mixed_layer_depth: pathological_to_nan must be a boolean")
+
+    logger.info(
+        "mixed_layer_depth: using %d levels spanning %.4g-%.4g m for thresholds %s",
+        level.size,
+        level[0],
+        level[-1],
+        density_thresholds.tolist(),
     )
 
-    thresholds = _as_sequence(thresholds)
-    names = _resolve_names(names, thresholds, default_single="mld", caller=caller, kind="threshold")
+    threshold_dim = "_mld_threshold"
+    diagnosed = xr.apply_ufunc(
+        _mixed_layer_depth_for_thresholds,
+        temp,
+        salt,
+        input_core_dims=[["level"], ["level"]],
+        output_core_dims=[[threshold_dim]],
+        kwargs={
+            "depth": level,
+            "thresholds": density_thresholds,
+            "ref_pressure": reference_pressure,
+            "eos": resolved_eos,
+            "pathological_to_nan": pathological_to_nan,
+        },
+        dask="parallelized",
+        output_dtypes=[np.float64],
+        dask_gufunc_kwargs={
+            "output_sizes": {threshold_dim: density_thresholds.size},
+            "allow_rechunk": False,
+        },
+    )
+    diagnosed = diagnosed.assign_coords({threshold_dim: density_thresholds})
 
-    for name, threshold in zip(names, thresholds):
-        if name in xds:
-            raise ValueError(
-                f"{caller}: {name!r} is already in the dataset; choose a different name"
-            )
-        result = xr.apply_ufunc(
-            mixed_layer_depth_by_density_difference,
-            xds[temperature],
-            xds[salinity],
-            kwargs={
-                "depth": level,
-                "density_diff": float(threshold),
-                "ref_pressure": ref_pressure,
-                "eos": eos,
-                "pathological_to_nan": pathological_to_nan,
-            },
-            input_core_dims=[["level"], ["level"]],
-            output_core_dims=[[]],
-            dask="parallelized",
-            output_dtypes=[float],
-        )
-        result.attrs = {
+    for index, (name, threshold) in enumerate(
+        zip(output_names, density_thresholds, strict=True)
+    ):
+        output = diagnosed.isel({threshold_dim: index}, drop=True).rename(name)
+        output.attrs = {
+            "diagnostic": "mixed_layer_depth",
             "long_name": "ocean mixed layer depth",
             "units": "m",
             "description": (
-                f"depth where potential density exceeds the near surface value by "
-                f"{float(threshold):g} kg m-3, using the {eos} equation of state"
+                "first depth where potential density exceeds the top-layer "
+                f"value by {threshold:g} kg m-3"
             ),
             "density_threshold": float(threshold),
-            "equation_of_state": eos,
+            "density_threshold_units": "kg m-3",
+            "reference_pressure": reference_pressure,
+            "reference_pressure_pa": reference_pressure,
+            "reference_pressure_units": "Pa",
+            "reference_density_layer": "top_model_layer",
+            "equation_of_state": resolved_eos,
+            "source_temperature": temperature,
+            "source_salinity": salinity,
             "vertical_grid": grid_description,
+            "vertical_coordinate": "nominal_layer_center_depth",
+            "source_vertical_level_count": int(level.size),
+            "land_policy": "NaN where the surface temperature or salinity is invalid",
+            "bottom_policy": "deepest valid layer center when the threshold is not crossed",
+            "missing_policy": (
+                "joint finite temperature and salinity from the top model layer "
+                "until the first invalid level"
+            ),
+            "pathological_policy": (
+                "NaN" if pathological_to_nan else "MOM6-compatible zero"
+            ),
             "provenance": (
-                "MOM6 diagnoseMLDbyDensityDifference, MOM_diagnose_MLD.F90"
+                "MOM6 diagnoseMLDbyDensityDifference (MOM_diagnose_MLD.F90) "
+                "with Wright (1997) potential density"
             ),
         }
-        xds[name] = result
+        xds[name] = output
 
     return xds
+
+
+def _as_ohc_depths(
+    depths: Sequence[float | None] | np.ndarray | float | None,
+) -> tuple[float | None, ...]:
+    """Normalize configured integration depths for the OHC kernel."""
+    if isinstance(depths, (str, bytes)):
+        raise TypeError(
+            "ocean_heat_content: depths must be numeric, null, or a sequence"
+        )
+    if depths is None:
+        candidates = [None]
+    elif isinstance(depths, np.ndarray):
+        candidates = [depths.item()] if depths.ndim == 0 else depths
+    elif isinstance(depths, Sequence):
+        candidates = list(depths)
+    else:
+        candidates = [depths]
+    return _validated_ohc_depths(candidates)
+
+
+def _format_ohc_depth(depth: float) -> str:
+    """Format a validated depth for an unambiguous Anemoi channel name."""
+    value = float(depth)
+    if value.is_integer():
+        return str(int(value))
+    return f"{value:g}".replace(".", "p")
+
+
+def _resolve_ohc_names(
+    names: Sequence[str] | str | None,
+    depths: tuple[float | None, ...],
+    xds: xr.Dataset,
+) -> list[str]:
+    """Resolve and validate one OHC channel name per integration depth."""
+    if names is None:
+        output_names = [
+            "ohc" if depth is None else f"ohc{_format_ohc_depth(depth)}"
+            for depth in depths
+        ]
+    elif isinstance(names, str):
+        output_names = [names]
+    elif not isinstance(names, Sequence):
+        raise TypeError(
+            "ocean_heat_content: names must be a string or sequence of strings"
+        )
+    else:
+        output_names = list(names)
+    return _validate_output_names(
+        output_names,
+        expected_count=len(depths),
+        xds=xds,
+        caller="ocean_heat_content",
+        value_description="depths",
+    )
+
+
+def _resolve_ohc_output_units(output_units: str) -> tuple[str, float]:
+    """Return canonical OHC units and the scale from J m-2."""
+    if not isinstance(output_units, str):
+        raise TypeError("ocean_heat_content: output_units must be a string")
+    key = (
+        output_units.strip()
+        .lower()
+        .replace(" ", "")
+        .replace("_", "")
+        .replace("^", "")
+        .replace("/", "")
+    )
+    try:
+        return _OHC_OUTPUT_UNITS[key]
+    except KeyError as error:
+        raise ValueError(
+            "ocean_heat_content: output_units must describe 'GJ m-2' or "
+            f"'J m-2'; got {output_units!r}"
+        ) from error
 
 
 def ocean_heat_content(
     xds: xr.Dataset,
-    temperature: Optional[str] = "temp",
-    depths: Optional[list | tuple | float] = (700, 2000, None),
-    names: Optional[list | tuple | str] = None,
-    interfaces: Optional[list | tuple] = None,
-    rho0: Optional[float] = RHO_0,
-    heat_capacity: Optional[float] = HEAT_CAPACITY,
-    require_full_depth: Optional[bool] = True,
+    temperature: str = "temp",
+    depths: Sequence[float | None] | np.ndarray | float | None = (
+        700.0,
+        2000.0,
+        None,
+    ),
+    names: Sequence[str] | str | None = None,
+    interfaces: Sequence[float] | np.ndarray | None = None,
+    rho0: float = RHO_0,
+    heat_capacity: float = HEAT_CAPACITY,
+    require_full_depth: bool = True,
+    output_units: str = "GJ m-2",
 ) -> xr.Dataset:
-    """Add depth integrated ocean heat content.
+    """Append finite-volume ocean heat content for one or more depths.
 
-    See :func:`ufs2arco.ocean_diagnostics.ocean_heat_content` for the integral and
-    its partial cell weighting.
-
-    Layer interfaces default to being reconstructed from the ``level``
-    coordinate via
-    :func:`ufs2arco.ocean_diagnostics.interfaces_from_centers`, so this works for
-    any z-coordinate ocean source without a hard coded depth table. Pass
-    ``interfaces`` to override.
-
-    Default names are ``ohc300``, ``ohc1000`` and, for the full column, ``ohc``.
-    As with mixed layer depth these avoid a trailing ``_<digits>``, which the
-    anemoi target would read as a vertical level.
-
-    The result is stored in GJ m-2, not the J m-2 that
-    :func:`ufs2arco.ocean_diagnostics.ocean_heat_content` and MOM6 itself use.
-    Heat content in J m-2 is O(1e10)-O(1e11), which overflows fp16 to inf;
-    GJ m-2 keeps it in the tens-to-hundreds range, so it survives fp16
-    training like every other channel.
-
-    Args:
-        xds (xr.Dataset): with ``temperature`` on a ``level`` dim
-        temperature (str, optional): potential temperature variable [degC]
-        depths (float or sequence, optional): integration depths [m]; None means
-            the full water column
-        names (str or sequence, optional): output names, one per depth
-        interfaces (sequence, optional): explicit interface depths [m],
-            ``len(level) + 1`` of them
-        rho0 (float, optional): Boussinesq reference density [kg m-3]
-        heat_capacity (float, optional): heat capacity of seawater [J kg-1 K-1]
-        require_full_depth (bool, optional): NaN where the column is shallower
-            than the requested depth
-
-    Returns:
-        xds (xr.Dataset): with one heat content variable per depth
+    The memory-bounded kernel computes ``rho0 * Cp * integral(temp dz)`` in
+    J m-2 over the native, contiguous water column. This wrapper scales the
+    result to GJ m-2 by default before Anemoi can cast it for storage. Set
+    ``output_units`` to ``"J m-2"`` only when the larger magnitude is desired.
     """
     caller = "ocean_heat_content"
-    _require(xds, temperature, caller=caller)
-    level = _levels(xds, caller)
-    _log_grid(caller, level)
+    temp = _validate_temperature(xds, temperature, caller)
+    level = _validate_level(xds, caller)
+    _validate_level_chunks(caller, temp)
+    integration_depths = _as_ohc_depths(depths)
+    output_names = _resolve_ohc_names(names, integration_depths, xds)
+    canonical_units, scale_from_joules = _resolve_ohc_output_units(output_units)
+    density = _validated_positive_constant("ocean_heat_content: rho0", rho0)
+    capacity = _validated_positive_constant(
+        "ocean_heat_content: heat_capacity",
+        heat_capacity,
+    )
+    if not isinstance(require_full_depth, (bool, np.bool_)):
+        raise TypeError(f"{caller}: require_full_depth must be a boolean")
+    require_full_depth = bool(require_full_depth)
 
     if interfaces is None:
-        z_i = interfaces_from_centers(level)
-    else:
-        z_i = np.asarray(interfaces, dtype=float)
-        if z_i.size != level.size + 1:
-            raise ValueError(
-                f"{caller}: got {z_i.size} interfaces for {level.size} levels, "
-                f"expected {level.size + 1}"
-            )
-
-    depths = _as_sequence(depths)
-    names = _resolve_names(names, depths, default_single=None, caller=caller, kind="depth")
-
-    for name, max_depth in zip(names, depths):
-        if name in xds:
-            raise ValueError(
-                f"{caller}: {name!r} is already in the dataset; choose a different name"
-            )
-        if max_depth is not None and float(max_depth) > z_i[-1]:
-            logger.warning(
-                f"{caller}: requested depth {float(max_depth):g} m is below the deepest "
-                f"interface at {z_i[-1]:.4g} m, so {name!r} will be NaN everywhere when "
-                "require_full_depth is True"
-            )
-        result = xr.apply_ufunc(
-            _ocean_heat_content_kernel,
-            xds[temperature],
-            kwargs={
-                "interfaces": z_i,
-                "max_depth": None if max_depth is None else float(max_depth),
-                "rho0": rho0,
-                "heat_capacity": heat_capacity,
-                "require_full_depth": require_full_depth,
-            },
-            input_core_dims=[["level"]],
-            output_core_dims=[[]],
-            dask="parallelized",
-            output_dtypes=[float],
+        interface_values = interfaces_from_centers(level)
+        interface_source = "reconstructed_from_level_centers"
+        vertical_coordinate = (
+            "nominal_layer_interfaces_reconstructed_from_level"
         )
-        # The kernel returns J m-2, matching MOM6. Store GJ m-2 instead: J m-2 is
-        # O(1e10)-O(1e11), which overflows fp16 (max ~65504) to inf, and GJ m-2
-        # keeps values in the tens-to-hundreds range.
-        result = result / _JOULES_PER_GIGAJOULE
-        span = "the full water column" if max_depth is None else f"0 - {float(max_depth):g} m"
-        result.attrs = {
+    else:
+        interface_values = _validated_interfaces(interfaces, level.size)
+        if np.any(level <= interface_values[:-1]) or np.any(
+            level >= interface_values[1:]
+        ):
+            raise ValueError(
+                f"{caller}: every level center must lie strictly within its explicit "
+                "interface pair"
+            )
+        interface_source = "explicit"
+        vertical_coordinate = "explicit_nominal_layer_interfaces"
+
+    if canonical_units == "J m-2":
+        logger.warning(
+            "%s: J m-2 values are commonly 1e10-1e11 and are unsafe for "
+            "downstream fp16; prefer output_units='GJ m-2'",
+            caller,
+        )
+    for name, depth in zip(output_names, integration_depths, strict=True):
+        if depth is not None and depth > interface_values[-1]:
+            logger.warning(
+                "%s: requested depth %.6g m is below the deepest interface "
+                "%.6g m; %r will be all NaN when require_full_depth is true",
+                caller,
+                depth,
+                interface_values[-1],
+                name,
+            )
+
+    logger.info(
+        "%s: using %d levels spanning %.4g-%.4g m for depths %s",
+        caller,
+        level.size,
+        level[0],
+        level[-1],
+        list(integration_depths),
+    )
+    depth_dim = "_ohc_depth"
+    diagnosed_joules = xr.apply_ufunc(
+        _ocean_heat_content_for_depths,
+        temp,
+        input_core_dims=[["level"]],
+        output_core_dims=[[depth_dim]],
+        kwargs={
+            "interfaces": interface_values,
+            "max_depths": integration_depths,
+            "rho0": density,
+            "heat_capacity": capacity,
+            "require_full_depth": require_full_depth,
+        },
+        dask="parallelized",
+        output_dtypes=[np.float64],
+        dask_gufunc_kwargs={
+            "output_sizes": {depth_dim: len(integration_depths)},
+            "allow_rechunk": False,
+        },
+    )
+    diagnosed = diagnosed_joules * scale_from_joules
+
+    for index, (name, depth) in enumerate(
+        zip(output_names, integration_depths, strict=True)
+    ):
+        output = diagnosed.isel({depth_dim: index}, drop=True).rename(name)
+        span = "the full contiguous water column"
+        if depth is not None:
+            span = f"0-{depth:g} m"
+        if depth is None:
+            bottom_policy = "integrate to the deepest contiguous valid interface"
+        elif require_full_depth:
+            bottom_policy = (
+                "NaN unless the contiguous water column reaches the requested depth"
+            )
+        else:
+            bottom_policy = (
+                "integrate to the shallower of the requested depth and local bottom"
+            )
+        output.attrs = {
+            "diagnostic": "ocean_heat_content",
             "long_name": "ocean heat content",
-            "units": "GJ m-2",
+            "units": canonical_units,
             "description": (
-                f"heat content integrated over {span} as rho0*Cp*integral(theta dz), "
-                f"with rho0={rho0:g} kg m-3 and Cp={heat_capacity:g} J kg-1 K-1, "
-                "stored in GJ m-2 (divided by 1e9) so it stays finite in fp16"
+                f"rho0*Cp*integral(temp dz) over {span}, relative to 0 degC"
             ),
-            "rho0": float(rho0),
-            "heat_capacity": float(heat_capacity),
-            "require_full_depth": str(bool(require_full_depth)),
-            "provenance": "Boussinesq heat content following MOM6 RHO_0 and C_P conventions",
+            "native_units": "J m-2",
+            "joules_to_output_units": float(scale_from_joules),
+            "source_temperature": temperature,
+            "temperature_reference": 0.0,
+            "temperature_reference_units": "degC",
+            "rho0": density,
+            "rho0_units": "kg m-3",
+            "heat_capacity": capacity,
+            "heat_capacity_units": "J kg-1 K-1",
+            "require_full_depth": require_full_depth,
+            "interface_source": interface_source,
+            "layer_thickness_source": "nominal interfaces",
+            "time_varying_layer_thickness_used": False,
+            "vertical_coordinate": vertical_coordinate,
+            "source_vertical_level_count": int(level.size),
+            "land_policy": "NaN where surface temperature is invalid",
+            "bottom_policy": bottom_policy,
+            "missing_policy": (
+                "contiguous finite temperature from the surface until the first "
+                "invalid level"
+            ),
+            "provenance": (
+                "Boussinesq finite-volume heat content following MOM6 RHO_0 "
+                "and C_P conventions"
+            ),
         }
-        if max_depth is not None:
-            result.attrs["integration_depth"] = float(max_depth)
-        xds[name] = result
+        if depth is not None:
+            output.attrs.update(
+                {
+                    "integration_depth": float(depth),
+                    "integration_depth_units": "m",
+                }
+            )
+        xds[name] = output
 
     return xds
-
-
-def _as_sequence(value) -> list:
-    """Accept a scalar, None, or a sequence, and always return a list."""
-    if value is None:
-        return [None]
-    if isinstance(value, (list, tuple)):
-        return list(value)
-    return [value]
-
-
-def _resolve_names(names, values, default_single, caller, kind) -> list:
-    """Work out output variable names, or explain what the recipe must provide."""
-    if names is not None:
-        names = [names] if isinstance(names, str) else list(names)
-        if len(names) != len(values):
-            raise ValueError(
-                f"{caller}: got {len(names)} name(s) for {len(values)} {kind}(s); "
-                "provide exactly one name per value"
-            )
-        return names
-
-    if kind == "depth":
-        return ["ohc" if value is None else f"ohc{_format_depth(value)}" for value in values]
-
-    if len(values) == 1 and default_single is not None:
-        return [default_single]
-
-    raise ValueError(
-        f"{caller}: with {len(values)} {kind}s you must supply 'names', one per {kind}. "
-        f"Only a single {kind} gets a default name ({default_single!r}). Note that names "
-        "ending in an underscore followed by digits are read as vertical levels by the "
-        "anemoi target, so avoid e.g. 'mld_003'."
-    )
-
-
-def _format_depth(value) -> str:
-    """Render a depth for use in a variable name, without a decimal point."""
-    value = float(value)
-    if value.is_integer():
-        return str(int(value))
-    return str(value).replace(".", "p")

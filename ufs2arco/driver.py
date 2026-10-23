@@ -222,6 +222,28 @@ class Driver:
         return self.target.store_path
 
 
+    def _write_container_template(
+        self,
+        cds: xr.Dataset,
+        overwrite: bool,
+    ) -> None:
+        """Write lazy sample arrays and eagerly persist invariant grid data."""
+
+        kwargs = {"mode": "w"} if overwrite else {}
+        cds.to_zarr(self.store_path, compute=False, **kwargs)
+
+        sample_dims = set(self.target.renamed_sample_dims)
+        invariant_data_vars = [
+            name
+            for name in cds.data_vars
+            if not sample_dims.intersection(cds[name].dims)
+        ]
+        invariant_names = invariant_data_vars + list(cds.coords)
+        invariants = cds[invariant_names].load()
+        invariants.attrs = cds.attrs.copy()
+        invariants.to_zarr(self.store_path, mode="r+")
+
+
     def setup(self, runtype: str):
         self._init_topo(runtype)
         self._init_source()
@@ -233,15 +255,55 @@ class Driver:
     def write_container(self, overwrite):
         """Write empty zarr store, to be filled with data"""
 
+        write_error = None
         if self.topo.is_root:
-            cds = self.mover.create_container()
+            try:
+                cds = self.mover.create_container()
 
-            kwargs = {"mode": "w"} if overwrite else {}
-            logger.info(f"Driver.write_container: storing container at {self.store_path}\n{cds}\n")
-            cds.to_zarr(self.store_path, compute=False, **kwargs)
-            logger.info("Driver.write_container: Done storing container.\n")
+                logger.info(f"Driver.write_container: storing container at {self.store_path}\n{cds}\n")
+                self._write_container_template(cds, overwrite=overwrite)
+                logger.info("Driver.write_container: Done storing container.\n")
+            except Exception as exc:
+                write_error = f"{type(exc).__name__}: {exc}"
+
+        write_error = self.topo.broadcast(write_error)
+        if write_error is not None:
+            raise RuntimeError(
+                "Driver.write_container: container creation failed: "
+                f"{write_error}"
+            )
 
         self.topo.barrier()
+
+
+    def _raise_collective_batch_error(
+        self,
+        batch_idx: int,
+        local_error: str | None,
+    ) -> None:
+        """Raise one rank-local batch failure coherently on every rank."""
+
+        gathered = self.topo.gather(local_error)
+        batch_error = None
+        if self.topo.is_root:
+            failed = next(
+                (
+                    (rank, error)
+                    for rank, error in enumerate(gathered)
+                    if error is not None
+                ),
+                None,
+            )
+            if failed is not None:
+                rank, error = failed
+                batch_error = f"batch {batch_idx}, rank {rank}: {error}"
+
+        batch_error = self.topo.broadcast(batch_error)
+        if batch_error is not None:
+            raise RuntimeError(
+                "Driver.run: distributed data movement failed: "
+                f"{batch_error}"
+            )
 
 
     def run(self, overwrite: bool = False):
@@ -264,33 +326,29 @@ class Driver:
         n_batches = len(self.mover)
         missing_dims = []
         for batch_idx in range(self.mover.start, n_batches):
+            batch_error = None
+            try:
+                xds = next(self.mover)
+                missing_dims.extend(self.mover.missing_sample_dims)
 
-            xds = next(self.mover)
-
-
-            # xds is None if MPI rank looks for non existent indices (i.e., last batch scenario)
-            # len(xds) == 0 if we couldn't find the file we were looking for
-            has_content = xds is not None and len(xds) > 0
-            if has_content:
-
-                xds = xds.reset_coords(drop=True)
-                region = self.mover.find_my_region(xds)
-                xds.to_zarr(self.store_path, region=region)
+                # A rank can have no sample in the final partial batch.
+                has_content = xds is not None and len(xds) > 0
+                if has_content:
+                    xds = xds.reset_coords(drop=True)
+                    region = self.mover.find_my_region(xds)
+                    xds.to_zarr(self.store_path, region=region)
+            except Exception as exc:
+                batch_error = f"{type(exc).__name__}: {exc}"
+            finally:
                 self.mover.clear_cache(batch_idx)
 
-            elif xds is not None:
-
-                # we couldn't find the file, keep track of it
-                batch_indices = self.mover.get_batch_indices(batch_idx)
-                for these_dims in batch_indices:
-                    missing_dims.append(these_dims)
-
+            self._raise_collective_batch_error(batch_idx, batch_error)
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
 
         self.topo.barrier()
         logger.info(f"Done moving the data\n")
 
-        self.report_missing_data(missing_dims)
+        self.report_missing_data(missing_dims, resume=self.mover.start > 0)
         self.target.finalize(self.topo)
         self.finalize_attributes()
 
@@ -303,28 +361,28 @@ class Driver:
 
         # hacky for now, reset the mover's sample_indices to be the missing dims
         self.mover.sample_indices = missing_dims
-        self.mover.restart(idx=0)
+        iter(self.mover)
 
         missing_again = list()
         n_batches = len(self.mover)
-        for batch_idx, xds in enumerate(self.mover):
+        for batch_idx in range(n_batches):
+            batch_error = None
+            try:
+                xds = next(self.mover)
+                missing_again.extend(self.mover.missing_sample_dims)
 
-            # xds is None if MPI rank looks for non existent indices (i.e., last batch scenario)
-            # len(xds) == 0 if we couldn't find the file we were looking for
-            has_content = xds is not None and len(xds) > 0
-            if has_content:
-
-                xds = xds.reset_coords(drop=True)
-                region = self.mover.find_my_region(xds)
-                xds.to_zarr(self.store_path, region=region)
+                # A rank can have no sample in the final partial batch.
+                has_content = xds is not None and len(xds) > 0
+                if has_content:
+                    xds = xds.reset_coords(drop=True)
+                    region = self.mover.find_my_region(xds)
+                    xds.to_zarr(self.store_path, region=region)
+            except Exception as exc:
+                batch_error = f"{type(exc).__name__}: {exc}"
+            finally:
                 self.mover.clear_cache(batch_idx)
 
-            elif xds is not None:
-
-                batch_indices = self.mover.get_batch_indices(batch_idx)
-                for these_dims in batch_indices:
-                    missing_again.append(these_dims)
-
+            self._raise_collective_batch_error(batch_idx, batch_error)
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
 
         self.topo.barrier()
@@ -338,50 +396,102 @@ class Driver:
     def finalize_attributes(self):
 
         logger.info(f"Storing the recipe and anything from the 'attrs' section in zarr store attributes")
+        write_error = None
         if self.topo.is_root:
-            zds = zarr.open(self.store_path, mode="a")
-            zds.attrs["recipe"] = self.config
-            if "attrs" in self.config.keys():
-                for key, val in self.config["attrs"].items():
-                    zds.attrs[key] = val
+            try:
+                zds = zarr.open(self.store_path, mode="a")
+                zds.attrs["recipe"] = self.config
+                if "attrs" in self.config.keys():
+                    for key, val in self.config["attrs"].items():
+                        zds.attrs[key] = val
 
-            zds.attrs["latest_write_timestamp"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-            # just in case
-            zarr.consolidate_metadata(self.store_path)
+                zds.attrs["latest_write_timestamp"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                # just in case
+                zarr.consolidate_metadata(self.store_path)
+            except Exception as exc:
+                write_error = f"{type(exc).__name__}: {exc}"
+
+        write_error = self.topo.broadcast(write_error)
+        if write_error is not None:
+            raise RuntimeError(
+                "Driver.finalize_attributes: root write failed: "
+                f"{write_error}"
+            )
         self.topo.barrier()
         logger.info(f"🚀🚀🚀 Dataset is ready for launch at: {self.store_path}")
 
 
     def get_missing_data_path(self, store_path) -> str:
         directory, zstore = os.path.split(store_path)
-        return f"{directory}/missing.{zstore}.yaml"
+        return os.path.join(directory, f"missing.{zstore}.yaml")
 
-    def report_missing_data(self, missing_dims):
+
+    def _missing_data_outside_resumed_range(self, missing_data_yaml):
+        """Retain previous gaps that this resumed run did not retry."""
+        try:
+            previous_missing = _open_patch_yaml(missing_data_yaml)
+        except FileNotFoundError:
+            return []
+
+        sample_dims = self.source.sample_dims
+        first_sample = self.mover.start * self.mover.batch_size
+        # MPI get_batch_indices only describes one rank, not the retried range.
+        retried_samples = {
+            tuple(sample[dim] for dim in sample_dims)
+            for sample in self.mover.sample_indices[first_sample:]
+        }
+        return [
+            sample
+            for sample in previous_missing
+            if tuple(sample[dim] for dim in sample_dims) not in retried_samples
+        ]
+
+
+    def report_missing_data(self, missing_dims, *, resume=False):
+        """Replace missing state, retaining untouched samples on resume."""
 
         missing_dims = self.topo.gather(missing_dims)
 
+        report_error = None
         if self.topo.is_root:
-            # collect the list of lists into one list of dicts
-            missing_dims = [item for sublist in missing_dims for item in sublist]
-
-            if len(missing_dims) > 0:
-                # sort it by t0 or time
-                # then convert numpy or pandas types to int/str etc
+            try:
+                # collect the list of lists into one list of dicts
+                missing_dims = [item for sublist in missing_dims for item in sublist]
+                missing_data_yaml = self.get_missing_data_path(self.store_path)
+                if resume:
+                    missing_dims.extend(
+                        self._missing_data_outside_resumed_range(missing_data_yaml)
+                    )
+                # Always replace the stored missing-data state. A successful patch
+                # must clear dates that were missing in the previous run.
                 missing_dims = sorted(missing_dims, key=_get_time)
                 missing_dims = [_convert_types_to_yaml(d) for d in missing_dims]
-
                 self.target.handle_missing_data(missing_dims)
 
-                missing_data_yaml = self.get_missing_data_path(self.store_path)
                 with open(missing_data_yaml, "w") as f:
                     yaml.dump(missing_dims, stream=f)
 
-                logger.warning(f"⚠️  Some data are missing.")
-                logger.warning(f"⚠️  The missing dimension combos, i.e., {self.source.sample_dims}")
-                logger.warning(f"⚠️  were written to: {missing_data_yaml}")
-                logger.warning(f"If you know the files are actually available, You can run")
-                logger.warning(f"\tpython -c 'import ufs2arco; ufs2arco.Driver(\"/path/to/your/original/recipe.yaml\").patch()'")
-                logger.warning(f"to try getting the data again\n")
+                if len(missing_dims) > 0:
+                    logger.warning(f"⚠️  Some data are missing.")
+                    logger.warning(f"⚠️  The missing dimension combos, i.e., {self.source.sample_dims}")
+                    logger.warning(f"⚠️  were written to: {missing_data_yaml}")
+                    logger.warning(f"If you know the files are actually available, You can run")
+                    logger.warning(f"\tpython -c 'import ufs2arco; ufs2arco.Driver(\"/path/to/your/original/recipe.yaml\").patch()'")
+                    logger.warning(f"to try getting the data again\n")
+                else:
+                    logger.info(
+                        "No source samples are missing; cleared the stored "
+                        f"missing-data manifest at {missing_data_yaml}"
+                    )
+            except Exception as exc:
+                report_error = f"{type(exc).__name__}: {exc}"
+
+        report_error = self.topo.broadcast(report_error)
+        if report_error is not None:
+            raise RuntimeError(
+                "Driver.report_missing_data: root write failed: "
+                f"{report_error}"
+            )
 
 # some utilities for handling missing data
 def _get_time(d):

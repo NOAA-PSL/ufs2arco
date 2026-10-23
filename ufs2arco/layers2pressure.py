@@ -182,7 +182,8 @@ class Layers2Pressure():
         prsi = self.calc_pressure_interfaces(pressfc)
         dlogp = self.calc_dlogp(prsi)
         dlogp = dlogp.sel({self.level_name: temp[self.level_name]})
-        spfh_thresh = spfh.where(spfh > self.q_min, self.q_min)
+        # ``clip`` preserves missing humidity while enforcing the lower bound.
+        spfh_thresh = spfh.clip(min=self.q_min)
         return -self.Rd /  self.g * temp * (1. + self.z_vir*spfh_thresh) * dlogp
 
     def calc_layer_mean_pressure(
@@ -210,7 +211,7 @@ class Layers2Pressure():
 
         # rTv computed here:
         # https://github.com/NOAA-GFDL/GFDL_atmos_cubed_sphere/blob/ab195d5026ca4c221b6cbb3888c8ae92d711f89a/driver/fvGFS/atmosphere.F90#L2199-L2200
-        spfh_thresh = spfh.where(spfh > self.q_min, self.q_min)
+        spfh_thresh = spfh.clip(min=self.q_min)
         rTv = self.Rd * temp * (1. + self.z_vir*spfh_thresh)
 
         # layer mean pressure computed here:
@@ -286,54 +287,150 @@ class Layers2Pressure():
         if cds is None:
             cds = self.get_interp_coefficients(pstar, prsl)
 
-        xda_left = xda.where(cds["is_left"]).sum(self.level_name)
-        xda_right = xda.where(cds["is_right"]).sum(self.level_name)
+        if self.level_name not in xda.dims:
+            raise ValueError(
+                f"interp2pressure: {xda.name or 'input'} must have dimension "
+                f"{self.level_name!r}"
+            )
+
+        if "left_index" in cds and "right_index" in cds:
+            xda_left = self._gather_level(xda, cds["left_index"])
+            xda_right = self._gather_level(xda, cds["right_index"])
+        else:
+            # Compatibility with coefficient datasets created by older releases.
+            # Filling unselected levels with zero, rather than relying on the
+            # default skipna behavior of sum, preserves a selected NaN.
+            xda_left = xda.where(cds["is_left"], 0).sum(
+                self.level_name, skipna=False
+            )
+            xda_right = xda.where(cds["is_right"], 0).sum(
+                self.level_name, skipna=False
+            )
 
         result = xda_left + (xda_right - xda_left) * cds["factor"]
 
-        mask = (cds["is_right"].sum(self.level_name) > 0) & (cds["is_left"].sum(self.level_name) > 0)
-        return result.where(mask)
+        if "valid" in cds:
+            valid = cds["valid"]
+        else:
+            valid = (
+                (cds["is_right"].sum(self.level_name) > 0)
+                & (cds["is_left"].sum(self.level_name) > 0)
+            )
+        valid = valid & np.isfinite(xda_left) & np.isfinite(xda_right)
+        return result.where(valid)
 
 
-    def get_interp_coefficients(self, pstar: float, prsl: xr.DataArray) -> xr.Dataset:
+    def get_interp_coefficients(
+        self,
+        pstar: float,
+        prsl: xr.DataArray,
+        include_masks: bool = True,
+    ) -> xr.Dataset:
         """Compute the coefficients needed to interpolate between pressure levels
 
         Args:
             pstar (float): pressure level to interpolate to in same units as prsl
             prsl (xr.DataArray): layer mean pressure
+            include_masks (bool, optional): include the legacy full-column
+                ``is_left`` and ``is_right`` masks. Indexed interpolation does
+                not require them, so transforms processing large grids should
+                set this to False.
 
         Returns:
             cds (xr.Dataset): with coefficients needed to do interpolation
         """
-        dlev = pstar - prsl
-        dloglev = np.log(pstar) - np.log(prsl)
+        if not np.isscalar(pstar) or not np.isfinite(pstar) or pstar <= 0:
+            raise ValueError("get_interp_coefficients: pstar must be positive and finite")
+        if self.level_name not in prsl.dims:
+            raise ValueError(
+                f"get_interp_coefficients: prsl must have dimension "
+                f"{self.level_name!r}"
+            )
 
-        # get coefficients representing pressure distance left and right of pstar
-        is_left = dlev == dlev.where(dlev>=0).min(self.level_name)
-        is_right = dlev == dlev.where(dlev<=0).max(self.level_name)
+        valid_pressure = np.isfinite(prsl) & (prsl > 0)
 
-        # TODO: add extrapolation from level to ground here
-        p_left = dloglev.where(is_left).sum(self.level_name)
-        p_right = -dloglev.where(is_right).sum(self.level_name)
+        left_candidates = valid_pressure & (prsl <= pstar)
+        has_left = left_candidates.any(self.level_name)
+        left_index = prsl.where(left_candidates, -np.inf).argmax(self.level_name)
+        del left_candidates
 
-        denominator = p_left + p_right
-        denominator = denominator.where(denominator > 1e-6, 1e-6)
-        factor = p_left / denominator
-        factor = factor.where(
-            factor < 10.,
-            10.
-        ).where(
-            factor > -10.,
-            -10.,
+        right_candidates = valid_pressure & (prsl >= pstar)
+        has_right = right_candidates.any(self.level_name)
+        right_index = prsl.where(right_candidates, np.inf).argmin(self.level_name)
+        del right_candidates
+
+        left_index = left_index.astype(np.int64)
+        right_index = right_index.astype(np.int64)
+        left_pressure = self._gather_level(prsl, left_index)
+        right_pressure = self._gather_level(prsl, right_index)
+        candidates_valid = has_left & has_right
+        candidates_valid = (
+            candidates_valid
+            & np.isfinite(left_pressure)
+            & np.isfinite(right_pressure)
         )
-        return xr.Dataset({
-            "is_left": is_left,
-            "is_right": is_right,
+
+        p_left = np.log(pstar) - np.log(left_pressure)
+        p_right = np.log(right_pressure) - np.log(pstar)
+        denominator = p_left + p_right
+        exact = (
+            candidates_valid
+            & np.isclose(left_pressure, pstar, rtol=1e-7, atol=0.0)
+            & np.isclose(right_pressure, pstar, rtol=1e-7, atol=0.0)
+        )
+        strict_bracket = (
+            candidates_valid
+            & (left_pressure < pstar)
+            & (right_pressure > pstar)
+            & (np.abs(right_index - left_index) == 1)
+            & np.isfinite(denominator)
+            & (denominator > 0)
+        )
+        valid = exact | strict_bracket
+        safe_denominator = denominator.where(strict_bracket, 1.0)
+        factor = (p_left / safe_denominator).where(valid)
+        factor = xr.where(exact, 0.0, factor)
+        valid = valid & np.isfinite(factor) & (factor >= 0) & (factor <= 1)
+        factor = factor.where(valid)
+
+        data_vars = {
+            "left_index": left_index,
+            "right_index": right_index,
+            "left_pressure": left_pressure,
+            "right_pressure": right_pressure,
             "p_left": p_left,
             "p_right": p_right,
             "denominator": denominator,
             "factor": factor,
-        })
+            "valid": valid,
+            "exact": exact,
+        }
+
+        if include_masks:
+            vertical_index = xr.DataArray(
+                np.arange(prsl.sizes[self.level_name]),
+                coords={self.level_name: prsl[self.level_name]},
+                dims=(self.level_name,),
+            )
+            data_vars["is_left"] = (vertical_index == left_index) & has_left
+            data_vars["is_right"] = (vertical_index == right_index) & has_right
+
+        return xr.Dataset(data_vars)
+
+    def _gather_level(
+        self,
+        xda: xr.DataArray,
+        index: xr.DataArray,
+    ) -> xr.DataArray:
+        """Gather one vertical index per column without retaining its coordinate."""
+
+        vertical_index = xr.DataArray(
+            np.arange(xda.sizes[self.level_name]),
+            coords={self.level_name: xda[self.level_name]},
+            dims=self.level_name,
+        )
+        selected = vertical_index == index.reset_coords(drop=True)
+        return xda.where(selected, 0).sum(self.level_name, skipna=False)
 
     def _dphalf_to_pfull(self, xda, name):
         xds = xda.to_dataset(name=name)

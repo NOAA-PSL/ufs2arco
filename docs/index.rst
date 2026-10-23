@@ -80,6 +80,12 @@ Table of Contents
    gefs_archive
    gfs_archive
    hrrr_archive
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Transforms
+
+   replay_pressure_levels
    ocean
 
 .. toctree::
@@ -88,6 +94,7 @@ Table of Contents
 
    base_target
    anemoi_target
+   static_masks
 
 .. toctree::
    :maxdepth: 1

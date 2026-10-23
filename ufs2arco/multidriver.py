@@ -222,16 +222,106 @@ class MultiDriver(Driver):
     def write_container(self, overwrite):
         """Write empty zarr store, to be filled with data"""
 
+        write_error = None
         if self.topo.is_root:
-            dslist = [mover.create_container() for mover in self.movers]
-            cds = self.target.merge_multisource(dslist, apply_masks=False)
+            try:
+                dslist = [mover.create_container() for mover in self.movers]
+                cds = self.target.merge_multisource(dslist, apply_masks=False)
+                cds = self.target.prepare_static_masks(cds)
 
-            kwargs = {"mode": "w"} if overwrite else {}
-            logger.info(f"Driver.write_container: storing container at {self.store_path}\n{cds}\n")
-            cds.to_zarr(self.store_path, compute=False, **kwargs)
-            logger.info("Driver.write_container: Done storing container.\n")
+                logger.info(f"Driver.write_container: storing container at {self.store_path}\n{cds}\n")
+                self._write_container_template(cds, overwrite=overwrite)
+                logger.info("Driver.write_container: Done storing container.\n")
+            except Exception as exc:
+                write_error = f"{type(exc).__name__}: {exc}"
+
+        write_error = self.topo.broadcast(write_error)
+        if write_error is not None:
+            raise RuntimeError(
+                "MultiDriver.write_container: container creation failed: "
+                f"{write_error}"
+            )
 
         self.topo.barrier()
+
+
+    def _validate_static_masks_collectively(self) -> None:
+        """Preflight static-mask identity on every rank before any writes."""
+
+        local_result = {
+            "rank": self.topo.rank,
+            "error": None,
+            "manifest": None,
+        }
+        try:
+            local_result["manifest"] = self.target.validate_static_mask_store()
+        except Exception as exc:
+            local_result["error"] = f"{type(exc).__name__}: {exc}"
+
+        gathered = self.topo.gather(local_result)
+        validation_error = None
+        if self.topo.is_root:
+            results = gathered
+            failed = next(
+                (result for result in results if result["error"] is not None),
+                None,
+            )
+            if failed is not None:
+                validation_error = (
+                    f"rank {failed['rank']}: {failed['error']}"
+                )
+            else:
+                reference = results[0]["manifest"]
+                mismatch = next(
+                    (
+                        result
+                        for result in results[1:]
+                        if result["manifest"] != reference
+                    ),
+                    None,
+                )
+                if mismatch is not None:
+                    validation_error = (
+                        "artifact or policy identity differs on rank "
+                        f"{mismatch['rank']}"
+                    )
+
+        validation_error = self.topo.broadcast(validation_error)
+        if validation_error is not None:
+            raise RuntimeError(
+                "MultiDriver.run: static-mask preflight failed: "
+                f"{validation_error}"
+            )
+
+
+    def _raise_collective_batch_error(
+        self,
+        batch_idx: int,
+        local_error: str | None,
+    ) -> None:
+        """Raise one rank-local batch failure coherently on every rank."""
+
+        gathered = self.topo.gather(local_error)
+        batch_error = None
+        if self.topo.is_root:
+            failed = next(
+                (
+                    (rank, error)
+                    for rank, error in enumerate(gathered)
+                    if error is not None
+                ),
+                None,
+            )
+            if failed is not None:
+                rank, error = failed
+                batch_error = f"batch {batch_idx}, rank {rank}: {error}"
+
+        batch_error = self.topo.broadcast(batch_error)
+        if batch_error is not None:
+            raise RuntimeError(
+                "MultiDriver.run: distributed data movement failed: "
+                f"{batch_error}"
+            )
 
 
     def run(self, overwrite: bool = False):
@@ -249,49 +339,48 @@ class MultiDriver(Driver):
         # create container, only if mover start is not 0
         if self.mover.start == 0:
             self.write_container(overwrite=overwrite)
+        self._validate_static_masks_collectively()
 
         # loop through batches
         n_batches = len(self.mover)
         missing_dims = []
         for batch_idx in range(self.mover.start, n_batches):
+            batch_error = None
+            try:
+                dslist = list()
+                foundit = list()
+                for mover in self.movers:
+                    xds = next(mover)
+                    missing_dims.extend(mover.missing_sample_dims)
 
-            dslist = list()
-            foundit = list()
-            for mover in self.movers:
+                    # A rank can have no sample in the final partial batch.
+                    has_content = xds is not None and len(xds) > 0
+                    if has_content:
+                        foundit.append(True)
+                        dslist.append(xds.reset_coords(drop=True))
+                    elif xds is not None:
+                        foundit.append(False)
 
-                xds = next(mover)
+                # We need both conditions because all([]) is True.
+                if all(foundit) and len(foundit) == len(self.movers):
+                    mds = self.target.merge_multisource(dslist)
+                    region = self.mover.find_my_region(mds)
+                    mds = self.target.prepare_multisource_region_write(mds)
+                    mds.to_zarr(self.target.store_path, region=region)
+            except Exception as exc:
+                batch_error = f"{type(exc).__name__}: {exc}"
+            finally:
+                for mover in self.movers:
+                    mover.clear_cache(batch_idx)
 
-                # xds is None if MPI rank looks for non existent indices (i.e., last batch scenario)
-                # len(xds) == 0 if we couldn't find the file we were looking for
-                has_content = xds is not None and len(xds) > 0
-                if has_content:
-                    foundit.append(True)
-                    dslist.append(xds.reset_coords(drop=True))
-
-                elif xds is not None:
-
-                    foundit.append(False)
-                    batch_indices = mover.get_batch_indices(batch_idx)
-                    for these_dims in batch_indices:
-                        missing_dims.append(these_dims)
-
-            # we need both conditionals, since all([]) == True
-            if all(foundit) and len(foundit) == len(self.movers):
-
-                mds = self.target.merge_multisource(dslist)
-
-                region = self.mover.find_my_region(mds)
-                mds.to_zarr(self.target.store_path, region=region)
-
-            for mover in self.movers:
-                mover.clear_cache(batch_idx)
+            self._raise_collective_batch_error(batch_idx, batch_error)
 
             logger.info(f"Done with batch {batch_idx+1} / {n_batches}")
 
         self.topo.barrier()
         logger.info(f"Done moving the data\n")
 
-        self.report_missing_data(missing_dims)
+        self.report_missing_data(missing_dims, resume=self.mover.start > 0)
         self.target.finalize(self.topo)
         self.finalize_attributes()
 
