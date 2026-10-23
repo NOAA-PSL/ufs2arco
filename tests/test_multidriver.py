@@ -113,9 +113,17 @@ def test_run_tracks_missing_and_skips_write_when_any_source_missing(tmp_path, mo
     d.finalize_attributes = lambda: None
     d.write_container = lambda overwrite: None
 
-    monkeypatch.setattr(xr.Dataset, "to_zarr", lambda self, *args, **kwargs: None, raising=False)
+    writes = []
+    monkeypatch.setattr(
+        xr.Dataset,
+        "to_zarr",
+        lambda self, *args, **kwargs: writes.append((args, kwargs)),
+        raising=False,
+    )
     d.run(overwrite=False)
 
+    # no batch write should happen when any source is missing
+    assert writes == []
     assert target.merge_calls == 0
     assert d.report_payload == [{"t0": "2020-01-01", "fhr": 0, "member": 0}]
     assert mover_ok.cleared == [0]
@@ -159,8 +167,22 @@ def test_write_container_merges_multisource_and_writes(monkeypatch, tmp_path):
 
     d.movers = [_Mover(), _Mover()]
     d.targets = [_Target(), _Target()]
-    monkeypatch.setattr(xr.Dataset, "to_zarr", lambda self, *args, **kwargs: None, raising=False)
+
+    writes = []
+
+    def _record_to_zarr(self, *args, **kwargs):
+        writes.append((self, args, kwargs))
+        return None
+
+    monkeypatch.setattr(xr.Dataset, "to_zarr", _record_to_zarr, raising=False)
     d.write_container(overwrite=False)
+
+    # the merged container is written once to the store with compute=False
+    assert len(writes) == 1
+    written_ds, args, kwargs = writes[0]
+    assert args[0] == d.store_path
+    assert kwargs.get("compute") is False
+    assert "a" in written_ds
 
 
 def test_run_writes_when_all_sources_present(monkeypatch, tmp_path):
@@ -213,6 +235,18 @@ def test_run_writes_when_all_sources_present(monkeypatch, tmp_path):
     d.report_missing_data = lambda missing: None
     d.finalize_attributes = lambda: None
     d.write_container = lambda overwrite: None
-    monkeypatch.setattr(xr.Dataset, "to_zarr", lambda self, *args, **kwargs: None, raising=False)
+
+    writes = []
+
+    def _record_to_zarr(self, *args, **kwargs):
+        writes.append((args, kwargs))
+        return None
+
+    monkeypatch.setattr(xr.Dataset, "to_zarr", _record_to_zarr, raising=False)
     d.run(overwrite=False)
     assert tgt.merged == 1
+    # exactly one batch write, to the target store, with the expected region
+    assert len(writes) == 1
+    args, kwargs = writes[0]
+    assert args[0] == "/tmp/out.zarr"
+    assert kwargs["region"] == {"t0": slice(0, 1)}

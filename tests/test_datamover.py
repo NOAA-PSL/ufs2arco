@@ -243,10 +243,22 @@ def test_next_data_inference_uses_saved_structure_after_initial_condition():
     mover = DataMover(source, target, batch_size=1, cache_dir=".")
 
     first = mover._next_data()
-    mover.data_counter += 1
-    second = mover._next_data()
-
     assert len(first) > 0
-    assert len(second) > 0
-    assert calls["open_sample_dataset"] == 2
     assert target.ds_structure is not None
+    reads_after_ic = calls["open_sample_dataset"]
+    assert reads_after_ic > 0
+
+    # advance to the first batch on a later t0 (t0[1]); with
+    # sample_dims ordered (t0, fhr, member) and fhr=[0], member=[0, 1],
+    # batches 0 and 1 are t0[0]; batch 2 is the first t0[1] sample.
+    # note: fhr is intentionally a single value ([0]) because the
+    # AnemoiInferenceWithForcings target requires len(fhr) == 1 -- the
+    # forecast rollout is represented along t0/time, not fhr, so we only
+    # ever vary t0 here, never fhr.
+    mover.data_counter = 2
+    later = mover._next_data()
+
+    # the later timestep should reuse the saved structure, not re-read the source
+    assert len(later) > 0
+    assert calls["open_sample_dataset"] == reads_after_ic
+    assert later["t0"].values[0] == np.datetime64(source.t0[1])

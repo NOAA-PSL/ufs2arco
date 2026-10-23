@@ -1,3 +1,7 @@
+import os
+import yaml
+import pytest
+
 import pandas as pd
 import numpy as np
 import xarray as xr
@@ -162,3 +166,81 @@ def test_open_grib_adds_valid_time_and_member(monkeypatch):
     )
     assert "valid_time" in out.coords
     assert "member" in out.coords
+
+
+# ---------------------------------------------------------------------------
+# Schema/smoke tests for the real reference.*.yaml metadata files.
+# The tests above monkeypatch yaml.safe_load, so the shipped reference files are
+# never actually validated.  These load the real files and assert the structure
+# the NOAAGribForecastData parsing logic relies on.
+# ---------------------------------------------------------------------------
+SOURCES_DIR = os.path.dirname(nmod.__file__)
+REFERENCE_FILES = ["reference.gefs.yaml", "reference.gfs.yaml", "reference.hrrr.yaml"]
+
+
+def _load_reference(name):
+    with open(os.path.join(SOURCES_DIR, name), "r") as f:
+        return yaml.safe_load(f)
+
+
+@pytest.mark.parametrize("fname", REFERENCE_FILES)
+def test_reference_yaml_loads_and_is_nonempty_mapping(fname):
+    meta = _load_reference(fname)
+    assert isinstance(meta, dict)
+    assert len(meta) > 0
+
+
+@pytest.mark.parametrize("fname", REFERENCE_FILES)
+def test_reference_yaml_required_keys_and_types(fname):
+    meta = _load_reference(fname)
+    for varname, entry in meta.items():
+        assert isinstance(entry, dict), f"{fname}:{varname} is not a mapping"
+
+        # file_suffixes must be a non-empty list of strings
+        assert "file_suffixes" in entry, f"{fname}:{varname} missing file_suffixes"
+        suffixes = entry["file_suffixes"]
+        assert isinstance(suffixes, list) and len(suffixes) > 0
+        assert all(isinstance(s, str) for s in suffixes)
+
+        # filter_by_keys must contain typeOfLevel + paramId used by _open_single_variable
+        assert "filter_by_keys" in entry, f"{fname}:{varname} missing filter_by_keys"
+        fbk = entry["filter_by_keys"]
+        assert isinstance(fbk, dict)
+        assert "typeOfLevel" in fbk
+        assert "paramId" in fbk
+
+        # long_name is used in attrs/logging
+        assert "long_name" in entry
+        assert isinstance(entry["long_name"], str)
+
+
+@pytest.mark.parametrize("fname", REFERENCE_FILES)
+def test_reference_yaml_time_bounds_are_parseable(fname):
+    """Any time_bounds must be a 2-element [start, end] that _is_within_datetime_bounds accepts."""
+    meta = _load_reference(fname)
+    probe = pd.Timestamp("2021-06-01")
+    for varname, entry in meta.items():
+        tbds = entry.get("time_bounds")
+        if tbds is None:
+            continue
+        assert isinstance(tbds, list) and len(tbds) == 2
+        # should not raise; None endpoints are allowed (open bounds)
+        result = _is_within_datetime_bounds(probe, tbds)
+        assert isinstance(result, (bool,))
+        for endpoint in tbds:
+            if endpoint is not None:
+                # must be a parseable timestamp
+                pd.Timestamp(endpoint)
+
+
+@pytest.mark.parametrize("fname", REFERENCE_FILES)
+def test_reference_yaml_alternative_names_resolve(fname):
+    """If a var declares alternative_name, that target must exist and carry time_bounds."""
+    meta = _load_reference(fname)
+    for varname, entry in meta.items():
+        altname = entry.get("alternative_name")
+        if altname is None:
+            continue
+        assert altname in meta, f"{fname}:{varname} alternative_name '{altname}' not defined"
+        # the parsing logic reads time_bounds on both the var and its alternative
+        assert "time_bounds" in meta[altname]

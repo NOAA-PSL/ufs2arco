@@ -3,6 +3,7 @@ import pandas as pd
 import xarray as xr
 import pytest
 
+from ufs2arco.mpi import SerialTopology
 from ufs2arco.targets.anemoi import Anemoi, AnemoiInferenceWithForcings, _merge_attrs
 
 
@@ -176,3 +177,87 @@ def test_merge_attrs_conflict_raises():
                 {"foo": "b", "variables": ["y"], "variables_metadata": {"y": {}}},
             ]
         )
+
+
+def _make_stats_target(store_path):
+    return Anemoi(
+        source=_SourceNoFhr(),
+        chunks={"time": 1, "ensemble": 1, "variable": 1, "cell": 4},
+        store_path=store_path,
+    )
+
+
+def _write_sample_stats(store_path):
+    # dims: (time=2, ensemble=1, variable=2)
+    count = np.array([[[1.0, 1.0]], [[1.0, 1.0]]])
+    sums = np.array([[[2.0, 1.0]], [[4.0, 1.0]]])
+    squares = np.array([[[8.0, 1.0]], [[20.0, 3.0]]])
+    maximum = np.array([[[2.0, 1.0]], [[4.0, 1.0]]])
+    minimum = np.array([[[2.0, 1.0]], [[4.0, 1.0]]])
+    has_nans = np.array([[[False, False]], [[False, False]]])
+
+    dims = ("time", "ensemble", "variable")
+    ds = xr.Dataset(
+        {
+            "count_array": (dims, count),
+            "sums_array": (dims, sums),
+            "squares_array": (dims, squares),
+            "maximum_array": (dims, maximum),
+            "minimum_array": (dims, minimum),
+            "has_nans_array": (dims, has_nans),
+        },
+        coords={"time": [0, 1], "ensemble": [0], "variable": [0, 1]},
+    )
+    ds.to_zarr(store_path, mode="w")
+
+
+def test_aggregate_stats_serial_exact_values(tmp_path):
+    store = str(tmp_path / "out.zarr")
+    target = _make_stats_target(store)
+    _write_sample_stats(store)
+
+    topo = SerialTopology(log_dir=None)
+    target.aggregate_stats(topo)
+
+    result = xr.open_zarr(store)
+
+    # variable 0: mean = 6/2 = 3, var = 28/2 - 9 = 5, stdev = sqrt(5)
+    # variable 1: mean = 2/2 = 1, var = 4/2 - 1 = 1, stdev = 1
+    np.testing.assert_allclose(result["count"].values, [2.0, 2.0])
+    np.testing.assert_allclose(result["sums"].values, [6.0, 2.0])
+    np.testing.assert_allclose(result["mean"].values, [3.0, 1.0])
+    np.testing.assert_allclose(result["stdev"].values, [np.sqrt(5.0), 1.0])
+    np.testing.assert_allclose(result["maximum"].values, [4.0, 1.0])
+    np.testing.assert_allclose(result["minimum"].values, [2.0, 1.0])
+    assert result["has_nans"].values.tolist() == [False, False]
+
+
+def test_aggregate_stats_clamps_negative_variance_to_zero(tmp_path):
+    # construct a case where floating point could yield slightly negative variance:
+    # squares/count == mean^2 exactly -> variance 0, stdev 0 (not nan)
+    store = str(tmp_path / "out.zarr")
+    target = _make_stats_target(store)
+
+    dims = ("time", "ensemble", "variable")
+    const = np.array([[[5.0]], [[5.0]]])  # same value both timesteps
+    ds = xr.Dataset(
+        {
+            "count_array": (dims, np.array([[[1.0]], [[1.0]]])),
+            "sums_array": (dims, const),
+            "squares_array": (dims, const ** 2),
+            "maximum_array": (dims, const),
+            "minimum_array": (dims, const),
+            "has_nans_array": (dims, np.array([[[False]], [[False]]])),
+        },
+        coords={"time": [0, 1], "ensemble": [0], "variable": [0]},
+    )
+    ds.to_zarr(store, mode="w")
+
+    topo = SerialTopology(log_dir=None)
+    target.aggregate_stats(topo)
+
+    result = xr.open_zarr(store)
+    # mean = 10/2 = 5, variance = 50/2 - 25 = 0
+    np.testing.assert_allclose(result["mean"].values, [5.0])
+    np.testing.assert_allclose(result["stdev"].values, [0.0])
+    assert np.isfinite(result["stdev"].values).all()
