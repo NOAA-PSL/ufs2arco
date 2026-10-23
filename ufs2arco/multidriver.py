@@ -94,17 +94,17 @@ class MultiDriver(Driver):
 
         # First, make sure the names are legit
         SourceDatasets = list()
+        source_names = list()
         for local_config in self.config["multisource"]:
 
             name = local_config["source"]["name"].lower()
+            source_names.append(name)
             if name not in ufs2arco.sources._recognized:
                 raise NotImplementedError(f"Driver.__init__: unrecognized data source {name}. Must be one of {ufs2arco.sources._recognized}")
 
             SourceDatasets.append( getattr(ufs2arco.sources, ufs2arco.sources._recognized[name]) )
 
-        try:
-            assert all(local_config["source"]["name"].lower() == name for local_config in self.config["multisource"])
-        except:
+        if len(set(source_names)) > 1:
             raise NotImplementedError("For multisource workflows, all sources have to come from the same dataset. Can't mix and match")
 
         # Now initialize the actual objects
