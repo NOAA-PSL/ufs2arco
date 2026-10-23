@@ -180,7 +180,6 @@ class DataMover():
 
 
     def _mark_static_variables(self, xds: xr.Dataset) -> None:
-        """Let mappings carry the static-variable flag under the new name."""
         if not getattr(self.target, "always_open_static_vars", False):
             return
         for name in self.source.static_vars:
