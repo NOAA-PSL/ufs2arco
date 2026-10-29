@@ -106,7 +106,11 @@ class Anemoi(Target):
     @property
     def datetime(self):
         if self._has_fhr:
-            return self.build_forecast_datetime(self.source.t0, self.source.fhr)
+            if not hasattr(self, "_forecast_datetime"):
+                self._forecast_datetime = self.build_forecast_datetime(
+                    self.source.t0, self.source.fhr
+                )
+            return self._forecast_datetime
         else:
             return self.source.time
 
