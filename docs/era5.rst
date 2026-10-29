@@ -17,7 +17,7 @@ the uri can be updated to the desired data resolution (e.g., one-degree, quarter
 Available Pressure Levels (hPa)
 -------------------------------
 
-this is a test
+.. include:: levels.era5.rst
 
 
 Available Variables

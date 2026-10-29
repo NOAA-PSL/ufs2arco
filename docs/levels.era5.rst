@@ -1,4 +1,4 @@
-.. list-table:: 
+.. list-table:: Available Pressure Levels (hPa)
    :widths: 6 6 6 6 6 6
    :header-rows: 0
 
