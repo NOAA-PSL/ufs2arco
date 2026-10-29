@@ -14,7 +14,7 @@ class AWSGEFSArchive(NOAAGribForecastData, Source):
 
     sample_dims = ("t0", "fhr", "member")
     horizontal_dims = ("latitude", "longitude")
-    file_suffixes = ("a", "b")
+    file_suffixes = ("a",)# "b")
     static_vars = ("lsm", "orog")
 
     @property
@@ -91,19 +91,25 @@ class AWSGEFSArchive(NOAAGribForecastData, Source):
         Returns:
             str: The constructed file path.
         """
-        c_or_p = "c" if member == 0 else "p"
+        if member == -1:
+            member_str = "geavg"
+        elif member == 0:
+            member_str = f"gec{member:02d}"
+        else:
+            member_str = f"gep{member:02d}"
+
         bucket = f"s3://noaa-gefs-pds"
         outer = f"gefs.{t0.year:04d}{t0.month:02d}{t0.day:02d}/{t0.hour:02d}"
         # Thanks to Herbie for figuring these out
         if t0 < pd.Timestamp("2018-07-27"):
             middle = ""
-            fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{file_suffix}f{fhr:03d}"
+            fname = f"{member_str}.t{t0.hour:02d}z.pgrb2{file_suffix}f{fhr:03d}"
         elif t0 < pd.Timestamp("2020-09-23T12"):
             middle = f"pgrb2{file_suffix}/"
-            fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{file_suffix}f{fhr:02d}"
+            fname = f"{member_str}.t{t0.hour:02d}z.pgrb2{file_suffix}f{fhr:02d}"
         else:
             middle = f"atmos/pgrb2{file_suffix}p5/"
-            fname = f"ge{c_or_p}{member:02d}.t{t0.hour:02d}z.pgrb2{file_suffix}.0p50.f{fhr:03d}"
+            fname = f"{member_str}.t{t0.hour:02d}z.pgrb2{file_suffix}.0p50.f{fhr:03d}"
         fullpath = f"filecache::{bucket}/{outer}/{middle}{fname}"
         logger.debug(f"{self.name}._build_path: reading {fullpath}")
         return fullpath

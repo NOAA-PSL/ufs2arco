@@ -10,7 +10,7 @@ d2m:
 gh:
   file_suffixes:
   - a
-  - b
+  #- b
   filter_by_keys:
     paramId: 156
     typeOfLevel: isobaricInhPa
@@ -60,7 +60,7 @@ sp:
 t:
   file_suffixes:
   - a
-  - b
+  #- b
   filter_by_keys:
     paramId: 130
     typeOfLevel: isobaricInhPa
@@ -78,7 +78,7 @@ t2m:
 u:
   file_suffixes:
   - a
-  - b
+  #- b
   filter_by_keys:
     paramId: 131
     typeOfLevel: isobaricInhPa
@@ -96,7 +96,7 @@ u10:
 v:
   file_suffixes:
   - a
-  - b
+  #- b
   filter_by_keys:
     paramId: 132
     typeOfLevel: isobaricInhPa
@@ -114,7 +114,7 @@ v10:
 w:
   file_suffixes:
   - a
-  - b
+  #- b
   filter_by_keys:
     paramId: 135
     typeOfLevel: isobaricInhPa
