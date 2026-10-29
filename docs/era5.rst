@@ -4,7 +4,7 @@ ERA5
 ####
 
 The ECMWF Reanalysis Version 5 (ERA5) data is distributed through the 
-Copernicus Cliamte Data Store
+Copernicus Climate Data Store
 
 `here <https://cds.climate.copernicus.eu/>`_.
 for more information, check out
