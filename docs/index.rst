@@ -79,6 +79,7 @@ Table of Contents
    gefs_archive
    gfs_archive
    hrrr_archive
+   era5
 
 .. toctree::
    :maxdepth: 1
