@@ -1,0 +1,49 @@
+# Features tested
+# Datamover:
+# - serial
+# Source:
+# - analysis template
+# - level selection
+# Target:
+# - base workflow for analysis
+# - rename
+mover:
+  name: datamover
+  batch_size: 1
+
+directories:
+  zarr: conus404_anemoi.zarr
+  cache: cache
+  logs: logs
+
+source:
+  name: conus404
+  uri: az://noaa/conus404.zarr
+  time:
+    start: 2017-01-01T00
+    end: 2017-01-01T06
+    freq: 1h
+
+  variables:
+    - T2
+    - U10
+    - V10
+    - Z
+
+  levels:
+    - 10
+    - 50
+
+target:
+  name: anemoi
+  sort_channels_by_levels: True
+
+  chunks:
+    time: 1
+    level: -1
+    variable: -1
+    ensemble: 1
+    cell: -1
+
+attrs:
+  description: "This is a test dataset"
