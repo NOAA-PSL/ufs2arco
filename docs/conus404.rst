@@ -20,5 +20,6 @@ Available Pressure Levels
 
 Available Variables
 -------------------
+.. note:: Some variables have staggered dimensions. To confirm dimensions for each variable, check `Planetary Computer's CONUS404 dataset overview <https://planetarycomputer.microsoft.com/dataset/conus404#overview>`_.
 
 .. include:: variables.conus404.rst

@@ -30,6 +30,7 @@ dependencies:
     - sphinx-book-theme
 # regrid
     - xesmf
+    - xwrf
 # developer
     - setuptools_scm>=8
     - pytest
