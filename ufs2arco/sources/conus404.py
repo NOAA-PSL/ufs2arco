@@ -24,10 +24,13 @@ class CONUS404(CloudZarrData, Source):
     sample_dims = ("time",)
     horizontal_dims = ("latitude", "longitude")
 
-    asset = pystac_client.Client.open(
+    client = pystac_client.Client.open(
         "https://planetarycomputer.microsoft.com/api/stac/v1",
         modifier=planetary_computer.sign_inplace,
-    ).get_collection("conus404").assets["zarr-abfs"]
+    )
+    
+    collection = client.get_collection("conus404")
+    asset = collection.assets["zarr-abfs"]
     storage_options = asset.extra_fields["xarray:storage_options"]
 
     @property
