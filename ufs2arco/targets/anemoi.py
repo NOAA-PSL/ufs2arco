@@ -119,6 +119,24 @@ class Anemoi(Target):
         return self.datetime
 
     @property
+    def frequency(self) -> str:
+        """Anemoi-compatible frequency string.
+
+        pandas returns bare offset aliases for single-unit frequencies
+        (e.g. "h" for hourly, "D" for daily, "min" for minutely).
+        Anemoi expects an explicit numeric prefix (e.g. "1h"), so we make
+        sure a leading count is always present.
+        """
+        freqstr = self.datetime.freqstr
+        if freqstr is None:
+            raise ValueError(
+                f"{self.name}: could not determine a regular frequency from the datetime axis."
+            )
+        if not re.match(r"^\d", freqstr):
+            freqstr = f"1{freqstr}"
+        return freqstr
+
+    @property
     def time(self):
         return np.arange(len(self.dates))
 
@@ -263,7 +281,7 @@ class Anemoi(Target):
             "resolution": str(self.resolution),
             "start_date": self.start_date,
             "end_date": self.end_date,
-            "frequency": self.datetime.freqstr,
+            "frequency": self.frequency,
             "statistics_start_date": self.statistics_start_date,
             "statistics_end_date": self.statistics_end_date,
         }
@@ -780,7 +798,7 @@ class Anemoi(Target):
 
         xds = xr.open_zarr(self.store_path)
         attrs = xds.attrs.copy()
-        freqstr = self.dates.freqstr
+        freqstr = self.frequency
 
         # get the start/end times for computing statistics
         # in terms of logical time index values
