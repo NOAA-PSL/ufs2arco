@@ -8,7 +8,7 @@ The `CONUS404 <https://planetarycomputer.microsoft.com/dataset/conus404#overview
  long-term regional hydroclimate reanalysis dataset produced by 
  National Center for Atmospheric Research (NCAR)
  can be accessed via Planetary Computer's Azure Blob Storage. 
- Example Jupytr notebook provided 
+ Example Jupyter notebook provided 
  `here <https://planetarycomputer.microsoft.com/dataset/conus404#Example-Notebook>`_.
 
 
