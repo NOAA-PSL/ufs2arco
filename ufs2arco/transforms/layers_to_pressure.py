@@ -366,7 +366,7 @@ def layers_to_pressure(
     level_name: str = "level",
     interface_name: str = "phalf",
 ) -> xr.Dataset:
-    """Interpolate full-column UFS-Replay fields to actual pressure levels.
+    """Recipe transform that interpolates atmospheric fields on complete 127-level UFS-Replay columns to pressure levels, using ``Layers2Pressure`` and adding fallback methods and missing-value handling.
 
     All 127 native hybrid layers are required. Pressure is diagnosed from the
     native surface pressure, temperature, humidity, and layer thickness. The

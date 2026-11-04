@@ -5,7 +5,7 @@ import numpy as np
 import xarray as xr
 
 class Layers2Pressure():
-    """A class to interpolate from Lagrangian layers to pressure levels, and also compute layer thickness, etc
+    """Python class for atmospheric hybrid-layer calculations: layer pressure, thickness, geopotential, and interpolation to pressure levels.
 
     Args:
         ak, bk (np.ndarray, optional): coefficients that define the vertical grid. If not provided, will
