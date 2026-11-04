@@ -24,10 +24,13 @@ class CONUS404(CloudZarrData, Source):
     sample_dims = ("time",)
     horizontal_dims = ("latitude", "longitude")
 
-    asset = pystac_client.Client.open(
+    client = pystac_client.Client.open(
         "https://planetarycomputer.microsoft.com/api/stac/v1",
         modifier=planetary_computer.sign_inplace,
-    ).get_collection("conus404").assets["zarr-abfs"]
+    )
+    
+    collection = client.get_collection("conus404")
+    asset = collection.assets["zarr-abfs"]
     storage_options = asset.extra_fields["xarray:storage_options"]
 
     @property
@@ -37,16 +40,28 @@ class CONUS404(CloudZarrData, Source):
             11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 
             21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 
             31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 
-            41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51
+            41, 42, 43, 44, 45, 46, 47, 48, 49
+        )
+
+    @property
+    def available_stag_levels(self) -> tuple:
+        return (
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+            11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 
+            21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 
+            31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 
+            41, 42, 43, 44, 45, 46, 47, 48, 49, 50
         )
 
     @property
     def rename(self) -> dict:
         return {
             "bottom_top": "level",
-            "bottom_top_stag": "level",
+            "bottom_top_stag": "level_stag",
             "south_north": "latitude",
-            "west_east": "longitude"
+            "west_east": "longitude",
+            "south_north_stag": "latitude_stag",
+            "west_east_stag": "longitude_stag"
         }
 
 

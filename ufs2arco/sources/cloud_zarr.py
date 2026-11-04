@@ -24,6 +24,10 @@ class CloudZarrData(Source):
     def available_levels(self) -> tuple:
         return tuple(self._xds["level"].values)
 
+    @property
+    def available_stag_levels(self) -> tuple:
+        return tuple(self._xds["level_stag"].values)
+
     def __init__(
         self,
         uri: str,
@@ -52,8 +56,12 @@ class CloudZarrData(Source):
 
         # now subsample the dataset
         self._xds = self._xds[self.variables]
-        if self.levels is not None:
+        if (self.levels is not None) & ('level' in self._xds.dims):
             self._xds = self._xds.sel(level=self.levels, **self._level_sel_kwargs)
+        if (self.levels is not None) & ('level_stag' in self._xds.dims):
+            stag_levels = self.levels
+            stag_levels.append(stag_levels[-1] + 1)
+            self._xds = self._xds.sel(level_stag=stag_levels, **self._level_sel_kwargs)
         self._xds = self.apply_slices(self._xds)
 
 

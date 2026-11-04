@@ -29,6 +29,8 @@ source:
     - U10
     - V10
     - Z
+    - U
+    - V
 
   levels:
     - 1
@@ -44,8 +46,9 @@ source:
 
 transforms:
   destagger: 
-    variable: Z
-    dimension: level
+    Z: level
+    U: longitude
+    V: latitude
 
 target:
   name: analysis
