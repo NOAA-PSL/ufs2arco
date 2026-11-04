@@ -80,6 +80,8 @@ Table of Contents
    gefs_archive
    gfs_archive
    hrrr_archive
+   era5
+   conus404
 
 .. toctree::
    :maxdepth: 1
