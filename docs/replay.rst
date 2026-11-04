@@ -14,7 +14,8 @@ The atmosphere and ocean are stored separately, and ufs2arco has a source for ea
   ``gs://noaa-ufs-gefsv13replay/ufs-hr1/1.00-degree/06h-freq/zarr/mom6.zarr``
 
 Both are Cloud Zarr sources. See :ref:`cloud-zarr-time-handling` for how timestamps
-and gaps are handled, and :doc:`moving_data` for accumulating variables over time.
+and gaps are handled, and :ref:`cloud-zarr-accumulation` for accumulating variables
+over time.
 To reuse a spatial mask fitted from a training dataset, see :doc:`static_masks`.
 
 Available Variables
