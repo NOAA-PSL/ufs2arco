@@ -3,22 +3,19 @@
 CONUS404
 ############
 
-The `CONUS404 <https://planetarycomputer.microsoft.com/dataset/conus404#overview>`_
- (CONterminous United States for over 40 years at 4 km resolution)
- long-term regional hydroclimate reanalysis dataset produced by 
- National Center for Atmospheric Research (NCAR)
- can be accessed via Planetary Computer's Azure Blob Storage. 
- Example Jupyter notebook provided 
- `here <https://planetarycomputer.microsoft.com/dataset/conus404#Example-Notebook>`_.
+The `CONUS404 <https://planetarycomputer.microsoft.com/dataset/conus404#overview>`_ (CONterminous
+United States for over 40 years at 4 km resolution) long-term regional hydroclimate reanalysis dataset
+produced by National Center for Atmospheric Research (NCAR) can be accessed via Planetary Computer's
+Azure Blob Storage. An example Jupyter notebook is provided
+`here <https://planetarycomputer.microsoft.com/dataset/conus404#Example-Notebook>`_.
 
 
-
-
-YAML File Specifications
+Config Specifications
 -------------------------
 An example of how to update the 'source' portion of a YAML file to pull CONUS404 data is provided below.
 
 .. code-block:: yaml
+
     source:
         name: conus404
         uri: az://noaa/conus404.zarr
@@ -37,6 +34,7 @@ upward from the lowest atmospheric layer.
 Use ``levels`` under ``source`` to select specific native layers:
 
 .. code-block:: yaml
+
     source:
         name: conus404
         levels: [0, 10, 25]
@@ -56,6 +54,7 @@ variable ``U`` along the ``longitude`` dimension (i.e., ``west_east_stag``), and
 the ``latitude`` dimension (i.e., ``south_north_stag``).
 
 .. code-block:: yaml
+
     transforms:
         destagger: 
             Z: level
