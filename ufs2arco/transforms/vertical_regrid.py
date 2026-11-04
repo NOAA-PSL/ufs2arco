@@ -179,15 +179,15 @@ def _resolve_ocean_source_interfaces(
     )
 
 
-def _fv_vertical_regrid(
+def fv_vertical_regrid(
     xds: xr.Dataset,
     weight_var: str,
     interfaces: list | np.ndarray,
     use_nearest_interfaces: Optional[bool] = False,
     keep_weight_var: Optional[bool] = False,
-    _valid_mask: Optional[xr.DataArray] = None,
+    valid_mask: Optional[xr.DataArray] = None,
 ) -> xr.Dataset:
-    """Apply the shared vertical reduction with optional physical support.
+    """Vertically regrid a dataset based on interface values.
 
     Args:
         xds (xr.Dataset)
@@ -198,7 +198,8 @@ def _fv_vertical_regrid(
             grab interfaces from dataset via
             ``xarray.Dataset.sel(interface=interfaces, method='nearest')``
         keep_weight_var (bool, optional): if False, drop the weight variable from the dataset before saving
-        _valid_mask (xr.DataArray, optional): internal source-cell support mask
+        valid_mask (xr.DataArray, optional): source cells to include in the average, used by
+            ``fv_vertical_regrid_ocean`` to exclude cells below the wet column
 
     Returns:
         xds (xr.Dataset): with vertical averaging
@@ -277,8 +278,8 @@ def _fv_vertical_regrid(
     for key in vars3d:
         attrs = xds[key].attrs.copy()
         value = xds[key]
-        if _valid_mask is not None:
-            value = value.where(_valid_mask)
+        if valid_mask is not None:
+            value = value.where(valid_mask)
         broadcast_weight = finite_weight.broadcast_like(value)
         valid_weight = broadcast_weight.where(
             np.isfinite(value) & np.isfinite(broadcast_weight)
@@ -329,35 +330,6 @@ def _fv_vertical_regrid(
     # unfortunately, cannot store the level_bins due to this issue: https://github.com/pydata/xarray/issues/2847
     xds = xds.drop_vars("level_bins")
     return xds
-
-
-def fv_vertical_regrid(
-    xds: xr.Dataset,
-    weight_var: str,
-    interfaces: list | np.ndarray,
-    use_nearest_interfaces: Optional[bool] = False,
-    keep_weight_var: Optional[bool] = False,
-) -> xr.Dataset:
-    """Vertically regrid a dataset based on interface values.
-
-    Args:
-        xds: Dataset to regrid.
-        weight_var: Variable containing the source-cell weights.
-        interfaces: Target vertical-coordinate interfaces.
-        use_nearest_interfaces: Snap requests to an existing native interface
-            coordinate when true.
-        keep_weight_var: Retain the aggregated weight variable when true.
-
-    Returns:
-        Dataset with weighted vertical averages.
-    """
-    return _fv_vertical_regrid(
-        xds,
-        weight_var=weight_var,
-        interfaces=interfaces,
-        use_nearest_interfaces=use_nearest_interfaces,
-        keep_weight_var=keep_weight_var,
-    )
 
 
 def fv_vertical_regrid_ocean(
@@ -454,13 +426,13 @@ def fv_vertical_regrid_ocean(
         )
     )
 
-    result = _fv_vertical_regrid(
+    result = fv_vertical_regrid(
         xds,
         weight_var=weight_var,
         interfaces=interfaces,
         use_nearest_interfaces=use_nearest_interfaces,
         keep_weight_var=keep_weight_var,
-        _valid_mask=leading_wet,
+        valid_mask=leading_wet,
     )
 
     mask = result["level"] > bottom_interface
