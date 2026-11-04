@@ -113,6 +113,7 @@ def test_packaged_ocean_interfaces_reconstruct_replay_levels():
     levels_path = (
         Path(__file__).parent.parent
         / "ufs2arco"
+        / "sources"
         / "replay_ocean_vertical_levels.yaml"
     )
     with levels_path.open() as stream:

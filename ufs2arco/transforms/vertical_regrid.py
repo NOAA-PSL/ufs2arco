@@ -82,6 +82,7 @@ def _packaged_replay_ocean_interfaces() -> np.ndarray:
         os.path.join(
             os.path.dirname(__file__),
             "..",
+            "sources",
             "replay_ocean_vertical_levels.yaml",
         )
     )
