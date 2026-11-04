@@ -6,6 +6,7 @@ from ufs2arco.transforms.horizontal_regrid import horizontal_regrid
 from ufs2arco.transforms.mappings import get_available_mappings, apply_mappings
 from ufs2arco.transforms.rotate_vectors import rotate_vectors
 from ufs2arco.transforms.vertical_regrid import fv_vertical_regrid
+from ufs2arco.transforms.destagger import destagger
 
 logger = logging.getLogger("ufs2arco")
 
@@ -20,6 +21,7 @@ class Transformer:
             "horizontal_regrid",
             "mappings",
             "rotate_vectors",
+            "destagger"
         )
 
     def __init__(self, options):
@@ -52,6 +54,14 @@ class Transformer:
                 import xesmf
             except ImportError:
                 raise ImportError(f"Transformer.__init__: Could not 'import xesmf', but this is needed for 'horizontal_grid' transformations. Install xesmf with\n'conda install -c conda-forge xesmf'")
+
+        # if we want to do destaggering, check if xwrf is installed
+        if "destagger" in names:
+            try:
+                import xwrf
+            except ImportError:
+                raise ImportError(f"Transformer.__init__: Could not 'import xwrf', but this is needed for 'destagger' transformations. Install xwrf with\n'conda install -c conda-forge xwrf'")
+
 
         self.names = names
         self.options = options
@@ -90,6 +100,9 @@ class Transformer:
 
         if "horizontal_regrid" in self.names:
             xds = horizontal_regrid(xds, **self.options["horizontal_regrid"])
+
+        if "destagger" in self.names:
+            xds = destagger(xds, self.options["destagger"])
 
         if "mappings" in self.names:
             xds = apply_mappings(xds, self.options["mappings"])
