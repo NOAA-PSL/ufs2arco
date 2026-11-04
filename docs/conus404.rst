@@ -8,7 +8,7 @@ The `CONUS404 <https://planetarycomputer.microsoft.com/dataset/conus404#overview
  long-term regional hydroclimate reanalysis dataset produced by 
  National Center for Atmospheric Research (NCAR)
  can be accessed via Planetary Computer's Azure Blob Storage. 
- Example Jupytr notebook provided 
+ Example Jupyter notebook provided 
  `here <https://planetarycomputer.microsoft.com/dataset/conus404#Example-Notebook>`_.
 
 
@@ -71,6 +71,6 @@ Available Pressure Levels
 
 Available Variables
 -------------------
-.. note:: Some variables have staggered dimensions. To confirm dimensions for each variable, check `Planetary Computer's CONUS404 dataset overview <https://planetarycomputer.microsoft.com/dataset/conus404#overview>`_.
+.. note:: We provide a list of commonly used variables below to get users started; however, this is not an exhaustive list. Additionally, some variables have staggered dimensions. To confirm available variables and their dimensions check `Planetary Computer's CONUS404 dataset overview <https://planetarycomputer.microsoft.com/dataset/conus404#overview>`_. 
 
 .. include:: variables.conus404.rst
