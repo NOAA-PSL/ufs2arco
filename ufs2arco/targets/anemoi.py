@@ -228,6 +228,10 @@ class Anemoi(Target):
         self.sort_channels_by_levels = sort_channels_by_levels
         # additional checks
         if self._has_fhr:
+             if isinstance(self, AnemoiInferenceWithForcings) and len(self.source.fhr) != 1:
+                 raise ValueError(
+                     f"{self.name}: inference does not support multiple forecast hours yet."
+                 )
             # ensure fhrs requested are valid.
             _ = self.datetime
 
