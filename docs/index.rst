@@ -13,14 +13,15 @@ The name stems from its original intent, which was to transform output from the
 `Unified Forecast System (UFS) <https://www.ufs.epic.noaa.gov/>`_
 into
 Analysis Ready, Cloud Optimized (ARCO;
-`Abernathey et al., (2021) <https://doi.ieeecomputersociety.org/10.1109/MCSE.2021.3059437>`_)
+`Abernathey et al., 2021 <https://doi.ieeecomputersociety.org/10.1109/MCSE.2021.3059437>`_)
 format.
-However, the package now pulls data from a number of non-UFS sources, including GFS/GEFS
-before UFS was created, and even
+However, the package now pulls data from a number of additional sources, including historical 
+Global Forecast System (GFS) and Global Ensemble Forecast System (GEFS) from 
+before the creation of UFS archived on `Geoscience Data Exchange (GDEX) <https://gdex.ucar.edu/datasets/d084001/>` and 
 `ECMWF's ERA5 dataset <https://www.ecmwf.int/en/forecasts/dataset/ecmwf-reanalysis-v5>`_.
 
 .. warning::
-    The documentation is very much a work in progress.
+    The documentation is a work in progress.
     If you have any questions, feel free to raise an issue on the GitHub repo
     (see "Getting Support" in the Table of Contents).
 
@@ -29,7 +30,7 @@ Capability Overview
 ###################
 
 The package is specifically designed to let users run an Extract, Transform, Load (ETL)
-pipeline which converts NOAA datasets into a format suitable for their uses.
+pipeline which converts weather forecast and reanalysis datasets into a format suitable for their uses.
 There are three general concepts that are important for the workload:
 
 * **Data Source**: the original source of data, for example the
@@ -43,15 +44,13 @@ There are three general concepts that are important for the workload:
   target layouts:
 
   1. **base**: which puts the dataset in a familiar form where all variables and
-     dimensions are easily exposed for analysis. See 
-     `NOAA's UFS Replay <https://nbviewer.org/gist/timothyas/f37ec28562e97c74217401fceb144f1f>`_
-     on Google Cloud Storage for an example of this output format.
+     dimensions are easily exposed for analysis. 
 
   2. **anemoi**: which makes the dataset ready for machine learning model
      development using the `anemoi framework
      <https://anemoi.readthedocs.io/en/latest/>`_.
      Documentation regarding this layout is coming, but in the meantime,
-     check out the `anemoi-datsets documentation
+     check out the `anemoi-datasets documentation
      <https://anemoi.readthedocs.io/projects/datasets/en/latest/>`_ for more
      information on this data layout. 
 

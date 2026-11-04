@@ -128,7 +128,6 @@ class Source:
         """
         return xds
 
-
     def apply_slices(self, xds: xr.Dataset) -> xr.Dataset:
         """Apply any slices, for now just data selection via "sel" or "isel"
         Note that this is the first transformation, so slicing options relate to
@@ -145,9 +144,27 @@ class Source:
 
         if "sel" in self.slices.keys():
             for key, val in self.slices["sel"].items():
-                xds = xds.sel({key: slice(*val)})
+
+                # Handle latitude regardless of coordinate ordering
+                if key == "latitude" and len(val) == 2:
+                    coord = xds[key].values
+
+                    if len(coord) > 1:
+                        ascending = coord[0] < coord[-1]
+
+                        if ascending:
+                            start, stop = min(val), max(val)
+                        else:
+                            start, stop = max(val), min(val)
+
+                        xds = xds.sel({key: slice(start, stop)})
+                    else:
+                        xds = xds.sel({key: slice(*val)})
+                else:
+                    xds = xds.sel({key: slice(*val)})
 
         if "isel" in self.slices.keys():
             for key, val in self.slices["isel"].items():
                 xds = xds.isel({key: slice(*val)})
+
         return xds
