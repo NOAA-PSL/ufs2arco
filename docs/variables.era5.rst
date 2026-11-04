@@ -29,5 +29,6 @@
    * - ``vertical_velocity``
      - Vertical velocity
 
-This is not an exhaustive list of variables. For the full list of available variables, please visit: 
-`Copernicus ERA5 documentation <https://confluence.ecmwf.int/spaces/CKB/pages/76414402/ERA5+data+documentation>`_.
+NOTE: This is not an exhaustive list of variables, and is provided to get
+users started on commonly selected variables. For the full list of available
+variables, please visit: `Copernicus ERA5 documentation <https://confluence.ecmwf.int/spaces/CKB/pages/76414402/ERA5+data+documentation>`_.
