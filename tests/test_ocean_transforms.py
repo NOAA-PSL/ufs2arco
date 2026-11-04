@@ -24,7 +24,6 @@ from ufs2arco.transforms.transformer import Transformer
 from ufs2arco.transforms.vertical_regrid import (
     fv_vertical_regrid,
     fv_vertical_regrid_ocean,
-    fv_vertical_regrid_ocn,
 )
 
 
@@ -127,7 +126,6 @@ def test_packaged_ocean_interfaces_reconstruct_replay_levels():
 
 def test_ocean_vertical_regrid_functions_are_publicly_exported():
     assert transform_exports.fv_vertical_regrid_ocean is fv_vertical_regrid_ocean
-    assert transform_exports.fv_vertical_regrid_ocn is fv_vertical_regrid_ocn
 
 
 def test_vertical_regrid_renormalizes_each_variable_valid_weight():

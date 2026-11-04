@@ -502,9 +502,3 @@ def fv_vertical_regrid_ocean(
         )
 
     return result
-
-
-def fv_vertical_regrid_ocn(*args, **kwargs) -> xr.Dataset:
-    """Backward-compatible alias for the original ocean regrid name."""
-
-    return fv_vertical_regrid_ocean(*args, **kwargs)

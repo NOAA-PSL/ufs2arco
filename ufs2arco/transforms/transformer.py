@@ -12,7 +12,6 @@ from ufs2arco.transforms.ocean import (
 )
 from ufs2arco.transforms.rotate_vectors import rotate_vectors
 from ufs2arco.transforms.vertical_regrid import fv_vertical_regrid
-from ufs2arco.transforms.vertical_regrid import fv_vertical_regrid_ocn
 from ufs2arco.transforms.vertical_regrid import fv_vertical_regrid_ocean
 
 logger = logging.getLogger("ufs2arco")
@@ -30,7 +29,6 @@ class Transformer:
             "ocean_heat_content",
             "layers_to_pressure",
             "fv_vertical_regrid",
-            "fv_vertical_regrid_ocn",
             "fv_vertical_regrid_ocean",
             "horizontal_regrid",
             "mappings",
@@ -52,7 +50,6 @@ class Transformer:
 
         vertical_regrids = {
             "fv_vertical_regrid",
-            "fv_vertical_regrid_ocn",
             "fv_vertical_regrid_ocean",
         }
         combined_vertical = vertical_regrids.intersection(names)
@@ -141,9 +138,6 @@ class Transformer:
 
         if "fv_vertical_regrid" in self.names:
             xds = fv_vertical_regrid(xds, **self.options["fv_vertical_regrid"])
-
-        if "fv_vertical_regrid_ocn" in self.names:
-            xds = fv_vertical_regrid_ocn(xds, **self.options["fv_vertical_regrid_ocn"])
 
         if "fv_vertical_regrid_ocean" in self.names:
             xds = fv_vertical_regrid_ocean(xds, **self.options["fv_vertical_regrid_ocean"])
