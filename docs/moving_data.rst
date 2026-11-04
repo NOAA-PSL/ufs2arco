@@ -104,17 +104,17 @@ Cloud Zarr timestamps
 ^^^^^^^^^^^^^^^^^^^^^
 
 Cloud Zarr sources select exact timestamps. For CF calendars such as Julian,
-the requested year, month, day, and time are matched in the source calendar;
-dates are not converted between calendars or replaced with a nearby sample.
-A matched sample uses the requested datetime label in the output. Dates that
-cannot be represented in the source calendar raise an error.
+the requested year, month, day, and time are matched in the source calendar.
+Dates are not converted between calendars or replaced with a nearby sample.
+A matched sample keeps the requested datetime label in the output, and a date that
+cannot be represented in the source calendar raises an error.
 
-Absent samples are recorded as missing. Anemoi excludes declared missing
-dates from aggregate statistics and excludes temporal differences touching
-those dates. The output retains its requested time axis, so consult
-``missing_dates`` rather than treating unwritten values as observations.
+Absent samples are recorded as missing. Anemoi excludes declared missing dates from
+aggregate statistics, along with any temporal differences touching those dates.
+The output keeps its requested time axis, so consult ``missing_dates`` rather than
+treating unwritten values as observations.
 
-For gappy sources, use ``batch_size: 1`` with the serial ``DataMover``, or use
+For sources with gaps, use ``batch_size: 1`` with the serial ``DataMover``, or use
 ``MPIDataMover``, which reads one sample per rank. A serial batch containing
 both present and absent samples cannot be written as one contiguous region.
 At least one requested sample must exist to establish the output structure.
@@ -123,22 +123,23 @@ At least one requested sample must exist to establish the output structure.
 Resuming and patching
 ^^^^^^^^^^^^^^^^^^^^^
 
-Set ``mover.start`` to the batch index from which an interrupted conversion
-should resume, using the original recipe and output store. Missing samples
-outside the retried batches remain recorded; successfully retried samples
-are removed from the report. Retain the ``missing.<store>.yaml`` file beside
-the output so those earlier gaps remain recoverable.
+To resume an interrupted conversion, set ``mover.start`` to the batch index to
+resume from, using the original recipe and output store. Successfully retried
+samples are removed from the report, and missing samples outside the retried
+batches remain recorded. Keep the ``missing.<store>.yaml`` file beside the output
+so those earlier gaps remain recoverable.
 
-For an MPI resume, use the same rank count as the original conversion because
-each batch contains one sample per rank. For a single-source recipe, retry
-the samples listed in the missing report with:
+For an MPI resume, use the same rank count as the original conversion, because
+each batch contains one sample per rank.
+
+For a single-source recipe, retry the samples listed in the missing report with:
 
 .. code-block:: bash
 
    python -c "from ufs2arco import Driver; Driver('recipe.yaml').patch()"
 
-A successful patch clears the missing report; samples that are still absent
-remain listed. Multisource patching is not supported; resume a multisource
+A successful patch clears the missing report, and samples that are still absent
+remain listed. Multisource patching is not supported, so resume a multisource
 conversion from the batch that needs to be retried.
 
 
@@ -146,7 +147,7 @@ Accumulating Cloud Zarr variables
 #################################
 
 Use ``source.accumulate_variables`` to sum selected dynamic variables over
-the interval preceding each output timestamp. Other selected variables are
+the interval before each output timestamp. Other selected variables are
 read at the exact requested timestamp. For example, the source section of a
 Replay atmosphere recipe can include:
 
@@ -165,14 +166,14 @@ Replay atmosphere recipe can include:
 
 Each sum covers ``(T - time.freq, T]``. With 3-hourly source data and 6-hourly
 output, the sample at 06:00 sums the 03:00 and 06:00 buckets. Adjacent windows
-do not count the boundary twice. Supply source bucket amounts appropriate for
-summation; this option does not convert rates to amounts or difference
-cumulative totals.
+do not count the boundary twice. The source must supply bucket amounts suitable for
+summing: this option does not convert rates to amounts or difference cumulative
+totals.
 
-Every expected source timestamp must exist, including the trailing window
-before the first requested output time. Missing buckets cause an error;
-NaNs within a bucket remain NaN in the sum. Accumulated variables must also
-appear in ``variables`` and cannot be static fields.
+Every expected source timestamp must exist, including the trailing window before
+the first requested output time. Missing buckets cause an error, while NaNs within
+a bucket remain NaN in the sum. Accumulated variables must also appear in
+``variables`` and cannot be static fields.
 
 Accumulation requires a regular datetime source cadence, at least two source
 timestamps, and a fixed output interval that is a multiple of that cadence.

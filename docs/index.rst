@@ -80,13 +80,7 @@ Table of Contents
    gefs_archive
    gfs_archive
    hrrr_archive
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Transforms
-
-   replay_pressure_levels
-   ocean
+   replay
 
 .. toctree::
    :maxdepth: 1
