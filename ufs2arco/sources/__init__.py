@@ -5,6 +5,7 @@ from .noaa_grib_forecast import NOAAGribForecastData
 from .aws_aorc import AWSAORC
 from .aws_gefs_archive import AWSGEFSArchive
 from .aws_hrrr_archive import AWSHRRRArchive
+from .aws_hrrr_archive_alaska import AWSHRRRArchiveAlaska
 from .gcs_era5_1degree import GCSERA5OneDegree
 from .gcs_replay_atmosphere import GCSReplayAtmosphere
 from .gcs_replay_ocean import GCSReplayOcean
