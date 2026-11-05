@@ -25,7 +25,8 @@ class Anemoi(Target):
     so they have different names originally.
 
     Assumptions:
-        * For :class:`EnsembleForecastSource` and :class:`ForecastSource` datasets, t0 gets renamed to time, and fhr is silently dropped
+        * For forecast sources, each ``(t0, fhr)`` sample is mapped to
+          ``valid_time = t0 + fhr``; ``fhr`` is not retained as an output dimension
         * :attr:`do_flatten_grid` = ``True``
         * set ``resolution`` to the same text used by other datasets when those datasets will be combined (e.g. multi-datasets)
         * just setting use_level_index = False for now, but eventually it would be nice to use this flag to switch between how vertical level suffixes are labeled
@@ -65,16 +66,75 @@ class Anemoi(Target):
         else:
             return self.expanded_horizontal_dims
 
+    @staticmethod
+    def build_forecast_datetime(t0, fhr) -> pd.DatetimeIndex:
+        """Build the regular valid-time axis represented by ``t0`` and ``fhr``."""
+        t0 = pd.DatetimeIndex(t0)
+        fhr = np.asarray(fhr)
+
+        # Preserve the source frequency and existing behavior when only one lead time requested.
+        # For example, if fhr[3] was wanted (instead of [0,1,3,4,5]) to create a dataset with 0,3,6,9,12...
+        if len(fhr) == 1:
+            return t0 + pd.Timedelta(hours=int(fhr[0]))
+
+        # valid time = initialization time + forecast hour (for every combination)
+        datetime = pd.DatetimeIndex([
+            pd.Timestamp(initialization) + pd.Timedelta(hours=int(forecast_hour))
+            for initialization in t0
+            for forecast_hour in fhr
+        ])
+
+        if not datetime.is_unique:
+            duplicates = datetime[datetime.duplicated()].unique().tolist()
+            raise ValueError(
+                f"t0 and fhr produce duplicate valid times: {duplicates}. "
+                "Check to ensure you are not grabbing both initialization and forecast for a single valid time."
+            )
+
+        if len(datetime) == 2:
+            frequency = datetime[1] - datetime[0]
+        else:
+            frequency = pd.infer_freq(datetime)
+
+        if frequency is None:
+            raise ValueError(
+                "t0 and fhr must produce a regularly spaced valid-time axis."
+            )
+
+        return pd.DatetimeIndex(datetime, freq=frequency)
+
     @property
     def datetime(self):
         if self._has_fhr:
-            return self.source.t0 + pd.Timedelta(hours=self.source.fhr[0])
+            if not hasattr(self, "_forecast_datetime"):
+                self._forecast_datetime = self.build_forecast_datetime(
+                    self.source.t0, self.source.fhr
+                )
+            return self._forecast_datetime
         else:
             return self.source.time
 
     @property
     def dates(self):
         return self.datetime
+
+    @property
+    def frequency(self) -> str:
+        """Anemoi-compatible frequency string.
+
+        pandas returns bare offset aliases for single-unit frequencies
+        (e.g. "h" for hourly, "D" for daily, "min" for minutely).
+        Anemoi expects an explicit numeric prefix (e.g. "1h"), so we make
+        sure a leading count is always present.
+        """
+        freqstr = self.datetime.freqstr
+        if freqstr is None:
+            raise ValueError(
+                f"{self.name}: could not determine a regular frequency from the datetime axis."
+            )
+        if not re.match(r"^\d", freqstr):
+            freqstr = f"1{freqstr}"
+        return freqstr
 
     @property
     def time(self):
@@ -168,8 +228,12 @@ class Anemoi(Target):
         self.sort_channels_by_levels = sort_channels_by_levels
         # additional checks
         if self._has_fhr:
-            assert len(self.source.fhr) == 1, \
-                f"{self.name}.__init__: Can only use this class with len(fhr)==1, no multiple lead times"
+             if isinstance(self, AnemoiInferenceWithForcings) and len(self.source.fhr) != 1:
+                 raise ValueError(
+                     f"{self.name}: inference does not support multiple forecast hours yet."
+                 )
+            # ensure fhrs requested are valid.
+            _ = self.datetime
 
         renamekeys = list(self.rename.keys())
         protected = list(self.protected_rename.keys()) + list(self.protected_rename.values())
@@ -221,7 +285,7 @@ class Anemoi(Target):
             "resolution": str(self.resolution),
             "start_date": self.start_date,
             "end_date": self.end_date,
-            "frequency": self.datetime.freqstr,
+            "frequency": self.frequency,
             "statistics_start_date": self.statistics_start_date,
             "statistics_end_date": self.statistics_end_date,
         }
@@ -738,7 +802,7 @@ class Anemoi(Target):
 
         xds = xr.open_zarr(self.store_path)
         attrs = xds.attrs.copy()
-        freqstr = self.dates.freqstr
+        freqstr = self.frequency
 
         # get the start/end times for computing statistics
         # in terms of logical time index values

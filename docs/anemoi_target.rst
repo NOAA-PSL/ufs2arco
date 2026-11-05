@@ -58,6 +58,14 @@ dataset for reforecasting.
 
 ``resolution`` is optional. Set it explicitly for multidataset use within anemoi.
 
+Users may wish to train a model with forecast data or initial
+conditions. When forecast data is requested, we map every ``(t0, fhr)`` sample to
+``valid_time = t0 + fhr`` and store it on the dataset's single ``time`` axis.
+This behavior is generic to forecast sources, but the available cadence depends
+on the source archive. Do not include a forecast hour that overlaps the next initialization. For
+example, forecast hour 6 from a 00Z cycle duplicates forecast hour 0 from the
+06Z cycle and is rejected.
+
 Anemoi Inference With Forcings
 ------------------------------
 
