@@ -365,16 +365,14 @@ class Anemoi(Target):
             }
             if len(self.ensemble) > 1:
                 meta["mars"]["number"] = list(self.ensemble)
+            # Only the ocean diagnostics carry these attributes; other variables are skipped.
             diagnostic = xds[name].attrs.get("diagnostic")
-            diagnostic_attrs = OCEAN_DIAGNOSTIC_METADATA_ATTRS.get(
-                diagnostic,
-                (),
-            )
-            for attr_name in diagnostic_attrs:
-                if attr_name in xds[name].attrs:
-                    meta[attr_name] = _json_compatible_metadata(
-                        xds[name].attrs[attr_name]
-                    )
+            if diagnostic in OCEAN_DIAGNOSTIC_METADATA_ATTRS:
+                for attr_name in OCEAN_DIAGNOSTIC_METADATA_ATTRS[diagnostic]:
+                    if attr_name in xds[name].attrs:
+                        meta[attr_name] = _json_compatible_metadata(
+                            xds[name].attrs[attr_name]
+                        )
             if "level" in xds[name].dims:
                 type_of_level = xds[name].attrs.get(
                     "type_of_level",
