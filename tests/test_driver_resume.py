@@ -99,7 +99,7 @@ def test_successful_report_uses_relative_sidecar(tmp_path, monkeypatch):
 
     driver.report_missing_data([])
 
-    assert driver.get_missing_data_path(driver.store_path) == "missing.dataset.zarr.yaml"
+    assert driver.get_missing_data_path(driver.store_path) == "./missing.dataset.zarr.yaml"
     assert_missing_records(driver, [])
 
 

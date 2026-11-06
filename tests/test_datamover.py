@@ -173,6 +173,7 @@ def test_create_container_preserves_sample_invariant_grid_fields():
         sample_dims=("time",),
         time=[pd.Timestamp("2000-01-01")],
         open_sample_dataset=lambda **kwargs: sample,
+        static_vars=(),
     )
     target = SimpleNamespace(
         renamed_sample_dims=("time",),

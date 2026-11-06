@@ -423,7 +423,7 @@ class Driver:
 
     def get_missing_data_path(self, store_path) -> str:
         directory, zstore = os.path.split(store_path)
-        return os.path.join(directory, f"missing.{zstore}.yaml")
+        return os.path.join(directory or ".", f"missing.{zstore}.yaml")
 
 
     def _missing_data_outside_resumed_range(self, missing_data_yaml):

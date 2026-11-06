@@ -17,6 +17,7 @@ def _target() -> Anemoi:
         member=None,
         sample_dims=("time",),
         horizontal_dims=("latitude", "longitude"),
+        static_vars=(),
     )
     return Anemoi(
         source=source,

@@ -8,7 +8,7 @@ from ufs2arco.sources import CloudZarrData, Source
 logger = logging.getLogger("ufs2arco")
 
 
-class GCSERA5OneDegree(CloudZarrData, Source):
+class GCSERA5(CloudZarrData, Source):
 
     sample_dims = ("time",)
     horizontal_dims = ("latitude", "longitude")

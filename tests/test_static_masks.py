@@ -72,6 +72,7 @@ def _target(
         member=None,
         sample_dims=("time",),
         horizontal_dims=("latitude", "longitude"),
+        static_vars=(),
     )
     static_mask_250 = {
         "path": str(static_mask_path),

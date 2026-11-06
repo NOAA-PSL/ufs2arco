@@ -31,7 +31,7 @@ class Anemoi(Target):
     Assumptions:
         * For :class:`EnsembleForecastSource` and :class:`ForecastSource` datasets, t0 gets renamed to time, and fhr is silently dropped
         * :attr:`do_flatten_grid` = ``True``
-        * resolution = None, I have no idea where this gets set in anemoi-datasets
+        * set ``resolution`` to the same text used by other datasets when those datasets will be combined (e.g. multi-datasets)
         * just setting use_level_index = False for now, but eventually it would be nice to use this flag to switch between how vertical level suffixes are labeled
         * if :attr:`sort_channels_by_level` is ``True``, then we'll make sure that channels go like variable_<level 0> -> variable_<largest level value>
     """
@@ -171,6 +171,7 @@ class Anemoi(Target):
         variables_with_nans: Optional[list] = None,
         transformed_dims: Optional[dict] = None,
         multisource_masks: Optional[list | dict] = None,
+        resolution: Optional[str | float] = None,
     ) -> None:
         """
 
@@ -217,6 +218,7 @@ class Anemoi(Target):
         self._static_mask_policy_manifest = None
         self._region_write_attrs = None
         self._validate_static_mask_configs()
+        self.resolution = str(resolution) if resolution is not None else None
 
 
     def apply_transforms_to_sample(
@@ -344,6 +346,7 @@ class Anemoi(Target):
 
         nds = xr.Dataset()
         nds.attrs["variables_metadata"] = dict()
+        static_variables = {self.rename.get(name, name) for name in self.source.static_vars}
 
         for name in xds.data_vars:
             # Record the horizontal grid from the first variable that carries it.
@@ -363,6 +366,9 @@ class Anemoi(Target):
                     "variable": name,
                 },
             }
+            if name in static_variables or xds[name].attrs.get("constant_in_time"):
+                meta["constant_in_time"] = True
+
             if len(self.ensemble) > 1:
                 meta["mars"]["number"] = list(self.ensemble)
             # Only the ocean diagnostics carry these attributes; other variables are skipped.
@@ -429,6 +435,9 @@ class Anemoi(Target):
                 else:
                     nds.attrs["variables_metadata"][name] = deepcopy(meta)
 
+        nds.attrs["constant_fields"] = sorted(
+            name for name, metadata in nds.attrs["variables_metadata"].items() if metadata.get("constant_in_time")
+        )
         return nds
 
 
@@ -585,7 +594,6 @@ class Anemoi(Target):
         nds = xds.stack(cell2d=xds.attrs["stack_order"])
         nds["cell"] = xr.DataArray(
             np.arange(len(nds["cell2d"])),
-            coords=nds["cell2d"].coords,
             dims=nds["cell2d"].dims,
             attrs={
                 "description": f"logical index for 'cell2d', which is a flattened lon x lat array",
@@ -1885,7 +1893,7 @@ def _merge_attrs(list_of_dicts):
     merged_dict = {}
     for d in list_of_dicts:
         for key, value in d.items():
-            if key not in ["variables", "variables_metadata", "latest_write_timestamp"]:
+            if key not in ["variables", "variables_metadata", "constant_fields", "latest_write_timestamp"]:
                 if key in merged_dict and merged_dict[key] != value:
                     raise ValueError(
                         f"Conflict for common key '{key}': "
@@ -1913,6 +1921,9 @@ def _merge_attrs(list_of_dicts):
         vmetadata.update(attrs["variables_metadata"].copy())
 
     merged_dict["variables_metadata"] = {key: vmetadata[key] for key in merged_dict["variables"]}
+    merged_dict["constant_fields"] = sorted(
+        name for name, metadata in merged_dict["variables_metadata"].items() if metadata.get("constant_in_time")
+    )
     return merged_dict
 
 
@@ -1975,6 +1986,7 @@ class AnemoiInferenceWithForcings(Anemoi):
         variables_with_nans: Optional[list] = None,
         multisource_masks: Optional[list | dict] = None,
         multistep_input: Optional[int] = 1,
+        resolution: Optional[str | float] = None,
     ) -> None:
 
         super().__init__(
@@ -1990,6 +2002,7 @@ class AnemoiInferenceWithForcings(Anemoi):
             channel_rename=channel_rename,
             variables_with_nans=variables_with_nans,
             multisource_masks=multisource_masks,
+            resolution=resolution,
         )
 
         self.multistep_input = multistep_input
