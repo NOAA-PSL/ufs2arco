@@ -99,6 +99,11 @@ class MPITopology:
     def gather(self, local_array):
         return self.comm.gather(local_array, root=self.root)
 
+    def broadcast(self, value):
+        """Broadcast a Python object from the root rank."""
+
+        return self.comm.bcast(value, root=self.root)
+
     def Reduce(self, local_array, result_buffer, op):
         self.comm.Reduce(local_array, result_buffer, op=op, root=self.root)
 
@@ -184,7 +189,14 @@ class SerialTopology:
         pass
 
     def gather(self, local_array):
-        return local_array
+        """Match mpi4py gather's root return shape in serial workflows."""
+
+        return [local_array]
+
+    def broadcast(self, value):
+        """Return the root value in serial workflows."""
+
+        return value
 
     # since the communication doesn't need to happen
     # we can assume these results already exist

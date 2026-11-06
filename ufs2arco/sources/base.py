@@ -112,6 +112,9 @@ class Source:
         if hasattr(self, "_accum_hrs"):
             key = "_accum_hrs"
             msg += f"{key:<18s}: {getattr(self, key)}\n"
+        if hasattr(self, "accumulate_variables"):
+            key = "accumulate_variables"
+            msg += f"{key:<18s}: {getattr(self, key)}\n"
         return msg
 
     def _open_static_vars(self, dims) -> bool:

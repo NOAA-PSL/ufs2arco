@@ -13,8 +13,12 @@ from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
 _local_path = os.path.dirname(__file__)
-_sources = ["replay", "gfs", "gefs", "hrrr", "era5"]
+_sources = ["replay", "replay_ocean", "gfs", "gefs", "hrrr", "era5"]
 _targets = ["base", "anemoi"]
+
+# Sources with no land/sea mask or orography to check. The ocean component
+# carries neither.
+_sources_without_static_vars = ["replay_ocean"]
 
 # keep these separate, as we do not need NRT with reanalysis datasets.
 _nrt_sources = ["hrrr", "gfs"]
@@ -109,6 +113,10 @@ def run_test(source, target):
     logger.info(f" ... Test Passed")
 
 def _test_static_vars(source, target, store):
+    if source in _sources_without_static_vars:
+        logger.info(f" ... skipping static var check, {source} has no lsm/orog")
+        return
+
     ds = xr.open_zarr(store, decode_timedelta=True)
 
     lsm = {
