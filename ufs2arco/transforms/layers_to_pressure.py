@@ -19,6 +19,25 @@ _MAX_FALLBACK_DISTANCE_PA = 1_000.0
 _MAX_BRIDGE_SPAN_PA = 2_500.0
 _PAIR_DIMENSION = "_layers_to_pressure_pair"
 
+# Attributes that the Anemoi target copies into variables_metadata for each
+# pressure-level channel. Update this list when this transform adds an attribute.
+PRESSURE_METADATA_ATTRS = (
+    "units",
+    "source_variable",
+    "vertical_interpolation",
+    "source_vertical_grid",
+    "support_variables",
+    "required_support_fields",
+    "derived_from",
+    "below_ground_policy",
+    "unbracketed_policy",
+    "extrapolation_policy",
+    "nearest_neighbor_policy",
+    "max_fallback_distance_hpa",
+    "max_bridge_span_hpa",
+    "max_bridged_missing_levels",
+)
+
 
 def _normalized_units(value: str) -> str:
     return value.strip().lower().replace(" ", "")

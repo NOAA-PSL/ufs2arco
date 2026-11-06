@@ -49,6 +49,78 @@ _OHC_OUTPUT_UNITS = {
     "gjm2": ("GJ m-2", 1.0 / _JOULES_PER_GIGAJOULE),
 }
 
+# Attributes that the Anemoi target copies into variables_metadata for each
+# ocean diagnostic, keyed by the "diagnostic" attribute these transforms write.
+# Update these lists when a transform adds an attribute.
+MIXED_LAYER_DEPTH_METADATA_ATTRS = (
+    "diagnostic",
+    "units",
+    "density_threshold",
+    "density_threshold_units",
+    "reference_pressure_pa",
+    "reference_density_layer",
+    "equation_of_state",
+    "source_temperature",
+    "source_salinity",
+    "vertical_grid",
+    "vertical_coordinate",
+    "source_vertical_level_count",
+    "land_policy",
+    "bottom_policy",
+    "missing_policy",
+    "pathological_policy",
+    "provenance",
+)
+OCEAN_DENSITY_METADATA_ATTRS = (
+    "diagnostic",
+    "units",
+    "density_kind",
+    "reference_pressure_pa",
+    "pressure_approximation",
+    "reference_density_kg_m3",
+    "gravity_m_s2",
+    "equation_of_state",
+    "subtract_1000",
+    "sigma_offset_kg_m3",
+    "source_temperature",
+    "source_salinity",
+    "vertical_coordinate",
+    "source_vertical_level_count",
+    "land_policy",
+    "missing_policy",
+    "provenance",
+)
+OCEAN_HEAT_CONTENT_METADATA_ATTRS = (
+    "diagnostic",
+    "units",
+    "native_units",
+    "joules_to_output_units",
+    "source_temperature",
+    "temperature_reference",
+    "temperature_reference_units",
+    "integration_depth",
+    "integration_depth_units",
+    "rho0",
+    "rho0_units",
+    "heat_capacity",
+    "heat_capacity_units",
+    "require_full_depth",
+    "interface_source",
+    "layer_thickness_source",
+    "time_varying_layer_thickness_used",
+    "vertical_coordinate",
+    "source_vertical_level_count",
+    "land_policy",
+    "bottom_policy",
+    "missing_policy",
+    "provenance",
+)
+OCEAN_DIAGNOSTIC_METADATA_ATTRS = {
+    "mixed_layer_depth": MIXED_LAYER_DEPTH_METADATA_ATTRS,
+    "ocean_density": OCEAN_DENSITY_METADATA_ATTRS,
+    "ocean_heat_content": OCEAN_HEAT_CONTENT_METADATA_ATTRS,
+}
+
 
 def _normalized_units(value: str) -> str:
     """Normalize common unit spellings for validation."""

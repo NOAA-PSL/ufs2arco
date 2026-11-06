@@ -12,6 +12,8 @@ import zarr
 
 from ufs2arco.sources import Source
 from ufs2arco.targets import Target
+from ufs2arco.transforms.layers_to_pressure import PRESSURE_METADATA_ATTRS
+from ufs2arco.transforms.ocean import OCEAN_DIAGNOSTIC_METADATA_ATTRS
 
 logger = logging.getLogger("ufs2arco")
 
@@ -58,90 +60,6 @@ class Anemoi(Target):
         "stdev",
         "sums",
     )
-    pressure_metadata_attrs = (
-        "units",
-        "source_variable",
-        "vertical_interpolation",
-        "source_vertical_grid",
-        "support_variables",
-        "required_support_fields",
-        "derived_from",
-        "below_ground_policy",
-        "unbracketed_policy",
-        "extrapolation_policy",
-        "nearest_neighbor_policy",
-        "max_fallback_distance_hpa",
-        "max_bridge_span_hpa",
-        "max_bridged_missing_levels",
-    )
-    mixed_layer_depth_metadata_attrs = (
-        "diagnostic",
-        "units",
-        "density_threshold",
-        "density_threshold_units",
-        "reference_pressure_pa",
-        "reference_density_layer",
-        "equation_of_state",
-        "source_temperature",
-        "source_salinity",
-        "vertical_grid",
-        "vertical_coordinate",
-        "source_vertical_level_count",
-        "land_policy",
-        "bottom_policy",
-        "missing_policy",
-        "pathological_policy",
-        "provenance",
-    )
-    ocean_density_metadata_attrs = (
-        "diagnostic",
-        "units",
-        "density_kind",
-        "reference_pressure_pa",
-        "pressure_approximation",
-        "reference_density_kg_m3",
-        "gravity_m_s2",
-        "equation_of_state",
-        "subtract_1000",
-        "sigma_offset_kg_m3",
-        "source_temperature",
-        "source_salinity",
-        "vertical_coordinate",
-        "source_vertical_level_count",
-        "land_policy",
-        "missing_policy",
-        "provenance",
-    )
-    ocean_heat_content_metadata_attrs = (
-        "diagnostic",
-        "units",
-        "native_units",
-        "joules_to_output_units",
-        "source_temperature",
-        "temperature_reference",
-        "temperature_reference_units",
-        "integration_depth",
-        "integration_depth_units",
-        "rho0",
-        "rho0_units",
-        "heat_capacity",
-        "heat_capacity_units",
-        "require_full_depth",
-        "interface_source",
-        "layer_thickness_source",
-        "time_varying_layer_thickness_used",
-        "vertical_coordinate",
-        "source_vertical_level_count",
-        "land_policy",
-        "bottom_policy",
-        "missing_policy",
-        "provenance",
-    )
-    ocean_diagnostic_metadata_attrs = {
-        "mixed_layer_depth": mixed_layer_depth_metadata_attrs,
-        "ocean_density": ocean_density_metadata_attrs,
-        "ocean_heat_content": ocean_heat_content_metadata_attrs,
-    }
 
     # these are basically properties
     always_open_static_vars = True
@@ -448,7 +366,7 @@ class Anemoi(Target):
             if len(self.ensemble) > 1:
                 meta["mars"]["number"] = list(self.ensemble)
             diagnostic = xds[name].attrs.get("diagnostic")
-            diagnostic_attrs = self.ocean_diagnostic_metadata_attrs.get(
+            diagnostic_attrs = OCEAN_DIAGNOSTIC_METADATA_ATTRS.get(
                 diagnostic,
                 (),
             )
@@ -465,7 +383,7 @@ class Anemoi(Target):
                 is_pressure_level = type_of_level == "isobaricInhPa"
                 if is_pressure_level:
                     meta["type_of_level"] = _json_compatible_metadata(type_of_level)
-                    for attr_name in self.pressure_metadata_attrs:
+                    for attr_name in PRESSURE_METADATA_ATTRS:
                         if attr_name in xds[name].attrs:
                             meta[attr_name] = _json_compatible_metadata(
                                 xds[name].attrs[attr_name]
