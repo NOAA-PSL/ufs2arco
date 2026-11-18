@@ -1,7 +1,9 @@
-import logging
-from typing import Optional
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
+import logging
 import re
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -10,6 +12,8 @@ import zarr
 
 from ufs2arco.sources import Source
 from ufs2arco.targets import Target
+from ufs2arco.transforms.layers_to_pressure import PRESSURE_METADATA_ATTRS
+from ufs2arco.transforms.ocean import OCEAN_DIAGNOSTIC_METADATA_ATTRS
 
 logger = logging.getLogger("ufs2arco")
 
@@ -38,6 +42,24 @@ class Anemoi(Target):
     use_level_index = False
     allow_nans = True
     data_dtype = np.float32
+    packed_stat_names = (
+        "count_array",
+        "has_nans_array",
+        "maximum_array",
+        "minimum_array",
+        "squares_array",
+        "sums_array",
+    )
+    aggregate_stat_names = (
+        "count",
+        "has_nans",
+        "maximum",
+        "mean",
+        "minimum",
+        "squares",
+        "stdev",
+        "sums",
+    )
 
     # these are basically properties
     always_open_static_vars = True
@@ -144,8 +166,11 @@ class Anemoi(Target):
         statistics_period: Optional[dict] = None,
         compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
+        use_level_index: Optional[bool] = False,
+        channel_rename: Optional[dict] = None,
         variables_with_nans: Optional[list] = None,
         transformed_dims: Optional[dict] = None,
+        multisource_masks: Optional[list | dict] = None,
         resolution: Optional[str | float] = None,
     ) -> None:
         """
@@ -166,6 +191,8 @@ class Anemoi(Target):
         )
 
         self.sort_channels_by_levels = sort_channels_by_levels
+        self.use_level_index = use_level_index
+        self.channel_rename = channel_rename if channel_rename is not None else dict()
         # additional checks
         if self._has_fhr:
             assert len(self.source.fhr) == 1, \
@@ -180,6 +207,17 @@ class Anemoi(Target):
 
         self.variables_with_nans = variables_with_nans
         self.transformed_dims = transformed_dims if transformed_dims else {}
+        if multisource_masks is None:
+            self.multisource_masks = list()
+        elif isinstance(multisource_masks, dict):
+            self.multisource_masks = [multisource_masks]
+        else:
+            self.multisource_masks = multisource_masks
+        self._static_mask_cache = {}
+        self._static_mask_valid_cache = {}
+        self._static_mask_policy_manifest = None
+        self._region_write_attrs = None
+        self._validate_static_mask_configs()
         self.resolution = str(resolution) if resolution is not None else None
 
 
@@ -201,6 +239,7 @@ class Anemoi(Target):
         xds = super().apply_transforms_to_sample(xds)
         xds = self._map_datetime_to_index(xds)
         xds = self._map_levels_to_suffixes(xds)
+        xds = self._rename_channels(xds)
         xds = self._map_static_to_expanded(xds)
         xds = xds.transpose(* (("time", "ensemble") + tuple(xds.attrs["stack_order"])) )
         xds = self._stackit(xds)
@@ -310,6 +349,13 @@ class Anemoi(Target):
         static_variables = {self.rename.get(name, name) for name in self.source.static_vars}
 
         for name in xds.data_vars:
+            # Record the horizontal grid from the first variable that carries it.
+            # This also covers datasets where every variable has a level dimension.
+            if "field_shape" not in nds.attrs and all(d in xds[name].dims for d in self.expanded_horizontal_dims):
+                stack_order = list(d for d in xds[name].dims if d in self.expanded_horizontal_dims)
+                nds.attrs["stack_order"] = stack_order
+                nds.attrs["field_shape"] = list(len(xds[d]) for d in stack_order)
+
             meta = {
                 "mars": {
                     "date": str(self.datetime[xds.time.values[0]]).replace("-","")[:8],
@@ -325,7 +371,28 @@ class Anemoi(Target):
 
             if len(self.ensemble) > 1:
                 meta["mars"]["number"] = list(self.ensemble)
+            # Only the ocean diagnostics carry these attributes; other variables are skipped.
+            diagnostic = xds[name].attrs.get("diagnostic")
+            if diagnostic in OCEAN_DIAGNOSTIC_METADATA_ATTRS:
+                for attr_name in OCEAN_DIAGNOSTIC_METADATA_ATTRS[diagnostic]:
+                    if attr_name in xds[name].attrs:
+                        meta[attr_name] = _json_compatible_metadata(
+                            xds[name].attrs[attr_name]
+                        )
             if "level" in xds[name].dims:
+                type_of_level = xds[name].attrs.get(
+                    "type_of_level",
+                    xds["level"].attrs.get("type_of_level", None),
+                )
+                is_pressure_level = type_of_level == "isobaricInhPa"
+                if is_pressure_level:
+                    meta["type_of_level"] = _json_compatible_metadata(type_of_level)
+                    for attr_name in PRESSURE_METADATA_ATTRS:
+                        if attr_name in xds[name].attrs:
+                            meta[attr_name] = _json_compatible_metadata(
+                                xds[name].attrs[attr_name]
+                            )
+
                 for level in xds[name].level.values:
                     idx = self._get_level_index(xds, level)
                     ilevel = int(level)
@@ -341,7 +408,16 @@ class Anemoi(Target):
                         },
                     )
                     nds.attrs["variables_metadata"][suffix_name] = deepcopy(meta)
-                    nds.attrs["variables_metadata"][suffix_name]["mars"]["level"] = ilevel if not self.use_level_index else idx
+                    stored_level = ilevel if not self.use_level_index else idx
+                    nds.attrs["variables_metadata"][suffix_name]["mars"]["level"] = _json_compatible_metadata(stored_level)
+                    if is_pressure_level:
+                        pressure_meta = nds.attrs["variables_metadata"][suffix_name]
+                        pressure_level_hpa = _json_compatible_metadata(ilevel)
+                        pressure_meta["pressure_level_hpa"] = pressure_level_hpa
+                        pressure_meta["mars"]["levtype"] = "pl"
+                        pressure_meta["mars"]["levelist"] = pressure_level_hpa
+                        if units:
+                            pressure_meta["level_units"] = _json_compatible_metadata(units)
 
                 if "remapping" not in nds.attrs:
                     nds.attrs["remapping"] = {"param_level": "{param}_{levelist}"}
@@ -358,18 +434,50 @@ class Anemoi(Target):
                     }
                 else:
                     nds.attrs["variables_metadata"][name] = deepcopy(meta)
-                # Is attributes here a hack? Add the "field_shape" here
-                # so that it's in the order of the data arrays, not in the dataset order
-                # (they could be different)
-                if "field_shape" not in nds.attrs and all(d in xds[name].dims for d in self.expanded_horizontal_dims):
-                    stack_order = list(d for d in xds[name].dims if d in self.expanded_horizontal_dims)
-                    nds.attrs["stack_order"] = stack_order
-                    nds.attrs["field_shape"] = list(len(xds[d]) for d in stack_order)
 
         nds.attrs["constant_fields"] = sorted(
             name for name, metadata in nds.attrs["variables_metadata"].items() if metadata.get("constant_in_time")
         )
         return nds
+
+
+    def _rename_channels(self, xds: xr.Dataset) -> xr.Dataset:
+        """Rename variables after level suffixes have been applied."""
+
+        if len(self.channel_rename) == 0:
+            return xds
+
+        rename_map = {}
+        known_names = set(xds.data_vars)
+        for old_name, new_name in self.channel_rename.items():
+            if old_name not in known_names:
+                logger.info(f"{self.name}._rename_channels: {old_name} not found, skipping.")
+            elif new_name in known_names and new_name != old_name:
+                raise ValueError(
+                    f"{self.name}._rename_channels: can't rename {old_name} "
+                    f"to {new_name}; {new_name} already exists."
+                )
+            else:
+                rename_map[old_name] = new_name
+
+        if len(rename_map) == 0:
+            return xds
+
+        xds = xds.rename(rename_map)
+
+        variables_metadata = xds.attrs.get("variables_metadata", None)
+        if variables_metadata is not None:
+            for old_name, new_name in rename_map.items():
+                if old_name not in variables_metadata:
+                    continue
+                metadata = deepcopy(variables_metadata.pop(old_name))
+                if "mars" in metadata:
+                    metadata["mars"]["param"] = new_name
+                    metadata["mars"]["variable"] = new_name
+                variables_metadata[new_name] = metadata
+            xds.attrs["variables_metadata"] = variables_metadata
+
+        return xds
 
 
     @staticmethod
@@ -522,6 +630,33 @@ class Anemoi(Target):
         return xds
 
 
+    @staticmethod
+    def _raise_collective_stage_error(topo, stage: str, local_error) -> None:
+        """Propagate a rank-local finalization failure before a barrier."""
+
+        gathered = topo.gather(local_error)
+        stage_error = None
+        if topo.is_root:
+            failed = next(
+                (
+                    (rank, error)
+                    for rank, error in enumerate(gathered)
+                    if error is not None
+                ),
+                None,
+            )
+            if failed is not None:
+                rank, error = failed
+                stage_error = f"rank {rank}: {error}"
+
+        stage_error = topo.broadcast(stage_error)
+        if stage_error is not None:
+            raise RuntimeError(
+                f"Anemoi.{stage}: distributed finalization failed: "
+                f"{stage_error}"
+            )
+
+
     def finalize(self, topo) -> None:
         """Finalize the dataset with
         * dates
@@ -529,14 +664,34 @@ class Anemoi(Target):
         * temporal stats (if specified)
         """
 
+        finalize_error = None
         if topo.is_root:
-            self.add_dates()
-            self.reconcile_missing_and_nans()
+            try:
+                self.add_dates()
+                self.reconcile_missing_and_nans()
+            except Exception as exc:
+                finalize_error = f"{type(exc).__name__}: {exc}"
+        self._raise_collective_stage_error(
+            topo,
+            "finalize_dates",
+            finalize_error,
+        )
         topo.barrier()
 
         logger.info(f"Aggregating statistics")
         self.aggregate_stats(topo)
         logger.info(f"Done aggregating statistics\n")
+        validation_error = None
+        if topo.is_root:
+            try:
+                self.validate_statistics()
+            except Exception as exc:
+                validation_error = f"{type(exc).__name__}: {exc}"
+        self._raise_collective_stage_error(
+            topo,
+            "validate_statistics",
+            validation_error,
+        )
 
         if self.compute_temporal_residual_statistics:
             logger.info(f"Computing temporal residual statistics")
@@ -596,9 +751,8 @@ class Anemoi(Target):
         logger.info("Checking that has_nans_array = True at each missing_date")
         for mdate in missing_dates:
             this_one = xds.sel(dates=mdate)
-            is_actually_nan = np.isnan(this_one["data"]).any().values
             has_nan = this_one["has_nans_array"].any().values
-            if is_actually_nan and not has_nan:
+            if not has_nan:
                 something_happened = True
 
                 logger.info(f" ... setting the date in has_nans_array to True: {mdate}")
@@ -611,12 +765,20 @@ class Anemoi(Target):
         if self.variables_with_nans is not None:
 
             ignoreme = list()
+            variable_names = list(xds.attrs["variables"])
             for ignore_this in self.variables_with_nans:
-                if ignore_this in xds.attrs["variables"]:
-                    ignoreme.append(ignore_this)
+                if ignore_this in variable_names:
+                    all_instances = [ignore_this]
                 else:
-                    all_instances = [entry for entry in xds.attrs["variables"] if ignore_this in entry]
-                    for entry in all_instances:
+                    ignore_this_lower = ignore_this.lower()
+                    all_instances = [
+                        entry
+                        for entry in variable_names
+                        if ignore_this_lower in entry.lower()
+                    ]
+
+                for entry in all_instances:
+                    if entry not in ignoreme:
                         ignoreme.append(entry)
 
             logger.info(f"Will ignore the following fields if they have NaNs\n{ignoreme}")
@@ -624,14 +786,21 @@ class Anemoi(Target):
 
         keep_idx = [idx for idx in xds["variable"].values if idx not in ignore_idx]
 
-        nanidx = xds["has_nans_array"].sel(variable=keep_idx).any(["variable", "ensemble"]).values
+        unexpected_nans = xds["has_nans_array"].sel(variable=keep_idx).any("ensemble")
+        nanidx = unexpected_nans.any("variable").values
         nandates = [str(pd.Timestamp(ndate)) for ndate in xds["dates"][nanidx].values]
         new_missing_dates = list()
         for ndate in nandates:
             is_missing = ndate in missing_dates
             if not is_missing:
                 something_happened = True
-                logger.info(f" ... adding date where has_nans_array = True to missing_dates: {ndate}")
+                these_nan_vars = unexpected_nans.sel(dates=ndate)
+                these_nan_vars = these_nan_vars["variable"].where(these_nan_vars, drop=True).values
+                these_nan_vars = [xds.attrs["variables"][int(idx)] for idx in these_nan_vars]
+                logger.info(
+                    " ... adding date where has_nans_array = True to missing_dates: "
+                    f"{ndate}; offending variables: {these_nan_vars}"
+                )
                 new_missing_dates.append(ndate)
 
         if len(new_missing_dates) > 0:
@@ -646,6 +815,23 @@ class Anemoi(Target):
             logger.info(f"{self.name}.reconcile_missing_and_nans: Updated zarr with missing_dates and has_nans_array")
 
 
+    @staticmethod
+    def _declared_missing_time_mask(xds: xr.Dataset) -> np.ndarray:
+        """Return the logical times declared absent from an output store."""
+
+        missing_dates = xds.attrs.get("missing_dates", [])
+        if len(missing_dates) == 0:
+            return np.zeros(xds.sizes["time"], dtype=bool)
+        if "dates" not in xds:
+            raise ValueError(
+                "Anemoi output declares missing_dates but has no dates array"
+            )
+
+        dates = pd.DatetimeIndex(pd.to_datetime(xds["dates"].values))
+        missing = pd.DatetimeIndex(pd.to_datetime(missing_dates))
+        return np.asarray(dates.isin(missing), dtype=bool)
+
+
     def aggregate_stats(self, topo) -> None:
         """Aggregate statistics over "time" and "ensemble" dimension...
         I'm assuming that this is relatively inexpensive without the spatial dimension
@@ -657,46 +843,87 @@ class Anemoi(Target):
         and it will get rid of the "_array" versions of the statistics
         """
 
-        xds = xr.open_zarr(self.store_path)
-        attrs = xds.attrs.copy()
+        xds = None
+        setup_error = None
+        try:
+            xds = xr.open_zarr(self.store_path)
+            attrs = xds.attrs.copy()
 
-        # get the start/end times for computing statistics
-        # in terms of logical time index values
-        start_idx = list(self.datetime).index(pd.Timestamp(self.statistics_start_date))
-        end_idx = list(self.datetime).index(pd.Timestamp(self.statistics_end_date))
-        xds = xds.sel(time=slice(start_idx, end_idx))
+            # get the start/end times for computing statistics
+            # in terms of logical time index values
+            start_idx = list(self.datetime).index(
+                pd.Timestamp(self.statistics_start_date)
+            )
+            end_idx = list(self.datetime).index(
+                pd.Timestamp(self.statistics_end_date)
+            )
+            xds = xds.sel(time=slice(start_idx, end_idx))
 
-        dims = ["time", "ensemble"]
-        time_indices = np.array_split(np.arange(len(xds["time"])), topo.size)
-        local_indices = time_indices[topo.rank]
+            dims = ["time", "ensemble"]
+            usable_time = np.flatnonzero(
+                ~self._declared_missing_time_mask(xds)
+            )
+            time_indices = np.array_split(usable_time, topo.size)
+            local_indices = time_indices[topo.rank]
 
-        vidx = xds["variable"].values
-        count = np.zeros_like(vidx, dtype=xds["count_array"].dtype)
-        has_nans = np.full_like(vidx, fill_value=False, dtype=xds["has_nans_array"].dtype)
-        maximum = np.full_like(vidx, fill_value=-np.inf, dtype=xds["maximum_array"].dtype)
-        minimum = np.full_like(vidx, fill_value=np.inf, dtype=xds["minimum_array"].dtype)
-        squares = np.zeros_like(vidx, dtype=xds["squares_array"].dtype)
-        sums = np.zeros_like(vidx, dtype=xds["sums_array"].dtype)
+            vidx = xds["variable"].values
+            count = np.zeros_like(vidx, dtype=xds["count_array"].dtype)
+            has_nans = np.full_like(
+                vidx,
+                fill_value=False,
+                dtype=xds["has_nans_array"].dtype,
+            )
+            maximum = np.full_like(
+                vidx,
+                fill_value=-np.inf,
+                dtype=xds["maximum_array"].dtype,
+            )
+            minimum = np.full_like(
+                vidx,
+                fill_value=np.inf,
+                dtype=xds["minimum_array"].dtype,
+            )
+            squares = np.zeros_like(vidx, dtype=xds["squares_array"].dtype)
+            sums = np.zeros_like(vidx, dtype=xds["sums_array"].dtype)
+        except Exception as exc:
+            setup_error = f"{type(exc).__name__}: {exc}"
 
-        logger.info(f"{self.name}.aggregate_stats: Performing local computations")
-        if local_indices.size > 0:
+        self._raise_collective_stage_error(
+            topo,
+            "aggregate_stats_setup",
+            setup_error,
+        )
 
-            lds = xds.isel(time=local_indices)
-            local_count = lds["count_array"].sum(dims).compute().values
-            local_has_nans = lds["has_nans_array"].any(dims).compute().values
-            local_maximum = lds["maximum_array"].max(dims).compute().values
-            local_minimum = lds["minimum_array"].min(dims).compute().values
-            local_squares = lds["squares_array"].sum(dims).compute().values
-            local_sums = lds["sums_array"].sum(dims).compute().values
+        compute_error = None
+        try:
+            logger.info(
+                f"{self.name}.aggregate_stats: Performing local computations"
+            )
+            if local_indices.size > 0:
+                lds = xds.isel(time=local_indices)
+                local_count = lds["count_array"].sum(dims).compute().values
+                local_has_nans = (
+                    lds["has_nans_array"].any(dims).compute().values
+                )
+                local_maximum = lds["maximum_array"].max(dims).compute().values
+                local_minimum = lds["minimum_array"].min(dims).compute().values
+                local_squares = lds["squares_array"].sum(dims).compute().values
+                local_sums = lds["sums_array"].sum(dims).compute().values
+            else:
+                local_count = count.copy()
+                local_has_nans = has_nans.copy()
+                local_maximum = maximum.copy()
+                local_minimum = minimum.copy()
+                local_squares = squares.copy()
+                local_sums = sums.copy()
+        except Exception as exc:
+            compute_error = f"{type(exc).__name__}: {exc}"
 
-        else:
-
-            local_count = count.copy()
-            local_has_nans = has_nans.copy()
-            local_maximum = maximum.copy()
-            local_minimum = minimum.copy()
-            local_squares = squares.copy()
-            local_sums = sums.copy()
+        self._raise_collective_stage_error(
+            topo,
+            "aggregate_stats_compute",
+            compute_error,
+        )
 
 
         # reduce results
@@ -710,93 +937,248 @@ class Anemoi(Target):
         logger.info(f"{self.name}.aggregate_stats: ... done communicating")
 
         # the rest is done on the root rank
+        write_error = None
         if topo.is_root:
-            nds = xr.Dataset()
-            kw = {"coords": xds["variable"].coords}
-            nds["count"] = xr.DataArray(count, **kw)
-            nds["has_nans"] = xr.DataArray(has_nans, **kw)
-            nds["maximum"] = xr.DataArray(maximum, **kw)
-            nds["minimum"] = xr.DataArray(minimum, **kw)
-            nds["squares"] = xr.DataArray(squares, **kw)
-            nds["sums"] = xr.DataArray(sums, **kw)
+            try:
+                nds = xr.Dataset()
+                kw = {"coords": xds["variable"].coords}
+                nds["count"] = xr.DataArray(count, **kw)
+                nds["has_nans"] = xr.DataArray(has_nans, **kw)
+                nds["maximum"] = xr.DataArray(maximum, **kw)
+                nds["minimum"] = xr.DataArray(minimum, **kw)
+                nds["squares"] = xr.DataArray(squares, **kw)
+                nds["sums"] = xr.DataArray(sums, **kw)
 
-            # now add mean & stdev
-            nds["mean"] = nds["sums"] / nds["count"]
-            variance = nds["squares"] / nds["count"] - nds["mean"]**2
-            nds["stdev"] = xr.where(variance >= 0, np.sqrt(variance), 0.)
+                # now add mean & stdev
+                nds["mean"] = nds["sums"] / nds["count"]
+                variance = nds["squares"] / nds["count"] - nds["mean"]**2
+                nds["stdev"] = xr.where(variance >= 0, np.sqrt(variance), 0.)
 
-            # store it, first copying the attributes over
-            nds.attrs = attrs
-            nds.to_zarr(self.store_path, mode="a")
-            logger.info(f"{self.name}.aggregate_stats: Stored aggregated stats")
+                # store it, first copying the attributes over
+                nds.attrs = attrs
+                nds.to_zarr(self.store_path, mode="a")
+                logger.info(f"{self.name}.aggregate_stats: Stored aggregated stats")
+            except Exception as exc:
+                write_error = f"{type(exc).__name__}: {exc}"
+
+        self._raise_collective_stage_error(
+            topo,
+            "aggregate_stats",
+            write_error,
+        )
+        xds.close()
 
         # unclear if this barrier is necessary...
         topo.barrier()
 
 
-    def calc_temporal_residual_stats(self, topo):
+    def validate_statistics(self) -> None:
+        """Validate that every packed variable has aggregated statistics."""
 
         xds = xr.open_zarr(self.store_path)
-        attrs = xds.attrs.copy()
-        freqstr = self.dates.freqstr
+        variables = list(xds.attrs.get("variables", []))
+        variable_size = xds.sizes.get("variable", None)
 
-        # get the start/end times for computing statistics
-        # in terms of logical time index values
-        start_idx = list(self.datetime).index(pd.Timestamp(self.statistics_start_date))
-        end_idx = list(self.datetime).index(pd.Timestamp(self.statistics_end_date))
-        xds = xds.sel(time=slice(start_idx, end_idx))
+        errors = []
+        if variable_size is None:
+            errors.append("dataset is missing the 'variable' dimension")
+        elif variable_size != len(variables):
+            errors.append(
+                f"variable dimension has size {variable_size}, but attrs['variables'] "
+                f"has {len(variables)} entries"
+            )
 
-        data_diff = xds["data"].diff("time")
-        n_time = len(data_diff["time"])
-        count = xds["count"].load()/len(xds["time"])*n_time
-        count = count.values.astype(np.float64)
-        time_indices = np.array_split(np.arange(n_time), topo.size)
-        local_indices = time_indices[topo.rank]
+        for name in self.aggregate_stat_names:
+            if name not in xds:
+                errors.append(f"missing aggregate statistic '{name}'")
+                continue
+            if "variable" not in xds[name].dims:
+                errors.append(f"aggregate statistic '{name}' does not have a variable dimension")
+                continue
+            if variable_size is not None and xds[name].sizes["variable"] != variable_size:
+                errors.append(
+                    f"aggregate statistic '{name}' has variable size "
+                    f"{xds[name].sizes['variable']}, expected {variable_size}"
+                )
 
-        residual_avg = np.zeros_like(xds["variable"].values, dtype=np.float64)
-        residual_var = np.zeros_like(xds["variable"].values, dtype=np.float64)
-        residual_max = np.zeros_like(xds["variable"].values, dtype=np.float64)
-        residual_min = np.zeros_like(xds["variable"].values, dtype=np.float64)
+        if len(errors) > 0:
+            raise RuntimeError(
+                f"{self.name}.validate_statistics: inconsistent statistics in "
+                f"{self.store_path}. " + "; ".join(errors)
+            )
 
-        logger.info(f"{self.name}.calc_temporal_residual_stats: Performing local computations")
-        if local_indices.size > 0:
-            dims = [d for d in xds["data"].dims if d != "variable"]
-            local_data_diff = data_diff.isel(time=local_indices).astype(np.float64)
-            local_residual_avg = local_data_diff.sum(dims).compute().values
-            local_residual_var = (local_data_diff**2).sum(dims).compute().values
-            local_residual_max = local_data_diff.max(dims).compute().values
-            local_residual_min = local_data_diff.min(dims).compute().values
 
-        else:
-            local_residual_var = residual_var.copy()
-            local_residual_avg = residual_avg.copy()
-            local_residual_max = residual_max.copy()
-            local_residual_min = residual_min.copy()
+    def calc_temporal_residual_stats(self, topo):
+
+        xds = None
+        setup_error = None
+        try:
+            xds = xr.open_zarr(self.store_path)
+            attrs = xds.attrs.copy()
+            freqstr = self.dates.freqstr
+
+            # get the start/end times for computing statistics
+            # in terms of logical time index values
+            start_idx = list(self.datetime).index(
+                pd.Timestamp(self.statistics_start_date)
+            )
+            end_idx = list(self.datetime).index(
+                pd.Timestamp(self.statistics_end_date)
+            )
+            xds = xds.sel(time=slice(start_idx, end_idx))
+
+            data_diff = xds["data"].diff("time")
+            missing_time = self._declared_missing_time_mask(xds)
+            usable_pairs = np.flatnonzero(
+                ~missing_time[:-1] & ~missing_time[1:]
+            )
+            time_indices = np.array_split(usable_pairs, topo.size)
+            local_indices = time_indices[topo.rank]
+
+            residual_count = np.zeros_like(
+                xds["variable"].values,
+                dtype=np.int64,
+            )
+            residual_sums = np.zeros_like(
+                xds["variable"].values,
+                dtype=np.float64,
+            )
+            residual_squares = np.zeros_like(
+                xds["variable"].values,
+                dtype=np.float64,
+            )
+            residual_max = np.full_like(
+                xds["variable"].values,
+                fill_value=-np.inf,
+                dtype=np.float64,
+            )
+            residual_min = np.full_like(
+                xds["variable"].values,
+                fill_value=np.inf,
+                dtype=np.float64,
+            )
+        except Exception as exc:
+            setup_error = f"{type(exc).__name__}: {exc}"
+
+        self._raise_collective_stage_error(
+            topo,
+            "calc_temporal_residual_stats_setup",
+            setup_error,
+        )
+
+        compute_error = None
+        try:
+            logger.info(
+                f"{self.name}.calc_temporal_residual_stats: "
+                "Performing local computations"
+            )
+            if local_indices.size > 0:
+                dims = [d for d in xds["data"].dims if d != "variable"]
+                local_data_diff = data_diff.isel(time=local_indices).astype(
+                    np.float64
+                )
+                local_statistics = xr.Dataset(
+                    {
+                        "count": local_data_diff.notnull().sum(dims),
+                        "sums": local_data_diff.sum(dims, skipna=True),
+                        "squares": (local_data_diff**2).sum(dims, skipna=True),
+                        "maximum": local_data_diff.fillna(-np.inf).max(dims),
+                        "minimum": local_data_diff.fillna(np.inf).min(dims),
+                    }
+                ).compute()
+                local_residual_count = local_statistics["count"].values.astype(
+                    np.int64
+                )
+                local_residual_sums = local_statistics["sums"].values
+                local_residual_squares = local_statistics["squares"].values
+                local_residual_max = local_statistics["maximum"].values
+                local_residual_min = local_statistics["minimum"].values
+            else:
+                local_residual_count = residual_count.copy()
+                local_residual_sums = residual_sums.copy()
+                local_residual_squares = residual_squares.copy()
+                local_residual_max = residual_max.copy()
+                local_residual_min = residual_min.copy()
+        except Exception as exc:
+            compute_error = f"{type(exc).__name__}: {exc}"
+
+        self._raise_collective_stage_error(
+            topo,
+            "calc_temporal_residual_stats_compute",
+            compute_error,
+        )
 
         logger.info(f"{self.name}.calc_temporal_residual_stats: Communicating results to root")
-        topo.sum(local_residual_avg, residual_avg)
-        topo.sum(local_residual_var, residual_var)
+        topo.sum(local_residual_count, residual_count)
+        topo.sum(local_residual_sums, residual_sums)
+        topo.sum(local_residual_squares, residual_squares)
         topo.max(local_residual_max, residual_max)
         topo.min(local_residual_min, residual_min)
         logger.info(f"{self.name}.calc_temporal_residual_stats: ... done communicating")
 
-
+        write_error = None
         if topo.is_root:
-            nds = xr.Dataset()
-            nds.attrs = attrs
+            try:
+                nds = xr.Dataset()
+                nds.attrs = attrs
 
-            # some corrections
-            residual_avg /= count
-            residual_var = residual_var / count - residual_avg**2
+                has_data = residual_count > 0
+                residual_mean = np.full_like(residual_sums, np.nan)
+                residual_second_moment = np.full_like(residual_squares, np.nan)
+                np.divide(
+                    residual_sums,
+                    residual_count,
+                    out=residual_mean,
+                    where=has_data,
+                )
+                np.divide(
+                    residual_squares,
+                    residual_count,
+                    out=residual_second_moment,
+                    where=has_data,
+                )
+                residual_variance = residual_second_moment - residual_mean**2
+                residual_variance = np.where(
+                    has_data,
+                    np.maximum(residual_variance, 0.0),
+                    np.nan,
+                )
+                residual_max = np.where(has_data, residual_max, np.nan)
+                residual_min = np.where(has_data, residual_min, np.nan)
 
-            ckw = {"coords": xds["variable"].coords}
-            nds[f"statistics_tendencies_{freqstr}_mean"] = xr.DataArray(residual_avg, **ckw)
-            nds[f"statistics_tendencies_{freqstr}_stdev"] = xr.DataArray(np.sqrt(residual_var), **ckw)
-            nds[f"statistics_tendencies_{freqstr}_maximum"] = xr.DataArray(residual_max, **ckw)
-            nds[f"statistics_tendencies_{freqstr}_minimum"] = xr.DataArray(residual_min, **ckw)
+                ckw = {"coords": xds["variable"].coords}
+                nds[f"statistics_tendencies_{freqstr}_count"] = xr.DataArray(
+                    residual_count,
+                    **ckw,
+                )
+                nds[f"statistics_tendencies_{freqstr}_mean"] = xr.DataArray(
+                    residual_mean,
+                    **ckw,
+                )
+                nds[f"statistics_tendencies_{freqstr}_stdev"] = xr.DataArray(
+                    np.sqrt(residual_variance),
+                    **ckw,
+                )
+                nds[f"statistics_tendencies_{freqstr}_maximum"] = xr.DataArray(
+                    residual_max,
+                    **ckw,
+                )
+                nds[f"statistics_tendencies_{freqstr}_minimum"] = xr.DataArray(
+                    residual_min,
+                    **ckw,
+                )
 
-            nds.to_zarr(self.store_path, mode="a")
-            logger.info(f"{self.name}.calc_temporal_residual_stats: Stored temporal residual stats")
+                nds.to_zarr(self.store_path, mode="a")
+                logger.info(f"{self.name}.calc_temporal_residual_stats: Stored temporal residual stats")
+            except Exception as exc:
+                write_error = f"{type(exc).__name__}: {exc}"
+
+        self._raise_collective_stage_error(
+            topo,
+            "calc_temporal_residual_stats",
+            write_error,
+        )
+        xds.close()
 
         # unclear if this barrier is necessary
         topo.barrier()
@@ -834,12 +1216,24 @@ class Anemoi(Target):
         zarr.consolidate_metadata(self.store_path)
 
 
-    def merge_multisource(self, dslist: list[xr.Dataset]) -> xr.Dataset:
+    def merge_multisource(
+        self,
+        dslist: list[xr.Dataset],
+        apply_masks: Optional[bool] = True,
+    ) -> xr.Dataset:
         """Take a list of datasets, each from their own source, and merge them"""
 
         attrs_list = [xds.attrs.copy() for xds in dslist]
+        merged_attrs = _merge_attrs(attrs_list)
+        self._validate_multisource_packed_grids(dslist)
 
-        result = xr.concat(dslist, dim="variable", data_vars="all", combine_attrs="drop")
+        result = xr.concat(
+            dslist,
+            dim="variable",
+            data_vars="all",
+            combine_attrs="drop",
+            join="exact",
+        )
 
         # these should not have a variable dimension
         for key in ["latitudes", "longitudes"]:
@@ -849,15 +1243,650 @@ class Anemoi(Target):
         result["new_variable"] = xr.DataArray(np.arange(len(result.variable)), coords=result.variable.coords)
         result = result.swap_dims({"variable": "new_variable"}).drop_vars("variable").rename({"new_variable": "variable"})
 
-        result.attrs = _merge_attrs(attrs_list)
+        result.attrs = merged_attrs
+
+        if apply_masks:
+            result = self._apply_multisource_masks(result)
+        else:
+            result = self._add_multisource_mask_placeholders(result)
 
         # Rechunk along variable, otherwise this is not worth it!
         result = result.chunk({"variable": self.chunks["variable"]})
 
 
-        # TODO: resort variable?
-        # Or maybe it's more straightforward to leave the order as is, same as concatenating multiple datasets
+        # Preserve source-block order so adding a later source does not change
+        # the channel indices of earlier sources.
         return result
+
+
+    def _validate_multisource_packed_grids(self, dslist: list[xr.Dataset]) -> None:
+        """Require packed sources to describe the same flattened grid."""
+
+        if len(dslist) == 0:
+            raise ValueError(f"{self.name}.merge_multisource: no datasets to merge")
+
+        reference = dslist[0]
+        if "data" not in reference:
+            raise ValueError(f"{self.name}.merge_multisource: source 0 is missing packed 'data'")
+
+        required_grid_fields = ("cell", "latitudes", "longitudes")
+        reference_dims = tuple(dim for dim in reference["data"].dims if dim != "variable")
+        reference_sizes = {dim: reference.sizes[dim] for dim in reference_dims}
+
+        for field in required_grid_fields:
+            if field not in reference:
+                raise ValueError(
+                    f"{self.name}.merge_multisource: source 0 is missing packed grid field '{field}'"
+                )
+
+        for source_idx, candidate in enumerate(dslist[1:], start=1):
+            if "data" not in candidate:
+                raise ValueError(
+                    f"{self.name}.merge_multisource: source {source_idx} is missing packed 'data'"
+                )
+
+            candidate_dims = tuple(dim for dim in candidate["data"].dims if dim != "variable")
+            candidate_sizes = {dim: candidate.sizes[dim] for dim in candidate_dims}
+            if candidate_dims != reference_dims or candidate_sizes != reference_sizes:
+                raise ValueError(
+                    f"{self.name}.merge_multisource: packed data dimensions differ between "
+                    f"source 0 and source {source_idx}: "
+                    f"{reference_sizes} != {candidate_sizes}"
+                )
+
+            for field in required_grid_fields:
+                if field not in candidate:
+                    raise ValueError(
+                        f"{self.name}.merge_multisource: source {source_idx} is missing "
+                        f"packed grid field '{field}'"
+                    )
+                if not reference[field].equals(candidate[field]):
+                    raise ValueError(
+                        f"{self.name}.merge_multisource: packed grid field '{field}' "
+                        f"differs between source 0 and source {source_idx}"
+                    )
+
+
+    def _validate_static_mask_configs(self) -> None:
+        """Validate opt-in static-mask artifact configuration."""
+
+        for index, config in enumerate(self.multisource_masks):
+            if not isinstance(config, Mapping):
+                raise TypeError(
+                    f"{self.name}: multisource_masks[{index}] must be a mapping"
+                )
+            options = config.get("static_mask")
+            if options is None:
+                continue
+            if not isinstance(options, Mapping):
+                raise TypeError(
+                    f"{self.name}: multisource_masks[{index}].static_mask "
+                    "must be a mapping"
+                )
+
+            mask_from = config.get("mask_from")
+            if not isinstance(mask_from, str) or not mask_from:
+                raise ValueError(
+                    f"{self.name}: static multisource mask {index} requires "
+                    "a non-empty string mask_from"
+                )
+            path = options.get("path")
+            if not isinstance(path, str) or not path:
+                raise ValueError(
+                    f"{self.name}: static multisource mask {index} requires "
+                    "static_mask.path"
+                )
+            mode = options.get("mode", "reuse")
+            if mode != "reuse":
+                raise ValueError(
+                    f"{self.name}: static_mask.mode must be 'reuse'; fit the "
+                    "training artifact first with python -m ufs2arco.static_masks"
+                )
+            artifact_variable = options.get("variable", mask_from)
+            if not isinstance(artifact_variable, str) or not artifact_variable:
+                raise ValueError(
+                    f"{self.name}: static_mask.variable must be a non-empty string"
+                )
+            method = options.get("method")
+            supported_methods = (
+                "any_valid",
+                "all_valid",
+                "minimum_valid_fraction",
+            )
+            if method is not None and method not in supported_methods:
+                raise ValueError(
+                    f"{self.name}: static_mask.method must be one of "
+                    f"{supported_methods}; got {method!r}"
+                )
+
+            minimum_valid_fraction = options.get("minimum_valid_fraction")
+            if method == "minimum_valid_fraction":
+                if (
+                    isinstance(minimum_valid_fraction, (bool, np.bool_))
+                    or not isinstance(
+                        minimum_valid_fraction,
+                        (int, float, np.integer, np.floating),
+                    )
+                    or not np.isfinite(minimum_valid_fraction)
+                    or not 0.0 < float(minimum_valid_fraction) <= 1.0
+                ):
+                    raise ValueError(
+                        f"{self.name}: static_mask.minimum_valid_fraction must "
+                        "be finite and in (0, 1] when method is "
+                        "'minimum_valid_fraction'"
+                    )
+            elif minimum_valid_fraction is not None:
+                raise ValueError(
+                    f"{self.name}: static_mask.minimum_valid_fraction is only "
+                    "valid when method is 'minimum_valid_fraction'"
+                )
+
+            mask_variables = config.get("mask_variables", [])
+            if (
+                isinstance(mask_variables, (str, bytes))
+                or not isinstance(mask_variables, Sequence)
+                or not all(
+                    isinstance(variable, str) and variable
+                    for variable in mask_variables
+                )
+            ):
+                raise TypeError(
+                    f"{self.name}: mask_variables must be a sequence of strings"
+                )
+
+
+    @property
+    def has_static_masks(self) -> bool:
+        """Whether any multisource mask uses a frozen training artifact."""
+
+        return any(
+            config.get("static_mask") is not None
+            for config in self.multisource_masks
+        )
+
+
+    def _static_mask_for_dataset(
+        self,
+        xds: xr.Dataset,
+        config_index: int,
+    ) -> xr.DataArray:
+        """Return a prepared static mask without rescanning grid coordinates."""
+
+        if self._static_mask_policy_manifest is None:
+            self._prepare_static_mask_cache(xds)
+
+        values = self._static_mask_valid_cache[config_index]
+        if xds.sizes.get("cell") != values.size:
+            raise ValueError(
+                f"{self.name}: static mask has {values.size} cells, but the "
+                f"sample has {xds.sizes.get('cell')}"
+            )
+        return xr.DataArray(
+            values,
+            dims=("cell",),
+            coords={"cell": xds["cell"]},
+        )
+
+
+    def _load_static_mask_artifact(self, config: Mapping):
+        """Load and validate one configured artifact, caching it by path."""
+
+        options = config["static_mask"]
+        configured_path = options["path"]
+        artifact = self._static_mask_cache.get(configured_path)
+        if artifact is None:
+            # Avoid importing the mask-fitting CLI during normal package import.
+            from ufs2arco.static_masks import load_static_mask_artifact
+
+            artifact = load_static_mask_artifact(configured_path)
+            self._static_mask_cache[configured_path] = artifact
+            self._static_mask_cache[artifact.path] = artifact
+
+        artifact_variable = options.get("variable", config["mask_from"])
+        expected_method = options.get("method")
+        if expected_method is not None and artifact.method != expected_method:
+            raise ValueError(
+                f"{self.name}: static mask method mismatch for "
+                f"{artifact_variable!r}: configured {expected_method!r}, "
+                f"artifact contains {artifact.method!r}"
+            )
+        expected_fraction = options.get("minimum_valid_fraction")
+        if (
+            expected_fraction is not None
+            and artifact.minimum_valid_fraction != float(expected_fraction)
+        ):
+            raise ValueError(
+                f"{self.name}: static mask minimum_valid_fraction mismatch for "
+                f"{artifact_variable!r}: configured {expected_fraction!r}, "
+                f"artifact contains {artifact.minimum_valid_fraction!r}"
+            )
+        return artifact, artifact_variable
+
+
+    def _multisource_mask_policy_entry(
+        self,
+        config_index: int,
+        config: Mapping,
+        artifact=None,
+        artifact_variable: Optional[str] = None,
+    ) -> dict:
+        """Return one complete mask rule for ordered resume checks."""
+
+        entry = {
+            "policy_version": 1,
+            "config_index": config_index,
+            "mode": (
+                "training_static"
+                if config.get("static_mask") is not None
+                else "sample_local"
+            ),
+            "mask_from": config["mask_from"],
+            "mask_variables": list(config.get("mask_variables", [])),
+            "output": config.get("output"),
+            "land_value": _json_compatible_metadata(
+                config.get("land_value", 1)
+            ),
+            "ocean_value": _json_compatible_metadata(
+                config.get("ocean_value", 0)
+            ),
+        }
+        if artifact is not None:
+            entry["artifact"] = artifact.manifest_entry(artifact_variable)
+        return entry
+
+
+    def _prepare_static_mask_cache(self, xds: xr.Dataset) -> list[dict]:
+        """Validate each artifact/grid once and cache its Boolean vector."""
+
+        if self._static_mask_policy_manifest is not None:
+            return self._static_mask_policy_manifest
+
+        required = ("cell", "latitudes", "longitudes")
+        missing = [name for name in required if name not in xds]
+        if missing:
+            raise ValueError(
+                f"{self.name}: cannot validate static mask grid; missing {missing}"
+            )
+        if "field_shape" not in xds.attrs:
+            raise ValueError(
+                f"{self.name}: cannot validate static mask grid; "
+                "attrs['field_shape'] is missing"
+            )
+
+        field_shape = tuple(int(value) for value in xds.attrs["field_shape"])
+        validated_artifacts = set()
+        valid_cache = {}
+        manifest = []
+        for config_index, config in enumerate(self.multisource_masks):
+            if config.get("static_mask") is None:
+                manifest.append(
+                    self._multisource_mask_policy_entry(
+                        config_index,
+                        config,
+                    )
+                )
+                continue
+
+            artifact, artifact_variable = self._load_static_mask_artifact(config)
+            if artifact.path not in validated_artifacts:
+                artifact.validate_grid(
+                    latitudes=xds["latitudes"].values,
+                    longitudes=xds["longitudes"].values,
+                    field_shape=field_shape,
+                    cells=xds["cell"].values,
+                )
+                validated_artifacts.add(artifact.path)
+
+            valid_cache[config_index] = artifact.valid_for(artifact_variable)
+            manifest.append(
+                self._multisource_mask_policy_entry(
+                    config_index,
+                    config,
+                    artifact,
+                    artifact_variable,
+                )
+            )
+
+        self._static_mask_valid_cache = valid_cache
+        self._static_mask_policy_manifest = manifest
+        return manifest
+
+
+    def prepare_static_masks(self, xds: xr.Dataset) -> xr.Dataset:
+        """Validate configured artifacts and attach their provenance manifest."""
+
+        if not self.has_static_masks:
+            return xds
+
+        policies = self._prepare_static_mask_cache(xds)
+        artifacts = []
+        for policy in policies:
+            entry = policy.get("artifact")
+            if entry is None:
+                continue
+            if entry not in artifacts:
+                artifacts.append(entry)
+        xds.attrs["static_mask_artifacts"] = artifacts
+        xds.attrs["static_mask_policies"] = policies
+        return xds
+
+
+    def validate_static_mask_store(self) -> list[dict]:
+        """Preflight static masks and reject any changed resume policy."""
+
+        xds = xr.open_zarr(self.store_path, consolidated=None)
+        try:
+            self._region_write_attrs = deepcopy(dict(xds.attrs))
+            stored_artifacts = xds.attrs.get("static_mask_artifacts")
+            stored_policies = xds.attrs.get("static_mask_policies")
+            stored_has_static_masks = (
+                stored_artifacts is not None or stored_policies is not None
+            )
+            if stored_has_static_masks != self.has_static_masks:
+                raise ValueError(
+                    f"{self.name}: configured and stored static-mask policies "
+                    "differ; resume would mix masking rules"
+                )
+            if not self.has_static_masks:
+                return []
+            if stored_artifacts is None or stored_policies is None:
+                raise ValueError(
+                    f"{self.name}: existing output has an incomplete "
+                    "static-mask manifest; start a new output store"
+                )
+
+            candidate_policies = self._prepare_static_mask_cache(xds)
+            candidate_artifacts = []
+            for policy in candidate_policies:
+                entry = policy.get("artifact")
+                if entry is None:
+                    continue
+                if entry not in candidate_artifacts:
+                    candidate_artifacts.append(entry)
+        finally:
+            xds.close()
+
+        if (
+            stored_artifacts != candidate_artifacts
+            or stored_policies != candidate_policies
+        ):
+            raise ValueError(
+                f"{self.name}: configured static-mask policy does not match "
+                "the existing output; start a new output store"
+            )
+        return candidate_policies
+
+
+    def prepare_multisource_region_write(self, xds: xr.Dataset) -> xr.Dataset:
+        """Keep only rank-owned arrays and restore immutable container attrs."""
+
+        if self._region_write_attrs is None:
+            raise RuntimeError(
+                f"{self.name}: output-store preflight must run before "
+                "regional writes"
+            )
+
+        sample_dims = set(self.renamed_sample_dims)
+        write_variables = [
+            name
+            for name in xds.data_vars
+            if sample_dims.intersection(xds[name].dims)
+        ]
+        if len(write_variables) == 0:
+            raise ValueError(
+                f"{self.name}: no sample-dependent variables are available "
+                "for the regional write"
+            )
+
+        result = xds[write_variables]
+        coordinate_names = list(result.coords)
+        if coordinate_names:
+            # The container already owns every coordinate. Dropping all of
+            # them avoids time/member ranks racing on shared coordinate chunks.
+            result = result.drop_vars(coordinate_names)
+        result.attrs = deepcopy(self._region_write_attrs)
+        return result
+
+
+    def _add_multisource_mask_placeholders(self, xds: xr.Dataset) -> xr.Dataset:
+        """Add output variables from multisource masks to the empty container."""
+
+        for config in self.multisource_masks:
+            output = config.get("output", None)
+            if output is None:
+                continue
+
+            logger.info(
+                f"{self.name}._add_multisource_mask_placeholders: "
+                f"adding placeholder variable {output}"
+            )
+            xds = self._append_packed_variable_placeholder(xds, output)
+
+        return xds
+
+
+    def _apply_multisource_masks(self, xds: xr.Dataset) -> xr.Dataset:
+        """Apply post-merge masks that need variables from multiple sources."""
+
+        for config_index, config in enumerate(self.multisource_masks):
+            mask_from = config["mask_from"]
+            if config.get("static_mask") is None:
+                mask_idx = _find_variable_index(xds, mask_from)
+                mask = xds["data"].isel(variable=mask_idx).isnull()
+                mask_description = f"where {mask_from} is NaN"
+            else:
+                valid = self._static_mask_for_dataset(xds, config_index)
+                sample_shape = xds["data"].isel(variable=0, drop=True)
+                mask = (~valid).broadcast_like(sample_shape)
+                artifact_variable = config["static_mask"].get(
+                    "variable",
+                    mask_from,
+                )
+                mask_description = (
+                    "outside frozen training support of "
+                    f"{artifact_variable}"
+                )
+
+            for variable in config.get("mask_variables", []):
+                variable_idx = _find_variable_index(xds, variable)
+                logger.info(
+                    f"{self.name}._apply_multisource_masks: masking {variable} "
+                    f"{mask_description}"
+                )
+                xds["data"].loc[{"variable": variable_idx}] = (
+                    xds["data"].isel(variable=variable_idx).where(~mask)
+                )
+                xds = self._refresh_packed_stats(xds, variable_idx)
+
+            output = config.get("output", None)
+            if output is not None:
+                logger.info(
+                    f"{self.name}._apply_multisource_masks: creating {output} "
+                    f"from {mask_description}"
+                )
+                land_value = config.get("land_value", 1)
+                ocean_value = config.get("ocean_value", 0)
+                mask_data = xr.where(mask, land_value, ocean_value).astype(self.data_dtype)
+                # This stored land/ocean field cannot be regenerated as an
+                # analytic forcing by anemoi-inference.
+                mask_data.attrs.update(
+                    {
+                        "computed_forcing": False,
+                        "constant_in_time": True,
+                    }
+                )
+                xds = self._append_packed_variable(xds, output, mask_data)
+
+        return xds
+
+
+    def _append_packed_variable_placeholder(
+        self,
+        xds: xr.Dataset,
+        variable_name: str,
+    ) -> xr.Dataset:
+        variables = list(xds.attrs["variables"])
+        if variable_name in variables:
+            raise ValueError(f"{self.name}._append_packed_variable_placeholder: {variable_name} already exists")
+
+        variable_idx = len(variables)
+        updates = {
+            "data": self._append_packed_array(
+                xds["data"],
+                xr.zeros_like(xds["data"].isel(variable=0, drop=True)).astype(self.data_dtype),
+                variable_idx,
+            ),
+        }
+
+        for name in self.packed_stat_names:
+            updates[name] = self._append_packed_array(
+                xds[name],
+                xr.zeros_like(xds[name].isel(variable=0, drop=True)),
+                variable_idx,
+            )
+
+        variables.append(variable_name)
+        xds.attrs["variables"] = variables
+        # Match the metadata of the static field written during source merging.
+        xds.attrs["variables_metadata"][variable_name] = {
+            "computed_forcing": False,
+            "constant_in_time": True,
+        }
+        xds = self._replace_packed_arrays(xds, updates)
+        xds = self._reset_packed_variable_coord(xds)
+        return self._validate_packed_variable_stats(xds, variable_name)
+
+
+    def _refresh_packed_stats(self, xds: xr.Dataset, variable_idx: int) -> xr.Dataset:
+        stats = self._packed_stats(xds["data"].isel(variable=variable_idx))
+        for name, xda in stats.items():
+            xds[name].loc[{"variable": variable_idx}] = xda
+        return xds
+
+
+    def _append_packed_variable(
+        self,
+        xds: xr.Dataset,
+        variable_name: str,
+        xda: xr.DataArray,
+    ) -> xr.Dataset:
+        variables = list(xds.attrs["variables"])
+        if variable_name in variables:
+            raise ValueError(f"{self.name}._append_packed_variable: {variable_name} already exists")
+
+        variable_idx = len(variables)
+        updates = {
+            "data": self._append_packed_array(xds["data"], xda, variable_idx),
+        }
+
+        stats = self._packed_stats(xda)
+        for name, stat in stats.items():
+            updates[name] = self._append_packed_array(xds[name], stat, variable_idx)
+
+        variables.append(variable_name)
+        xds.attrs["variables"] = variables
+        xds.attrs["variables_metadata"][variable_name] = {
+            "computed_forcing": xda.attrs.get("computed_forcing", True),
+            "constant_in_time": xda.attrs.get("constant_in_time", False),
+        }
+        xds = self._replace_packed_arrays(xds, updates)
+        xds = self._reset_packed_variable_coord(xds)
+        return self._validate_packed_variable_stats(xds, variable_name)
+
+
+    def _append_packed_array(
+        self,
+        existing: xr.DataArray,
+        new_values: xr.DataArray,
+        variable_idx: int,
+    ) -> xr.DataArray:
+        """Append a new variable slice to a packed data/stat array."""
+
+        new_values = new_values.expand_dims({"variable": [variable_idx]})
+        new_values = new_values.transpose(*existing.dims)
+        result = xr.concat([existing, new_values], dim="variable")
+        return result.assign_coords(variable=np.arange(result.sizes["variable"]))
+
+
+    def _replace_packed_arrays(
+        self,
+        xds: xr.Dataset,
+        updates: dict[str, xr.DataArray],
+    ) -> xr.Dataset:
+        """Replace packed arrays after their variable dimension has grown."""
+
+        drop_names = [name for name in updates if name in xds]
+        if len(drop_names) > 0:
+            xds = xds.drop_vars(drop_names)
+
+        if "variable" in xds.coords:
+            xds = xds.drop_vars("variable")
+
+        for name, xda in updates.items():
+            xds[name] = xda
+
+        return xds
+
+
+    def _reset_packed_variable_coord(self, xds: xr.Dataset) -> xr.Dataset:
+        """Keep packed variable coordinates aligned with attrs['variables']."""
+
+        if "variable" not in xds.sizes:
+            return xds
+
+        variables = xds.attrs.get("variables", None)
+        if variables is not None and len(variables) != xds.sizes["variable"]:
+            raise RuntimeError(
+                f"{self.name}._reset_packed_variable_coord: variable dimension "
+                f"has size {xds.sizes['variable']}, but attrs['variables'] has "
+                f"{len(variables)} entries"
+            )
+
+        return xds.assign_coords(variable=np.arange(xds.sizes["variable"]))
+
+
+    def _validate_packed_variable_stats(
+        self,
+        xds: xr.Dataset,
+        variable_name: str,
+    ) -> xr.Dataset:
+        """Ensure generated packed variables have all sample statistics."""
+
+        variable_idx = _find_variable_index(xds, variable_name)
+        missing = []
+        expected_size = len(xds.attrs["variables"])
+        for name in ("data",) + self.packed_stat_names:
+            if name not in xds:
+                missing.append(name)
+                continue
+            if "variable" not in xds[name].dims:
+                missing.append(name)
+                continue
+            if xds[name].sizes["variable"] != expected_size:
+                missing.append(name)
+                continue
+            if variable_idx >= xds[name].sizes["variable"]:
+                missing.append(name)
+
+        if len(missing) > 0:
+            raise RuntimeError(
+                f"{self.name}._validate_packed_variable_stats: generated variable "
+                f"{variable_name} is missing packed statistics/data slots: {missing}"
+            )
+
+        return xds
+
+
+    def _packed_stats(self, xda: xr.DataArray) -> dict[str, xr.DataArray]:
+        dims = [dim for dim in xda.dims if dim not in ("time", "variable", "ensemble")]
+        return {
+            "count_array": (~np.isnan(xda)).sum(dims, skipna=self.allow_nans).astype(np.float64),
+            "has_nans_array": np.isnan(xda).any(dims),
+            "maximum_array": xda.max(dims, skipna=self.allow_nans).astype(np.float64),
+            "minimum_array": xda.min(dims, skipna=self.allow_nans).astype(np.float64),
+            "squares_array": (xda**2).sum(dims, skipna=self.allow_nans).astype(np.float64),
+            "sums_array": xda.sum(dims, skipna=self.allow_nans).astype(np.float64),
+        }
 
 
 def _merge_attrs(list_of_dicts):
@@ -876,6 +1905,16 @@ def _merge_attrs(list_of_dicts):
     # handle these separately
     lists_of_variables = [attrs["variables"] for attrs in list_of_dicts]
     merged_dict["variables"] = [item for sublist in lists_of_variables for item in sublist]
+    duplicate_variables = sorted(
+        name
+        for name, count in Counter(merged_dict["variables"]).items()
+        if count > 1
+    )
+    if len(duplicate_variables) > 0:
+        raise ValueError(
+            "Duplicate packed channel names in multisource merge: "
+            f"{duplicate_variables}"
+        )
 
     vmetadata = dict()
     for attrs in list_of_dicts:
@@ -886,6 +1925,43 @@ def _merge_attrs(list_of_dicts):
         name for name, metadata in merged_dict["variables_metadata"].items() if metadata.get("constant_in_time")
     )
     return merged_dict
+
+
+def _json_compatible_metadata(value):
+    """Normalize variable provenance values for storage in Zarr attributes."""
+
+    if isinstance(value, np.ndarray):
+        return _json_compatible_metadata(value.tolist())
+    if isinstance(value, np.generic):
+        return _json_compatible_metadata(value.item())
+    if isinstance(value, (list, tuple)):
+        return [_json_compatible_metadata(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _json_compatible_metadata(item)
+            for key, item in value.items()
+        }
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(
+        "Variable metadata values must be JSON serializable; "
+        f"got {type(value).__name__}"
+    )
+
+
+def _find_variable_index(xds: xr.Dataset, variable_name: str) -> int:
+    variables = list(xds.attrs["variables"])
+    if variable_name in variables:
+        return variables.index(variable_name)
+
+    variable_name_lower = variable_name.lower()
+    matches = [idx for idx, name in enumerate(variables) if name.lower() == variable_name_lower]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(f"Found multiple variables matching {variable_name}: {[variables[idx] for idx in matches]}")
+
+    raise KeyError(f"Could not find variable {variable_name}. Available variables are {variables}")
 
 
 class AnemoiInferenceWithForcings(Anemoi):
@@ -905,7 +1981,10 @@ class AnemoiInferenceWithForcings(Anemoi):
         statistics_period: Optional[dict] = None,
         compute_temporal_residual_statistics: Optional[bool] = False,
         sort_channels_by_levels: Optional[bool] = False,
+        use_level_index: Optional[bool] = False,
+        channel_rename: Optional[dict] = None,
         variables_with_nans: Optional[list] = None,
+        multisource_masks: Optional[list | dict] = None,
         multistep_input: Optional[int] = 1,
         resolution: Optional[str | float] = None,
     ) -> None:
@@ -919,7 +1998,10 @@ class AnemoiInferenceWithForcings(Anemoi):
             statistics_period=statistics_period,
             compute_temporal_residual_statistics=compute_temporal_residual_statistics,
             sort_channels_by_levels=sort_channels_by_levels,
+            use_level_index=use_level_index,
+            channel_rename=channel_rename,
             variables_with_nans=variables_with_nans,
+            multisource_masks=multisource_masks,
             resolution=resolution,
         )
 

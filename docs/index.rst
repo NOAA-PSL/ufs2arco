@@ -79,6 +79,7 @@ Table of Contents
    gefs_archive
    gfs_archive
    hrrr_archive
+   replay
    era5
    conus404
 
@@ -88,6 +89,7 @@ Table of Contents
 
    base_target
    anemoi_target
+   static_masks
 
 .. toctree::
    :maxdepth: 1

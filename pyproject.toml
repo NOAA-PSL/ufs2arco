@@ -50,7 +50,10 @@ documentation="https://ufs2arco.readthedocs.io/en/latest/"
 requires = ["setuptools>=64.0.0", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["ufs2arco"]
+[tool.setuptools.packages.find]
+include = ["ufs2arco*"]
+
+[tool.setuptools.package-data]
+ufs2arco = ["*.yaml"]
 
 [tool.setuptools_scm]

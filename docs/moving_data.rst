@@ -96,3 +96,37 @@ Missing data samples can be found in the following ways:
    Note that this shows two missing data instances: one where the file couldn't be
    found (i.e., on 2021-02-02T00 forecast hour (fhr) 0), and one where the file was found,
    but it's corrupted (could not find sp).
+
+
+Resuming and patching
+^^^^^^^^^^^^^^^^^^^^^
+
+To resume an interrupted conversion, set ``mover.start`` to the batch index to
+resume from, using the original recipe and output store. Successfully retried
+samples are removed from the report, and missing samples outside the retried
+batches remain recorded. Keep the ``missing.<store>.yaml`` file beside the output
+so those earlier gaps remain recoverable.
+
+For an MPI resume, use the same rank count as the original conversion, because
+each batch contains one sample per rank.
+
+For a single-source recipe, retry the samples listed in the missing report with:
+
+.. code-block:: bash
+
+   python -c "from ufs2arco import Driver; Driver('recipe.yaml').patch()"
+
+A successful patch clears the missing report, and samples that are still absent
+remain listed. Multisource patching is not supported, so resume a multisource
+conversion from the batch that needs to be retried.
+
+
+Source-specific details
+#######################
+
+Some behavior depends on the type of source data:
+
+.. toctree::
+   :maxdepth: 1
+
+   cloud_zarr

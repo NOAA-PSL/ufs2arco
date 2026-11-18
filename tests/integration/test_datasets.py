@@ -13,7 +13,7 @@ from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
 _local_path = os.path.dirname(__file__)
-_sources = ["replay", "gfs", "gefs", "hrrr", "era5", "conus404"]
+_sources = ["replay", "replay_ocean", "gfs", "gefs", "hrrr", "era5", "conus404"]
 _targets = ["base", "anemoi"]
 
 # Sources with no land/sea mask or orography to check.
@@ -116,8 +116,8 @@ def run_test(source, target):
 def _test_static_vars(source, target, store):
     if source in _sources_without_static_vars:
         logger.info(f" ... skipping static var check, {source} has no lsm/orog")
-        return
-    
+        return    
+
     ds = xr.open_zarr(store, decode_timedelta=True)
 
     lsm = {
