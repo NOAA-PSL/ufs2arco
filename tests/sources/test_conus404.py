@@ -4,75 +4,48 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-
-@pytest.fixture
-def conus404_cls():
-    """Import the CONUS404 class with external STAC/planetary_computer deps mocked.
-
-    The class connects to a remote STAC catalog at class-definition time, so we
-    patch those modules before importing the module under test.
-    """
-    mock_storage_options = {"account_name": "test"}
-
-    mock_asset = MagicMock()
-    mock_asset.extra_fields = {"xarray:storage_options": mock_storage_options}
-
-    mock_collection = MagicMock()
-    mock_collection.assets = {"zarr-abfs": mock_asset}
-
-    mock_client = MagicMock()
-    mock_client.get_collection.return_value = mock_collection
-
-    mock_pystac_client = MagicMock()
-    mock_pystac_client.Client.open.return_value = mock_client
-
-    mock_planetary_computer = MagicMock()
-
-    with patch.dict(
-        sys.modules,
-        {
-            "pystac_client": mock_pystac_client,
-            "planetary_computer": mock_planetary_computer,
-        },
-    ):
-        # Ensure a fresh import so the mocked modules are picked up.
-        sys.modules.pop("ufs2arco.sources.conus404", None)
-        from ufs2arco.sources.conus404 import CONUS404
-
-        yield CONUS404, mock_storage_options
-
-    sys.modules.pop("ufs2arco.sources.conus404", None)
+from ufs2arco.sources.conus404 import CONUS404
 
 
-def test_class_attributes(conus404_cls):
-    CONUS404, _ = conus404_cls
+TIME = {"start": "2000-01-01", "end": "2000-01-02", "freq": "1h"}
+URI = "abfs://test/conus404.zarr"
+
+
+def test_class_attributes():
     assert CONUS404.sample_dims == ("time",)
     assert CONUS404.horizontal_dims == ("latitude", "longitude")
 
 
-def test_storage_options_from_asset(conus404_cls):
-    CONUS404, mock_storage_options = conus404_cls
-    assert CONUS404.storage_options == mock_storage_options
+def test_get_storage_options_reads_signed_zarr_asset():
+    storage_options = {"account_name": "test"}
+    pystac_client = MagicMock()
+    collection = pystac_client.Client.open.return_value.get_collection.return_value
+    collection.assets = {
+        "zarr-abfs": MagicMock(extra_fields={"xarray:storage_options": storage_options})
+    }
+    planetary_computer = MagicMock()
+
+    with patch.dict(
+        sys.modules,
+        {"pystac_client": pystac_client, "planetary_computer": planetary_computer},
+    ):
+        assert CONUS404.get_storage_options() == storage_options
+
+    assert pystac_client.Client.open.call_args.kwargs["modifier"] is planetary_computer.sign_inplace
+    pystac_client.Client.open.return_value.get_collection.assert_called_once_with("conus404")
 
 
-def test_available_levels(conus404_cls):
-    CONUS404, _ = conus404_cls
+def test_available_levels():
     obj = CONUS404.__new__(CONUS404)
-    levels = obj.available_levels
-    assert levels == tuple(range(50))
-    assert len(levels) == 50
+    assert obj.available_levels == tuple(range(50))
 
 
-def test_available_stag_levels(conus404_cls):
-    CONUS404, _ = conus404_cls
+def test_available_stag_levels():
     obj = CONUS404.__new__(CONUS404)
-    stag_levels = obj.available_stag_levels
-    assert stag_levels == tuple(range(51))
-    assert len(stag_levels) == 51
+    assert obj.available_stag_levels == tuple(range(51))
 
 
-def test_rename_mapping(conus404_cls):
-    CONUS404, _ = conus404_cls
+def test_rename_mapping():
     obj = CONUS404.__new__(CONUS404)
     assert obj.rename == {
         "bottom_top": "level",
@@ -84,25 +57,15 @@ def test_rename_mapping(conus404_cls):
     }
 
 
-def test_init_sets_time_and_calls_super(conus404_cls):
-    CONUS404, mock_storage_options = conus404_cls
-
-    time = {"start": "2000-01-01", "end": "2000-01-02", "freq": "1h"}
-    uri = "abfs://test/conus404.zarr"
-
-    with patch(
+@pytest.mark.parametrize("explicit", [None, {"account_name": "explicit"}])
+def test_init_sets_time_and_storage_options(explicit):
+    fetched = {"account_name": "fetched"}
+    with patch.object(CONUS404, "get_storage_options", return_value=fetched) as fetch, patch(
         "ufs2arco.sources.conus404.CloudZarrData.__init__", return_value=None
-    ) as mock_super_init:
-        obj = CONUS404(time=time, uri=uri)
+    ) as super_init:
+        obj = CONUS404(time=TIME, uri=URI, storage_options=explicit)
 
-    expected_time = pd.date_range(**time)
-    assert obj.time.equals(expected_time)
-
-    mock_super_init.assert_called_once()
-    _, kwargs = mock_super_init.call_args
-    assert kwargs["uri"] == uri
-    assert kwargs["variables"] is None
-    assert kwargs["levels"] is None
-    assert kwargs["use_nearest_levels"] is False
-    assert kwargs["slices"] is None
-    assert kwargs["storage_options"] == mock_storage_options
+    assert obj.time.equals(pd.date_range(**TIME))
+    assert obj.storage_options == (explicit or fetched)
+    assert fetch.call_count == (0 if explicit else 1)
+    assert super_init.call_args.kwargs["uri"] == URI
