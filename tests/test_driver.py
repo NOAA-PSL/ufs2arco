@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+import pytest
 import yaml
 import numpy as np
 import pandas as pd
@@ -19,16 +22,6 @@ def _write_recipe(path, extra=None):
         yaml.safe_dump(recipe, f)
 
 
-class _FakeTopo:
-    is_root = True
-
-    def gather(self, value):
-        return value
-
-    def barrier(self):
-        return None
-
-
 class _Topo:
     def __init__(self, is_root=True):
         self.is_root = is_root
@@ -37,6 +30,9 @@ class _Topo:
         return None
 
     def gather(self, value):
+        return [value]
+
+    def broadcast(self, value):
         return value
 
 
@@ -82,7 +78,7 @@ def test_report_missing_data_sorts_converts_and_writes_yaml(tmp_path):
     cfg = tmp_path / "recipe.yaml"
     _write_recipe(cfg, extra={"directories": {"zarr": str(tmp_path / "dataset.zarr"), "cache": "/tmp/cache", "logs": "/tmp/logs"}})
     d = Driver(str(cfg))
-    d.topo = _FakeTopo()
+    d.topo = _Topo()
     d.source = type("S", (), {"sample_dims": ("t0", "fhr", "member")})()
     captured = {}
 
@@ -94,8 +90,8 @@ def test_report_missing_data_sorts_converts_and_writes_yaml(tmp_path):
 
     d.target = _FakeTarget()
     missing = [
-        [{"t0": pd.Timestamp("2020-01-02"), "fhr": np.int64(6), "member": np.int32(1)}],
-        [{"t0": pd.Timestamp("2020-01-01"), "fhr": np.int64(0), "member": np.int32(0)}],
+        {"t0": pd.Timestamp("2020-01-02"), "fhr": np.int64(6), "member": np.int32(1)},
+        {"t0": pd.Timestamp("2020-01-01"), "fhr": np.int64(0), "member": np.int32(0)},
     ]
     d.report_missing_data(missing)
 
@@ -147,39 +143,67 @@ def test_init_target_rejects_unknown_name(tmp_path):
         pass
 
 
-def test_run_collects_missing_dims_for_empty_dataset(tmp_path):
+def _run_driver(tmp_path, next_fn):
     cfg = tmp_path / "recipe.yaml"
     _write_recipe(cfg)
     d = Driver(str(cfg))
+    missing = [{"t0": "2020-01-01", "fhr": 0, "member": 0}]
 
     class _Mover:
         start = 0
+        missing_sample_dims = missing
+        cleared = []
 
         def __len__(self):
             return 1
 
         def __next__(self):
-            return xr.Dataset()
+            return next_fn()
 
-        def get_batch_indices(self, _idx):
-            return [{"t0": "2020-01-01", "fhr": 0, "member": 0}]
-
-    class _Target:
-        store_path = "/tmp/out.zarr"
-
-        def finalize(self, topo):
-            _ = topo
+        def clear_cache(self, idx):
+            self.cleared.append(idx)
 
     d.setup = lambda runtype: None
     d.topo = _Topo()
     d.mover = _Mover()
-    d.target = _Target()
+    d.target = SimpleNamespace(store_path="/tmp/out.zarr", finalize=lambda topo: None)
     d.reported = None
-    d.report_missing_data = lambda missing: setattr(d, "reported", missing)
+    d.report_missing_data = lambda missing, **kw: setattr(d, "reported", missing)
     d.finalize_attributes = lambda: None
     d.write_container = lambda overwrite: None
+    return d, missing
+
+
+def test_run_collects_missing_dims_and_clears_cache(tmp_path):
+    d, missing = _run_driver(tmp_path, xr.Dataset)
     d.run(overwrite=False)
-    assert d.reported == [{"t0": "2020-01-01", "fhr": 0, "member": 0}]
+    assert d.reported == missing
+    assert d.mover.cleared == [0]
+
+
+def test_run_raises_collective_error_when_batch_fails(tmp_path):
+    def _fail():
+        raise ValueError("boom")
+
+    d, _ = _run_driver(tmp_path, _fail)
+    with pytest.raises(RuntimeError, match="batch 0, rank 0: ValueError: boom"):
+        d.run(overwrite=False)
+    assert d.mover.cleared == [0]
+
+
+def test_write_container_raises_when_root_fails(tmp_path):
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg)
+    d = Driver(str(cfg))
+    d.topo = _Topo()
+
+    def _fail():
+        raise ValueError("no data")
+
+    d.mover = SimpleNamespace(create_container=_fail)
+    d.target = SimpleNamespace(store_path=str(tmp_path / "x.zarr"))
+    with pytest.raises(RuntimeError, match="container creation failed: ValueError: no data"):
+        d.write_container(overwrite=False)
 
 
 def test_finalize_attributes_writes_recipe_and_attrs(tmp_path, monkeypatch):
@@ -200,3 +224,41 @@ def test_finalize_attributes_writes_recipe_and_attrs(tmp_path, monkeypatch):
     assert "recipe" in store.attrs
     assert store.attrs["project"] == "ufs2arco"
     assert "latest_write_timestamp" in store.attrs
+
+
+def test_container_template_eagerly_persists_invariant_grid(tmp_path):
+    pytest.importorskip("dask.array")
+    store = tmp_path / "container.zarr"
+    latitudes = np.array([-30.0, -30.0, 30.0, 30.0])
+    longitudes = np.array([0.0, 90.0, 0.0, 90.0])
+    container = xr.Dataset(
+        {
+            "data": (
+                ("time", "variable", "ensemble", "cell"),
+                np.full((2, 1, 1, 4), 7.0, dtype=np.float32),
+            ),
+            "latitudes": ("cell", latitudes),
+            "longitudes": ("cell", longitudes),
+        },
+        coords={
+            "time": [0, 1],
+            "variable": [0],
+            "ensemble": [0],
+            "cell": np.arange(4),
+        },
+    ).chunk()
+    driver = Driver.__new__(Driver)
+    driver.target = SimpleNamespace(
+        store_path=str(store),
+        renamed_sample_dims=("time",),
+    )
+
+    driver._write_container_template(container, overwrite=False)
+
+    written = xr.open_zarr(store)
+    try:
+        np.testing.assert_array_equal(written["latitudes"], latitudes)
+        np.testing.assert_array_equal(written["longitudes"], longitudes)
+        np.testing.assert_array_equal(written["cell"], np.arange(4))
+    finally:
+        written.close()

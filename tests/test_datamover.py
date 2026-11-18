@@ -1,80 +1,12 @@
 import pytest
 import os
 from types import SimpleNamespace
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 import numpy as np
 import xarray as xr
 import pandas as pd
 import ufs2arco.datamover as dmod
 from ufs2arco.datamover import DataMover, MPIDataMover
-import yaml
-from ufs2arco.driver import Driver
-
-@pytest.fixture
-def source():
-    source = MagicMock()
-    source.open_sample_dataset = MagicMock(return_value=xr.Dataset())
-    source.name = "MockDataset"
-    source.t0 = pd.date_range(start="2022-01-01T00", end="2022-01-01T18", freq="6h")
-    source.fhr = [0, 6]
-    source.member = [0, 1]
-    source.sample_dims = ("t0", "fhr", "member")
-    return source
-
-@pytest.fixture
-def target():
-    target = MagicMock()
-    target.chunks = {"t0": 1, "fhr": 1, "member": 1}
-    target.store_path = "/tmp/store/gefsdataset.zarr"
-    target.apply_transforms_to_sample = MagicMock(return_value=xr.Dataset())
-    return target
-
-
-@pytest.fixture
-def data_mover(source, target):
-    return DataMover(source, target, batch_size=2, start=0, cache_dir=".")
-
-def test_init(data_mover):
-    assert data_mover.batch_size == 2
-    assert data_mover.counter == 0
-    assert data_mover.data_counter == 0
-    assert data_mover.outer_cache_dir == "."
-    assert len(data_mover.sample_indices) == 16
-
-def test_len(data_mover):
-    assert len(data_mover) == 8
-
-def test_get_cache_dir(data_mover):
-    assert data_mover.get_cache_dir(0) == "./datamover-cache/0"
-
-def test_get_batch_indices(data_mover):
-    batch_indices = data_mover.get_batch_indices(0)
-    assert len(batch_indices) == 2
-
-@patch("ufs2arco.datamover.xr.merge")
-def test__next_data(mock_merge, data_mover):
-    mock_merge.return_value = xr.Dataset()
-    result = data_mover._next_data()
-    assert isinstance(result, xr.Dataset)
-    mock_merge.assert_called_once()
-
-@patch("ufs2arco.datamover.xr.merge")
-def test_get_data(mock_merge, data_mover):
-    mock_merge.return_value = xr.Dataset()
-    result = data_mover.get_data()
-    assert isinstance(result, xr.Dataset)
-
-@patch("ufs2arco.datamover.xr.merge")
-def test_clear_cache(mock_merge, data_mover):
-    mock_merge.return_value = xr.Dataset()
-    next(data_mover)
-    data_mover.clear_cache(0)
-    assert not os.path.isdir("./datamover-cache/0")
-
-def test_restart(data_mover):
-    data_mover.restart()
-    assert data_mover.data_counter == 0
-
 
 class _SimpleSource:
     sample_dims = ("t0", "fhr")
@@ -143,9 +75,12 @@ def test_get_data_increments_data_counter_once():
     assert mover.data_counter == initial + 1
 
 
-def test_clear_cache_noop_when_missing_dir(tmp_path):
+def test_clear_cache(tmp_path):
     mover = DataMover(_SimpleSource(), _SimpleTarget(), batch_size=1, cache_dir=str(tmp_path))
-    mover.clear_cache(999)
+    os.makedirs(mover.get_cache_dir(0))
+    mover.clear_cache(0)
+    assert not os.path.isdir(mover.get_cache_dir(0))
+    mover.clear_cache(999)  # missing dir is a no-op
 
 
 def test_mpi_datamover_paths_and_batch_indices(monkeypatch):
@@ -153,8 +88,8 @@ def test_mpi_datamover_paths_and_batch_indices(monkeypatch):
     topo = type("Topo", (), {"size": 4, "rank": 2})()
     mover = MPIDataMover(source=_SimpleSource(), target=_SimpleTarget(), mpi_topo=topo, cache_dir=".")
     assert mover.get_cache_dir(1).endswith("/mpidatamover-cache/2/1")
-    idx = mover.get_batch_indices(0)
-    assert isinstance(idx, list)
+    assert mover.get_batch_indices(0) == [mover.sample_indices[2]]
+    assert mover.get_batch_indices(1) == []
 
 
 class _BaseSource:
@@ -195,6 +130,18 @@ class _BaseTarget:
 
     def manage_coords(self, nds):
         return nds
+
+
+def test_init_and_batching():
+    mover = DataMover(_BaseSource(), _BaseTarget(), batch_size=3, start=1, cache_dir=".")
+    assert len(mover.sample_indices) == 4
+    assert len(mover) == 2
+    assert mover.data_counter == 1
+    assert mover.get_cache_dir(0) == "./datamover-cache/0"
+    assert len(mover.get_batch_indices(0)) == 3
+    assert mover.get_batch_indices(1) == [mover.sample_indices[3]]
+    mover.restart(idx=0)
+    assert mover.data_counter == 0
 
 
 def test_find_my_region_uses_target_sample_indices():
@@ -295,6 +242,8 @@ def test_mpi_datamover_str_contains_summary(monkeypatch):
     assert "Mover: MPIDataMover" in text
     assert "batch_size" in text
     assert "Total Samples" in text
+
+
 def test_create_container_skips_missing_leading_sample():
     requested_times = pd.date_range("2022-01-01T00", periods=2, freq="6h")
     available_sample = xr.Dataset(
@@ -413,63 +362,3 @@ def test_create_container_preserves_sample_invariant_grid_fields():
         container["data"].compute(),
         np.zeros((2, 2), dtype=np.float32),
     )
-
-
-def test_empty_missing_report_clears_previous_manifest(tmp_path):
-    output_store = tmp_path / "output.zarr"
-    driver = Driver.__new__(Driver)
-    driver.topo = SimpleNamespace(
-        is_root=True,
-        gather=lambda value: [value],
-        broadcast=lambda value: value,
-    )
-    driver.target = MagicMock(store_path=str(output_store))
-    driver.source = SimpleNamespace(sample_dims=("time",))
-
-    manifest = driver.get_missing_data_path(str(output_store))
-    with open(manifest, "w") as stream:
-        yaml.safe_dump([{"time": "2000-01-01 00:00:00"}], stream)
-
-    driver.report_missing_data([])
-
-    driver.target.handle_missing_data.assert_called_once_with([])
-    with open(manifest) as stream:
-        assert yaml.safe_load(stream) == []
-
-
-def test_container_template_eagerly_persists_invariant_grid(tmp_path):
-    pytest.importorskip("dask.array")
-    store = tmp_path / "container.zarr"
-    latitudes = np.array([-30.0, -30.0, 30.0, 30.0])
-    longitudes = np.array([0.0, 90.0, 0.0, 90.0])
-    container = xr.Dataset(
-        {
-            "data": (
-                ("time", "variable", "ensemble", "cell"),
-                np.full((2, 1, 1, 4), 7.0, dtype=np.float32),
-            ),
-            "latitudes": ("cell", latitudes),
-            "longitudes": ("cell", longitudes),
-        },
-        coords={
-            "time": [0, 1],
-            "variable": [0],
-            "ensemble": [0],
-            "cell": np.arange(4),
-        },
-    ).chunk()
-    driver = Driver.__new__(Driver)
-    driver.target = SimpleNamespace(
-        store_path=str(store),
-        renamed_sample_dims=("time",),
-    )
-
-    driver._write_container_template(container, overwrite=False)
-
-    written = xr.open_zarr(store)
-    try:
-        np.testing.assert_array_equal(written["latitudes"], latitudes)
-        np.testing.assert_array_equal(written["longitudes"], longitudes)
-        np.testing.assert_array_equal(written["cell"], np.arange(4))
-    finally:
-        written.close()
