@@ -94,11 +94,9 @@ class MultiDriver(Driver):
 
         # First, make sure the names are legit
         SourceDatasets = list()
-        source_names = list()
         for local_config in self.config["multisource"]:
 
             name = local_config["source"]["name"].lower()
-            source_names.append(name)
             if name not in ufs2arco.sources._recognized:
                 raise NotImplementedError(f"Driver.__init__: unrecognized data source {name}. Must be one of {ufs2arco.sources._recognized}")
 
