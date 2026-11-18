@@ -158,18 +158,17 @@ def test_aggregate_stats_serial_exact_values(tmp_path):
 
 
 def test_aggregate_stats_clamps_negative_variance_to_zero(tmp_path):
-    # construct a case where floating point could yield slightly negative variance:
-    # squares/count == mean^2 exactly -> variance 0, stdev 0 (not nan)
+    # squares slightly below sums**2 mimics round-off: variance = 49.8/2 - 25 = -0.1
     store = str(tmp_path / "out.zarr")
     target = _make_stats_target(store)
 
     dims = ("time", "ensemble", "variable")
-    const = np.array([[[5.0]], [[5.0]]])  # same value both timesteps
+    const = np.array([[[5.0]], [[5.0]]])
     ds = xr.Dataset(
         {
             "count_array": (dims, np.array([[[1.0]], [[1.0]]])),
             "sums_array": (dims, const),
-            "squares_array": (dims, const ** 2),
+            "squares_array": (dims, const ** 2 - 0.1),
             "maximum_array": (dims, const),
             "minimum_array": (dims, const),
             "has_nans_array": (dims, np.array([[[False]], [[False]]])),
@@ -182,7 +181,5 @@ def test_aggregate_stats_clamps_negative_variance_to_zero(tmp_path):
     target.aggregate_stats(topo)
 
     result = xr.open_zarr(store)
-    # mean = 10/2 = 5, variance = 50/2 - 25 = 0
     np.testing.assert_allclose(result["mean"].values, [5.0])
-    np.testing.assert_allclose(result["stdev"].values, [0.0])
-    assert np.isfinite(result["stdev"].values).all()
+    np.testing.assert_array_equal(result["stdev"].values, [0.0])

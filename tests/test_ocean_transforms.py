@@ -582,15 +582,23 @@ def test_native_resolution_guard_accepts_replay_grid_and_rejects_incomplete_grid
     assert "validated complete native grid" in description
 
     with pytest.raises(ValueError, match="complete Replay column"):
+        check_vertical_resolution(_REPLAY_LEVELS[:-1])
+
+
+@pytest.mark.parametrize(
+    "min_levels_in_search,match",
+    [(3, "vertical spacing reaches 50 m between 50 and 100 m"), (10, "found 4 levels above 200 m")],
+)
+def test_native_resolution_guard_rejects_coarse_upper_ocean(min_levels_in_search, match):
+    with pytest.raises(ValueError, match=match):
         check_vertical_resolution(
             np.array([5.0, 50.0, 100.0, 150.0]),
             mld_search_depth=200.0,
-            min_levels_in_search=3,
+            min_levels_in_search=min_levels_in_search,
             max_level_spacing=25.0,
+            expected_level_count=None,
+            minimum_deepest_level=None,
         )
-
-    with pytest.raises(ValueError, match="complete Replay column"):
-        check_vertical_resolution(_REPLAY_LEVELS[:-1])
 
 
 @pytest.mark.parametrize(

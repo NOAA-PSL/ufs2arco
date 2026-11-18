@@ -72,7 +72,7 @@ def rotate_lambert_conical_vectors(u_grid, v_grid):
             np.tan(np.deg2rad((90-rlati1)/2))/np.tan(np.deg2rad((90-rlati2)/2))
         )
 
-    dlon = (u_grid["longitude"] - orient + 180 + 3600 % 360) - 180
+    dlon = (u_grid["longitude"] - orient + 180 + 3600) % 360 - 180
 
     crot = np.cos(angle*np.deg2rad(dlon)).astype(u_grid.dtype)
     srot = np.sin(angle*np.deg2rad(dlon)).astype(u_grid.dtype)

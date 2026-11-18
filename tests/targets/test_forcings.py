@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 
 from ufs2arco.targets import forcings
@@ -75,15 +76,13 @@ def _grid_dataset(times=None):
     )
 
 
-def test_cos_sin_latitude_exact_and_identity():
-    xds = _grid_dataset()
+def test_cos_sin_latitude_exact_values():
+    xds = _grid_dataset()  # latitude = [-45, 0, 45] degrees
     clat = forcings._cos_latitude(xds)
     slat = forcings._sin_latitude(xds)
-    np.testing.assert_allclose((clat**2 + slat**2).values, 1.0, atol=1e-12)
-    # exact value at 0 deg latitude
-    idx0 = list(xds["latitude"].values).index(0.0)
-    assert float(clat.isel(latitude=idx0)) == 1.0
-    assert abs(float(slat.isel(latitude=idx0))) < 1e-12
+    half_sqrt2 = np.sqrt(2) / 2
+    np.testing.assert_allclose(clat.values, [half_sqrt2, 1.0, half_sqrt2], atol=1e-12)
+    np.testing.assert_allclose(slat.values, [-half_sqrt2, 0.0, half_sqrt2], atol=1e-12)
     for da in (clat, slat):
         assert da.attrs["computed_forcing"] is True
         assert da.attrs["constant_in_time"] is True
@@ -130,11 +129,26 @@ def test_cos_sin_local_time_identity():
     np.testing.assert_allclose((clt**2 + slt**2).values, 1.0, atol=1e-9)
 
 
-def test_cos_solar_zenith_angle_bounded_and_nonnegative():
-    xds = _grid_dataset()
-    csza = forcings._cos_solar_zenith_angle(xds, time="time")
-    assert float(csza.min()) >= 0.0
-    assert float(csza.max()) <= 1.0 + 1e-9
+@pytest.mark.parametrize(
+    "time,declination_deg",
+    [("2020-03-20T12", 0.0), ("2020-06-20T12", 23.44), ("2020-12-21T12", -23.44)],
+)
+def test_cos_solar_zenith_angle_is_cos_lat_minus_declination_at_noon_and_zero_at_midnight(
+    time, declination_deg
+):
+    # at 12Z it is local noon at longitude 0 and local midnight at longitude 180
+    xds = xr.Dataset(
+        coords={
+            "time": pd.DatetimeIndex([time]),
+            "longitude": ("longitude", np.array([0.0, 180.0])),
+            "latitude": ("latitude", np.array([-45.0, 0.0, 45.0])),
+        }
+    )
+    csza = forcings._cos_solar_zenith_angle(xds, time="time").isel(time=0)
+
+    expected_noon = np.cos(np.deg2rad(xds["latitude"].values - declination_deg))
+    np.testing.assert_allclose(csza.sel(longitude=0.0), expected_noon, atol=0.01)
+    np.testing.assert_array_equal(csza.sel(longitude=180.0), 0.0)
     assert csza.attrs["computed_forcing"] is True
     assert csza.attrs["constant_in_time"] is False
 
@@ -156,9 +170,11 @@ def test_cos_sin_day_progress_identity_and_longitude_dependence():
     assert len(np.unique(np.round(dp.values, 6))) > 1
 
 
-def test_solar_declination_angle_returns_two_arrays():
-    xds = _grid_dataset()
-    declination, time_correction = forcings._solar_declination_angle(xds, time="time")
-    assert declination.shape == xds["time"].shape
-    assert time_correction.shape == xds["time"].shape
-    assert float(np.abs(declination).max()) < 0.5
+@pytest.mark.parametrize(
+    "time,expected_deg",
+    [("2020-01-01T00", -23.0), ("2020-03-20T12", 0.0), ("2020-06-20T12", 23.44)],
+)
+def test_solar_declination_angle_matches_seasonal_values(time, expected_deg):
+    xds = _grid_dataset(times=pd.DatetimeIndex([time]))
+    declination, _ = forcings._solar_declination_angle(xds, time="time")
+    assert np.rad2deg(declination.item()) == pytest.approx(expected_deg, abs=0.5)

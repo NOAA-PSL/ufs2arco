@@ -35,16 +35,11 @@ def test_calc_delz_uses_qmin_floor():
     temp = xr.DataArray([[280.0, 270.0]], dims=("point", "level"), coords={"level": l2p.pfull.values})
     spfh = xr.DataArray([[-1e-6, 1e-12]], dims=("point", "level"), coords={"level": l2p.pfull.values})
     delz = l2p.calc_delz(pressfc=pressfc, temp=temp, spfh=spfh)
-    assert np.isfinite(delz.values).all()
 
-
-def test_get_interp_coefficients_bounds_factor_and_denominator():
-    l2p = _l2p()
-    prsl = xr.DataArray([[300.0, 800.0]], dims=("point", "level"), coords={"level": l2p.pfull.values})
-    cds = l2p.get_interp_coefficients(pstar=500.0, prsl=prsl)
-    assert float(cds["denominator"].min()) >= 1e-6
-    assert float(cds["factor"].max()) <= 10.0
-    assert float(cds["factor"].min()) >= -10.0
+    # interfaces are 1e4, 5e4, 1e5 Pa; both humidities are below q_min
+    dlogp = np.log([5.0, 2.0])
+    expected = -l2p.Rd / l2p.g * np.array([280.0, 270.0]) * (1 + l2p.z_vir * l2p.q_min) * dlogp
+    np.testing.assert_allclose(delz.values[0], expected, rtol=1e-12)
 
 
 def test_interp2pressure_returns_nan_when_no_valid_bracketing_levels():

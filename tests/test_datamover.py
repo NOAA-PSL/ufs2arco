@@ -214,24 +214,19 @@ def test_next_data_inference_uses_saved_structure_after_initial_condition():
     assert later["t0"].values[0] == np.datetime64(source.t0[1])
 
 
-def test_mark_static_variables_sets_constant_attr():
+@pytest.mark.parametrize("enabled", [True, False])
+def test_mark_static_variables_only_when_target_opens_static_vars(enabled):
     class _SourceWithStatic(_BaseSource):
         static_vars = ("lsm",)
 
-    mover = DataMover(_SourceWithStatic(), _BaseTarget(), batch_size=1, cache_dir=".")
-    xds = xr.Dataset({"lsm": ("x", [1.0, 2.0])}, coords={"x": [0, 1]})
+    class _Target(_BaseTarget):
+        always_open_static_vars = enabled
+
+    mover = DataMover(_SourceWithStatic(), _Target(), batch_size=1, cache_dir=".")
+    xds = xr.Dataset({"lsm": ("x", [1.0, 2.0]), "t2m": ("x", [3.0, 4.0])}, coords={"x": [0, 1]})
     mover._mark_static_variables(xds)
-    assert xds["lsm"].attrs.get("constant_in_time") is True
-
-
-def test_mark_static_variables_noop_when_target_disabled():
-    class _TargetNoStatic(_BaseTarget):
-        always_open_static_vars = False
-
-    mover = DataMover(_BaseSource(), _TargetNoStatic(), batch_size=1, cache_dir=".")
-    xds = xr.Dataset({"lsm": ("x", [1.0])}, coords={"x": [0]})
-    mover._mark_static_variables(xds)
-    assert "constant_in_time" not in xds["lsm"].attrs
+    assert xds["lsm"].attrs.get("constant_in_time", False) is enabled
+    assert "constant_in_time" not in xds["t2m"].attrs
 
 
 def test_mpi_datamover_str_contains_summary(monkeypatch):
