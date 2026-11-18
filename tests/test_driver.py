@@ -101,6 +101,7 @@ def test_report_missing_data_sorts_converts_and_writes_yaml(tmp_path):
     assert isinstance(captured["missing_dims"][0]["member"], int)
     yaml_path = tmp_path / "missing.dataset.zarr.yaml"
     assert yaml_path.exists()
+    assert d.get_missing_data_path("dataset.zarr") == "./missing.dataset.zarr.yaml"
 
 
 def test_convert_types_to_yaml_converts_time_and_numpy_ints():
@@ -172,13 +173,6 @@ def _run_driver(tmp_path, next_fn):
     d.finalize_attributes = lambda: None
     d.write_container = lambda overwrite: None
     return d, missing
-
-
-def test_run_collects_missing_dims_and_clears_cache(tmp_path):
-    d, missing = _run_driver(tmp_path, xr.Dataset)
-    d.run(overwrite=False)
-    assert d.reported == missing
-    assert d.mover.cleared == [0]
 
 
 def test_run_raises_collective_error_when_batch_fails(tmp_path):

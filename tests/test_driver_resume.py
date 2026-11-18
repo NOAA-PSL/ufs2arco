@@ -92,17 +92,6 @@ def assert_missing_records(driver, expected):
     driver.target.handle_missing_data.assert_called_once_with(expected)
 
 
-def test_successful_report_uses_relative_sidecar(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    driver, _ = make_driver(tmp_path)
-    driver.target.store_path = "dataset.zarr"
-
-    driver.report_missing_data([])
-
-    assert driver.get_missing_data_path(driver.store_path) == "./missing.dataset.zarr.yaml"
-    assert_missing_records(driver, [])
-
-
 def test_patch_restarts_both_counters_and_clears_recovered_gap(tmp_path, monkeypatch):
     driver, times = make_driver(tmp_path, start=3)
     write_manifest(driver, time_records(times[1]))
