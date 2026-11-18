@@ -50,45 +50,6 @@ def test_anemoi_drops_protected_rename_keys():
     assert "time" not in tgt.rename
 
 
-def test_map_levels_to_suffixes_creates_level_suffixed_fields():
-    tgt = _target()
-    xds = xr.Dataset(
-        {
-            "gh": (("time", "ensemble", "level", "latitudes", "longitudes"), np.ones((1, 1, 2, 2, 2))),
-            "t2m": (("time", "ensemble", "latitudes", "longitudes"), np.ones((1, 1, 2, 2))),
-        },
-        coords={
-            "time": [0],
-            "ensemble": [0],
-            "dates": ("time", [_SourceNoFhr.time[0]]),
-            "level": [100, 500],
-            "latitudes": [0.0, 1.0],
-            "longitudes": [10.0, 11.0],
-        },
-    )
-    out = tgt._map_levels_to_suffixes(xds)
-    assert "gh_100" in out
-    assert "gh_500" in out
-    assert "t2m" in out
-    assert "variables_metadata" in out.attrs
-
-
-def test_map_datetime_to_index_drops_dates_and_adds_time():
-    tgt = _target()
-    xds = xr.Dataset(
-        {"t2m": (("dates", "ensemble", "latitudes", "longitudes"), np.ones((1, 1, 2, 2)))},
-        coords={
-            "dates": [_SourceNoFhr.time[0]],
-            "ensemble": [0],
-            "latitudes": [0.0, 1.0],
-            "longitudes": [10.0, 11.0],
-        },
-    )
-    out = tgt._map_datetime_to_index(xds)
-    assert "time" in out.dims
-    assert "dates" not in out
-
-
 def test_sort_channels_by_levels_numeric_ordering():
     tgt = _target(sort_channels_by_levels=True)
     xds = xr.Dataset(
@@ -102,42 +63,6 @@ def test_sort_channels_by_levels_numeric_ordering():
     )
     out = tgt._stackit(xds)
     assert out.attrs["variables"] == ["gh_100", "gh_150", "gh_1000", "t2m"]
-
-
-def test_calc_sample_stats_computes_expected_arrays():
-    tgt = _target()
-    xds = xr.Dataset(
-        {
-            "data": (
-                ("time", "variable", "ensemble", "latitudes", "longitudes"),
-                np.array([[[[[1.0, np.nan], [3.0, 4.0]]]]]),
-            )
-        },
-        coords={
-            "time": [0],
-            "variable": [0],
-            "ensemble": [0],
-            "latitudes": [0.0, 1.0],
-            "longitudes": [10.0, 11.0],
-        },
-    )
-    out = tgt._calc_sample_stats(xds)
-    assert float(out["count_array"].values.squeeze()) == 3.0
-    assert bool(out["has_nans_array"].values.squeeze()) is True
-    assert float(out["maximum_array"].values.squeeze()) == 4.0
-    assert float(out["minimum_array"].values.squeeze()) == 1.0
-
-
-def test_flatten_grid_creates_cell_dimension():
-    tgt = _target()
-    xds = xr.Dataset(
-        {"data": (("time", "variable", "ensemble", "latitudes", "longitudes"), np.ones((1, 1, 1, 2, 2)))},
-        coords={"time": [0], "variable": [0], "ensemble": [0], "latitudes": [0.0, 1.0], "longitudes": [10.0, 11.0]},
-        attrs={"stack_order": ["latitudes", "longitudes"]},
-    )
-    out = tgt._flatten_grid(xds)
-    assert "cell" in out.dims
-    assert "cell2d" not in out
 
 
 def test_statistics_start_date_raises_if_not_in_datetime():

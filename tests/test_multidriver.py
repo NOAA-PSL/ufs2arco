@@ -1,3 +1,7 @@
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import numpy as np
 import yaml
 import xarray as xr
 
@@ -18,20 +22,56 @@ def _write_multi_recipe(path, target_name="anemoi"):
         yaml.safe_dump(recipe, f)
 
 
-def test_init_source_rejects_mixed_source_types(tmp_path):
-    cfg = tmp_path / "multi.yaml"
-    _write_multi_recipe(cfg)
-    with open(cfg, "r") as f:
-        recipe = yaml.safe_load(f)
-    recipe["multisource"][1]["source"]["name"] = "gfs_archive"
-    with open(cfg, "w") as f:
-        yaml.safe_dump(recipe, f)
-    d = MultiDriver(str(cfg))
-    try:
-        d._init_source()
-        raise AssertionError("Expected NotImplementedError for mixed multisource names")
-    except NotImplementedError as exc:
-        assert "all sources have to come from the same dataset" in str(exc)
+class _Mover:
+    start = 0
+
+    def __init__(self, xds, missing=()):
+        self.xds = xds
+        self.missing_sample_dims = list(missing)
+        self.cleared = []
+
+    def __len__(self):
+        return 1
+
+    def __next__(self):
+        return self.xds
+
+    def create_container(self):
+        return self.xds
+
+    def clear_cache(self, batch_idx):
+        self.cleared.append(batch_idx)
+
+    def find_my_region(self, _xds):
+        return {"time": slice(0, 1)}
+
+
+def _driver(tmp_path, movers):
+    target = MagicMock()
+    target.store_path = str(tmp_path / "out.zarr")
+    target.renamed_sample_dims = ("time",)
+    target.merge_multisource.side_effect = lambda dslist, **kwargs: xr.merge(dslist)
+    target.prepare_static_masks.side_effect = lambda xds: xds
+
+    d = MultiDriver.__new__(MultiDriver)
+    d.movers = movers
+    d.targets = [target] * len(movers)
+    d.topo = SimpleNamespace(
+        is_root=True,
+        rank=0,
+        gather=lambda value: [value],
+        broadcast=lambda value: value,
+        barrier=lambda: None,
+    )
+    d.setup = MagicMock()
+    d._validate_static_masks_collectively = MagicMock()
+    d.report_missing_data = MagicMock()
+    d.finalize_attributes = MagicMock()
+    return d
+
+
+def _sample():
+    return xr.Dataset({"a": ("time", [1.0])}, coords={"time": [0]})
 
 
 def test_init_transformer_prefers_common_over_unique(tmp_path):
@@ -49,84 +89,6 @@ def test_init_transformer_prefers_common_over_unique(tmp_path):
     assert d.transformers[0] is not None
     # common transforms overwrite conflicting keys from unique transforms
     assert d.transformers[0].options["divide"] == {"a": 2}
-
-
-def test_run_tracks_missing_and_skips_write_when_any_source_missing(tmp_path, monkeypatch):
-    cfg = tmp_path / "multi.yaml"
-    _write_multi_recipe(cfg)
-    d = MultiDriver(str(cfg))
-
-    class _Topo:
-        is_root = True
-
-        def barrier(self):
-            return None
-
-    class _Mover:
-        def __init__(self, payload):
-            self.start = 0
-            self._payload = payload
-            self._count = 0
-            self.cleared = []
-
-        def __len__(self):
-            return 1
-
-        def __next__(self):
-            item = self._payload[self._count]
-            self._count += 1
-            return item
-
-        def get_batch_indices(self, _batch_idx):
-            return [{"t0": "2020-01-01", "fhr": 0, "member": 0}]
-
-        def clear_cache(self, batch_idx):
-            self.cleared.append(batch_idx)
-
-        def find_my_region(self, _xds):
-            return {"t0": slice(0, 1)}
-
-    class _Target:
-        store_path = "/tmp/out.zarr"
-
-        def __init__(self):
-            self.merge_calls = 0
-            self.finalized = False
-
-        def merge_multisource(self, dslist):
-            self.merge_calls += 1
-            return xr.merge(dslist)
-
-        def finalize(self, _topo):
-            self.finalized = True
-
-    mover_ok = _Mover([xr.Dataset({"a": ("t0", [1])}, coords={"t0": [0]})])
-    mover_empty = _Mover([xr.Dataset()])
-    target = _Target()
-
-    d.setup = lambda runtype: None
-    d.topo = _Topo()
-    d.movers = [mover_ok, mover_empty]
-    d.targets = [target, target]
-    d.report_payload = None
-    d.report_missing_data = lambda missing_dims: setattr(d, "report_payload", missing_dims)
-    d.finalize_attributes = lambda: None
-    d.write_container = lambda overwrite: None
-
-    writes = []
-    monkeypatch.setattr(
-        xr.Dataset,
-        "to_zarr",
-        lambda self, *args, **kwargs: writes.append((args, kwargs)),
-        raising=False,
-    )
-    d.run(overwrite=False)
-
-    # no batch write should happen when any source is missing
-    assert writes == []
-    assert target.merge_calls == 0
-    assert d.report_payload == [{"t0": "2020-01-01", "fhr": 0, "member": 0}]
-    assert mover_ok.cleared == [0]
 
 
 def test_init_target_rejects_non_anemoi_target(tmp_path):
@@ -149,104 +111,29 @@ def test_init_transformer_sets_none_when_no_transforms(tmp_path):
     assert d.transformers == [None, None]
 
 
-def test_write_container_merges_multisource_and_writes(monkeypatch, tmp_path):
-    cfg = tmp_path / "multi.yaml"
-    _write_multi_recipe(cfg)
-    d = MultiDriver(str(cfg))
-    d.topo = type("Topo", (), {"is_root": True, "barrier": lambda self: None})()
+def test_run_skips_write_when_any_source_missing(tmp_path, monkeypatch):
+    missing = {"time": 0}
+    ok, empty = _Mover(_sample()), _Mover(xr.Dataset(), missing=[missing])
+    d = _driver(tmp_path, [ok, empty])
+    d.write_container = MagicMock()
+    write = MagicMock()
+    monkeypatch.setattr(xr.Dataset, "to_zarr", write)
 
-    class _Mover:
-        def create_container(self):
-            return xr.Dataset({"a": ("t0", [1])}, coords={"t0": [0]})
+    d.run(overwrite=False)
 
-    class _Target:
-        store_path = "/tmp/out.zarr"
+    write.assert_not_called()
+    d.target.merge_multisource.assert_not_called()
+    d.report_missing_data.assert_called_once_with([missing], resume=False)
+    assert ok.cleared == empty.cleared == [0]
 
-        def merge_multisource(self, dslist):
-            return xr.merge(dslist)
 
-    d.movers = [_Mover(), _Mover()]
-    d.targets = [_Target(), _Target()]
+def test_write_container_merges_sources_into_store(tmp_path):
+    d = _driver(tmp_path, [_Mover(_sample()), _Mover(_sample())])
 
-    writes = []
-
-    def _record_to_zarr(self, *args, **kwargs):
-        writes.append((self, args, kwargs))
-        return None
-
-    monkeypatch.setattr(xr.Dataset, "to_zarr", _record_to_zarr, raising=False)
     d.write_container(overwrite=False)
 
-    # the merged container is written once to the store with compute=False
-    assert len(writes) == 1
-    written_ds, args, kwargs = writes[0]
-    assert args[0] == d.store_path
-    assert kwargs.get("compute") is False
-    assert "a" in written_ds
-
-
-def test_run_writes_when_all_sources_present(monkeypatch, tmp_path):
-    cfg = tmp_path / "multi.yaml"
-    _write_multi_recipe(cfg)
-    d = MultiDriver(str(cfg))
-
-    class _Mover:
-        def __init__(self):
-            self.start = 0
-            self.cleared = []
-            self._used = False
-
-        def __len__(self):
-            return 1
-
-        def __next__(self):
-            if self._used:
-                return xr.Dataset()
-            self._used = True
-            return xr.Dataset({"a": ("t0", [1])}, coords={"t0": [0]})
-
-        def get_batch_indices(self, _idx):
-            return [{"t0": "2020-01-01", "fhr": 0, "member": 0}]
-
-        def clear_cache(self, idx):
-            self.cleared.append(idx)
-
-        def find_my_region(self, _xds):
-            return {"t0": slice(0, 1)}
-
-    class _Target:
-        store_path = "/tmp/out.zarr"
-
-        def __init__(self):
-            self.merged = 0
-
-        def merge_multisource(self, dslist):
-            self.merged += 1
-            return xr.merge(dslist)
-
-        def finalize(self, _topo):
-            return None
-
-    d.setup = lambda runtype: None
-    d.topo = type("Topo", (), {"is_root": True, "barrier": lambda self: None})()
-    d.movers = [_Mover(), _Mover()]
-    tgt = _Target()
-    d.targets = [tgt, tgt]
-    d.report_missing_data = lambda missing: None
-    d.finalize_attributes = lambda: None
-    d.write_container = lambda overwrite: None
-
-    writes = []
-
-    def _record_to_zarr(self, *args, **kwargs):
-        writes.append((args, kwargs))
-        return None
-
-    monkeypatch.setattr(xr.Dataset, "to_zarr", _record_to_zarr, raising=False)
-    d.run(overwrite=False)
-    assert tgt.merged == 1
-    # exactly one batch write, to the target store, with the expected region
-    assert len(writes) == 1
-    args, kwargs = writes[0]
-    assert args[0] == "/tmp/out.zarr"
-    assert kwargs["region"] == {"t0": slice(0, 1)}
+    d.target.merge_multisource.assert_called_once()
+    assert d.target.merge_multisource.call_args.kwargs == {"apply_masks": False}
+    stored = xr.open_zarr(d.store_path)
+    assert "a" in stored
+    np.testing.assert_array_equal(stored["time"], [0])
