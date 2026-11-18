@@ -14,7 +14,7 @@ class CloudZarrData(Source):
     """
     Generic access patterns for forecast datasets store somewhere in Zarr
     """
-    storage_options = tuple()
+    storage_options = None
 
     @property
     def available_variables(self) -> tuple:
@@ -37,7 +37,6 @@ class CloudZarrData(Source):
         slices: Optional[dict] = None,
         local: Optional[bool] = False,
         accumulate_variables: Optional[list | tuple | str] = None,
-        storage_options: Optional[str] = {"token": "anon"},
     ) -> None:
 
         # open and rename
@@ -61,10 +60,9 @@ class CloudZarrData(Source):
         # now subsample the dataset
         self._xds = self._xds[self.variables]
         if (self.levels is not None) & ('level' in self._xds.dims):
-            self._xds = self._xds.sel(level=self.levels, **self._level_sel_kwargs)
+            self._xds = self._xds.sel(level=list(self.levels), **self._level_sel_kwargs)
         if (self.levels is not None) & ('level_stag' in self._xds.dims):
-            stag_levels = self.levels
-            stag_levels.append(stag_levels[-1] + 1)
+            stag_levels = list(self.levels) + [self.levels[-1] + 1]
             self._xds = self._xds.sel(level_stag=stag_levels, **self._level_sel_kwargs)
         self._xds = self.apply_slices(self._xds)
 

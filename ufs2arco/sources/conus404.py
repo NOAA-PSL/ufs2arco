@@ -85,5 +85,4 @@ class CONUS404(CloudZarrData, Source):
             levels=levels,
             use_nearest_levels=use_nearest_levels,
             slices=slices,
-            storage_options=self.storage_options,
         )

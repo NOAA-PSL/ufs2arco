@@ -57,9 +57,12 @@ def test_level_selection(patch_level):
     assert src._xds["level"].values.tolist() == [500]
 
 
-def test_stag_level_selection_appends_extra_level(patch_level):
-    src = _CloudLike(uri="s3://dummy", variables=["w"], levels=[500, 1000])
+@pytest.mark.parametrize("levels", [[500, 1000], (500, 1000)])
+def test_stag_level_selection_appends_extra_level_without_mutating_levels(patch_level, levels):
+    src = _CloudLike(uri="s3://dummy", variables=["t", "w"], levels=levels)
+    assert src._xds["level"].values.tolist() == [500, 1000]
     assert src._xds["level_stag"].values.tolist() == [500, 1000, 1001]
+    assert list(src.levels) == list(levels) == [500, 1000]
 
 
 def test_use_nearest_levels(patch_level):
