@@ -6,6 +6,7 @@ from ufs2arco.log import setup_simple_log, SimpleFormatter
 def test_setup_simple_log_sets_level_and_adds_handler():
     logger = logging.getLogger("ufs2arco")
     before = list(logger.handlers)
+    before_level = logger.level
     try:
         setup_simple_log(level=logging.DEBUG)
         assert logger.level == logging.DEBUG
@@ -18,6 +19,7 @@ def test_setup_simple_log_sets_level_and_adds_handler():
         for h in list(logger.handlers):
             if h not in before:
                 logger.removeHandler(h)
+        logger.setLevel(before_level)
 
 
 def test_simple_formatter_converts_relative_created_to_seconds():

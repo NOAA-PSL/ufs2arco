@@ -38,13 +38,13 @@ def test_transformer_applies_multiply_divide_and_mapping():
 def test_transformer_dispatches_destagger():
     import numpy as np
 
-    tr = Transformer(options={"destagger": {"T": "west_east"}})
+    tr = Transformer(options={"destagger": {"U": "west_east"}})
     xds = xr.Dataset(
-        {"T": (("south_north", "west_east"), np.ones((2, 2)))},
+        {"U": (("south_north", "west_east_stag"), [[0.0, 2.0, 4.0], [10.0, 20.0, 30.0]])},
     )
     out = tr(xds)
-    # T has no staggered dim, so it passes through unchanged
-    assert "T" in out
+    assert out["U"].dims == ("south_north", "west_east")
+    np.testing.assert_array_equal(out["U"], [[1.0, 3.0], [15.0, 25.0]])
 
 
 def test_transformer_dispatches_rotate_vectors():
@@ -87,3 +87,5 @@ def test_transformer_dispatches_fv_vertical_regrid():
     )
     out = tr(xds)
     assert "temp" in out
+    assert "delz" not in out
+    assert "vertical_coordinate" in out["temp"].attrs
