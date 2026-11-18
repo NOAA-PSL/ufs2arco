@@ -57,7 +57,9 @@ def horizontal_regrid(
     if "lat_b" not in xds or "lon_b" not in xds:
         if not os.path.isfile(filename):
             logger.info(f"ufs2arco.transforms.horizontal_regrid: did not find 'lat_b' or 'lon_b' in source, computing bounds.")
-        xds = get_bounds(xds, is_gaussian=source_is_on_gaussian_grid)
+        missing_bounds = [key for key in ("lat_b", "lon_b") if key not in xds]
+        bounds = get_bounds(xds, is_gaussian=source_is_on_gaussian_grid)
+        xds = xds.assign_coords({key: bounds[key].variable for key in missing_bounds})  
         if not os.path.isfile(filename):
             logger.info(f"ufs2arco.transforms.horizontal_regrid: computed bounds are\nLongitude\n{xds.lon_b}\nLatitude\n{xds.lat_b}")
 
