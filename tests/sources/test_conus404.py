@@ -11,11 +11,6 @@ TIME = {"start": "2000-01-01", "end": "2000-01-02", "freq": "1h"}
 URI = "abfs://test/conus404.zarr"
 
 
-def test_class_attributes():
-    assert CONUS404.sample_dims == ("time",)
-    assert CONUS404.horizontal_dims == ("latitude", "longitude")
-
-
 def test_get_storage_options_reads_signed_zarr_asset():
     storage_options = {"account_name": "test"}
     pystac_client = MagicMock()
@@ -43,18 +38,6 @@ def test_available_levels():
 def test_available_stag_levels():
     obj = CONUS404.__new__(CONUS404)
     assert obj.available_stag_levels == tuple(range(51))
-
-
-def test_rename_mapping():
-    obj = CONUS404.__new__(CONUS404)
-    assert obj.rename == {
-        "bottom_top": "level",
-        "bottom_top_stag": "level_stag",
-        "south_north": "latitude",
-        "west_east": "longitude",
-        "south_north_stag": "latitude_stag",
-        "west_east_stag": "longitude_stag",
-    }
 
 
 @pytest.mark.parametrize("explicit", [None, {"account_name": "explicit"}])

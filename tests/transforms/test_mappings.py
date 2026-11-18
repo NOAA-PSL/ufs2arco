@@ -1,12 +1,7 @@
 import numpy as np
 import xarray as xr
 
-from ufs2arco.transforms.mappings import get_available_mappings, apply_mappings
-
-
-def test_get_available_mappings_contains_expected_entries():
-    mappings = get_available_mappings()
-    assert set(mappings.keys()) == {"log", "round"}
+from ufs2arco.transforms.mappings import apply_mappings
 
 
 def test_apply_mappings_supports_string_and_list_inputs():

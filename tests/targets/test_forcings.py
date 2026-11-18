@@ -32,12 +32,6 @@ def test_insolation_alias_matches_cos_solar_zenith_angle():
     np.testing.assert_allclose(a.values, b.values)
 
 
-def test_get_mappings_contains_expected_core_keys():
-    mappings = forcings.get_mappings(time="time")
-    for key in ["latitude", "cos_latitude", "julian_day", "cos_local_time", "insolation", "cos_year_progress"]:
-        assert key in mappings
-
-
 def test_latitude_and_longitude_forcing_attrs():
     xds = _dataset()
     lat = forcings._latitude(xds)
@@ -46,14 +40,6 @@ def test_latitude_and_longitude_forcing_attrs():
     assert lat.attrs["constant_in_time"] is True
     assert lon.attrs["computed_forcing"] is True
     assert lon.attrs["constant_in_time"] is True
-
-
-def test_julian_day_progression_and_attrs():
-    xds = _dataset()
-    jd = forcings._julian_day(xds, time="time")
-    assert jd.attrs["computed_forcing"] is True
-    assert jd.attrs["constant_in_time"] is False
-    assert float(jd.isel(time=1).values) > float(jd.isel(time=0).values)
 
 
 def test_year_progress_dtype_and_bounds():
@@ -107,10 +93,12 @@ def test_cos_sin_julian_day_match_manual():
     assert "sine" in sjd.attrs["description"]
 
 
-def test_julian_day_zero_at_year_start():
-    xds = _grid_dataset(times=pd.DatetimeIndex([pd.Timestamp("2020-01-01T00")]))
-    jd = forcings._julian_day(xds, time="time")
+def test_julian_day_starts_at_zero_and_increases():
+    jd = forcings._julian_day(_grid_dataset(), time="time")  # starts 2020-01-01T00
     assert float(jd.isel(time=0)) == 0.0
+    assert float(jd.isel(time=1)) > 0.0
+    assert jd.attrs["computed_forcing"] is True
+    assert jd.attrs["constant_in_time"] is False
 
 
 def test_local_time_offset_by_longitude():

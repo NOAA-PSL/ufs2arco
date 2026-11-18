@@ -344,24 +344,15 @@ def test_static_mask_artifact_refuses_an_existing_publisher_lock(tmp_path):
     assert not output.exists()
 
 
-def test_static_mask_artifact_rejects_tampered_training_identity(tmp_path):
-    import zarr
-
-    training = tmp_path / "training.zarr"
-    output = tmp_path / "static-mask.zarr"
-    _write_training_store(training)
-    fit_static_mask_artifact(training, VARIABLES, output)
-
-    group = zarr.open_group(output, mode="a")
-    identity = dict(group.attrs["training_identity"])
-    identity["training_store"] = "tampered"
-    group.attrs["training_identity"] = identity
-
-    with pytest.raises(ValueError, match="training identity is invalid"):
-        load_static_mask_artifact(output)
-
-
-def test_static_mask_artifact_rejects_tampered_fraction(tmp_path):
+@pytest.mark.parametrize(
+    "attr,tamper,match",
+    [
+        ("training_identity", lambda old: {**old, "training_store": "tampered"}, "training identity is invalid"),
+        ("minimum_valid_fraction", lambda old: 0.49, "mask checksum is invalid"),
+        ("minimum_valid_count", lambda old: 2, "minimum_valid_count is inconsistent"),
+    ],
+)
+def test_static_mask_artifact_rejects_tampered_attrs(tmp_path, attr, tamper, match):
     import zarr
 
     training = tmp_path / "training.zarr"
@@ -376,30 +367,9 @@ def test_static_mask_artifact_rejects_tampered_fraction(tmp_path):
     )
 
     group = zarr.open_group(output, mode="a")
-    group.attrs["minimum_valid_fraction"] = 0.49
+    group.attrs[attr] = tamper(group.attrs[attr])
 
-    with pytest.raises(ValueError, match="mask checksum is invalid"):
-        load_static_mask_artifact(output)
-
-
-def test_static_mask_artifact_rejects_tampered_minimum_count(tmp_path):
-    import zarr
-
-    training = tmp_path / "training.zarr"
-    output = tmp_path / "static-mask.zarr"
-    _write_training_store(training)
-    fit_static_mask_artifact(
-        training,
-        VARIABLES,
-        output,
-        method="minimum_valid_fraction",
-        minimum_valid_fraction=0.5,
-    )
-
-    group = zarr.open_group(output, mode="a")
-    group.attrs["minimum_valid_count"] = 2
-
-    with pytest.raises(ValueError, match="minimum_valid_count is inconsistent"):
+    with pytest.raises(ValueError, match=match):
         load_static_mask_artifact(output)
 
 

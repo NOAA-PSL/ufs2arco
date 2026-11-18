@@ -58,3 +58,37 @@ def test_replay_open_sample_dataset_dynamic_only(monkeypatch):
     assert "t" in out
     assert "land_static" not in out
     assert out["level"].values.tolist() == [500]
+
+
+def test_replay_atmosphere_accepts_store_without_auxiliary_time_coords(
+    tmp_path,
+):
+    store = tmp_path / "analysis.zarr"
+    xds = xr.Dataset(
+        {
+            "tmp": (
+                ("time", "pfull", "grid_yt", "grid_xt"),
+                np.ones((1, 1, 1, 1), dtype=np.float32),
+            ),
+        },
+        coords={
+            "time": pd.to_datetime(["2020-01-01T00"]),
+            "pfull": [25.0],
+            "grid_yt": [0.0],
+            "grid_xt": [0.0],
+        },
+    )
+    xds.to_zarr(store)
+
+    source = GCSReplayAtmosphere(
+        time={"start": "2020-01-01T00", "periods": 1, "freq": "6h"},
+        uri=str(store),
+        variables=["tmp"],
+        local=True,
+    )
+
+    sample = source.open_sample_dataset(
+        dims={"time": pd.Timestamp("2020-01-01T00")},
+        open_static_vars=False,
+    )
+    assert sample.tmp.item() == 1.0

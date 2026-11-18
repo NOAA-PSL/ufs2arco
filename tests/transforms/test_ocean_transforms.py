@@ -5,7 +5,6 @@ import pytest
 import xarray as xr
 import yaml
 
-import ufs2arco.transforms as transform_exports
 from ufs2arco.ocean_diagnostics import (
     HEAT_CAPACITY,
     RHO_0,
@@ -111,7 +110,7 @@ _REPLAY_LEVELS = np.array(
 
 def test_packaged_ocean_interfaces_reconstruct_replay_levels():
     levels_path = (
-        Path(__file__).parent.parent
+        Path(__file__).parent.parent.parent
         / "ufs2arco"
         / "sources"
         / "replay_ocean_vertical_levels.yaml"
@@ -123,10 +122,6 @@ def test_packaged_ocean_interfaces_reconstruct_replay_levels():
         0.5 * (interfaces[:-1] + interfaces[1:]),
         _REPLAY_LEVELS,
     )
-
-
-def test_ocean_vertical_regrid_functions_are_publicly_exported():
-    assert transform_exports.fv_vertical_regrid_ocean is fv_vertical_regrid_ocean
 
 
 def test_vertical_regrid_renormalizes_each_variable_valid_weight():

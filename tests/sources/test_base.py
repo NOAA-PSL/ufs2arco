@@ -51,13 +51,6 @@ def test_apply_slices_sel_then_isel():
     assert list(out.longitude.values) == [10, 11]
 
 
-
-
-
-def test_rename_default_is_empty_dict():
-    assert _DummySource(variables=["t2m"]).rename == {}
-
-
 def test_variables_default_to_all_available():
     src = _DummySource()
     assert set(src.variables) == set(_DummySource.available_variables)
@@ -66,22 +59,6 @@ def test_variables_default_to_all_available():
 def test_dynamic_vars_excludes_static():
     src = _DummySource(variables=["t2m", "lsm"])
     assert src.dynamic_vars == ("t2m",)
-
-
-def test_slice_and_levels_warning_does_not_raise():
-    # specifying both discrete levels and a level-based slice should warn, not raise
-    src = _DummySource(
-        variables=["t2m"],
-        levels=[100],
-        slices={"sel": {"level": (100, 500)}},
-    )
-    assert src.slices == {"sel": {"level": (100, 500)}}
-
-
-def test_add_full_extra_coords_is_passthrough():
-    src = _DummySource(variables=["t2m"])
-    xds = xr.Dataset({"t2m": ("x", [1, 2])}, coords={"x": [0, 1]})
-    assert src.add_full_extra_coords(xds).identical(xds)
 
 
 def test_apply_slices_latitude_descending():

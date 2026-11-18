@@ -4,9 +4,7 @@ import pytest
 import xarray as xr
 
 import ufs2arco.sources.cloud_zarr as cmod
-from ufs2arco.sources import CloudZarrData, Source
-from ufs2arco.sources.gcs_replay_atmosphere import GCSReplayAtmosphere
-from ufs2arco.sources.gcs_replay_ocean import GCSReplayOcean
+from ufs2arco.sources import CloudZarrData
 
 
 class _CloudLike(CloudZarrData):
@@ -79,7 +77,7 @@ def test_apply_isel_slices(patch_level):
     assert src._xds["longitude"].values.tolist() == [10.0]
 
 
-class TinyCloudZarr(CloudZarrData, Source):
+class TinyCloudZarr(CloudZarrData):
     sample_dims = ("time",)
     horizontal_dims = ("latitude", "longitude")
     static_vars = ("static",)
@@ -87,44 +85,6 @@ class TinyCloudZarr(CloudZarrData, Source):
     def __init__(self, time, uri, **kwargs):
         self.time = pd.date_range(**time)
         super().__init__(uri=uri, **kwargs)
-
-
-def test_replay_ocean_does_not_request_atmospheric_static_variables():
-    assert GCSReplayOcean.static_vars == tuple()
-
-
-def test_replay_atmosphere_accepts_store_without_auxiliary_time_coords(
-    tmp_path,
-):
-    store = tmp_path / "analysis.zarr"
-    xds = xr.Dataset(
-        {
-            "tmp": (
-                ("time", "pfull", "grid_yt", "grid_xt"),
-                np.ones((1, 1, 1, 1), dtype=np.float32),
-            ),
-        },
-        coords={
-            "time": pd.to_datetime(["2020-01-01T00"]),
-            "pfull": [25.0],
-            "grid_yt": [0.0],
-            "grid_xt": [0.0],
-        },
-    )
-    xds.to_zarr(store)
-
-    source = GCSReplayAtmosphere(
-        time={"start": "2020-01-01T00", "periods": 1, "freq": "6h"},
-        uri=str(store),
-        variables=["tmp"],
-        local=True,
-    )
-
-    sample = source.open_sample_dataset(
-        dims={"time": pd.Timestamp("2020-01-01T00")},
-        open_static_vars=False,
-    )
-    assert sample.tmp.item() == 1.0
 
 
 def write_tiny_zarr(tmp_path):

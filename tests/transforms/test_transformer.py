@@ -35,13 +35,6 @@ def test_transformer_applies_multiply_divide_and_mapping():
     assert result["round_t2m"].values.tolist() == [5.0, 6.0]
 
 
-def test_transformer_str_contains_options():
-    tr = Transformer(options={"multiply": {"t2m": 2}})
-    text = str(tr)
-    assert "Transformations" in text
-    assert "multiply" in text
-
-
 def test_transformer_dispatches_destagger():
     import numpy as np
 

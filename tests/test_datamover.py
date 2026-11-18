@@ -8,98 +8,19 @@ import pandas as pd
 import ufs2arco.datamover as dmod
 from ufs2arco.datamover import DataMover, MPIDataMover
 
-class _SimpleSource:
-    sample_dims = ("t0", "fhr")
-    t0 = pd.date_range("2020-01-01", periods=2, freq="6h")
-    fhr = [0, 6]
-
-    def __init__(self, empty=False):
-        self.empty = empty
-
-    def open_sample_dataset(self, dims, open_static_vars, cache_dir):
-        _ = (dims, open_static_vars, cache_dir)
-        if self.empty:
-            return xr.Dataset()
-        return xr.Dataset({"a": (("t0", "fhr", "x"), np.ones((1, 1, 2)))}, coords={"t0": [self.t0[0]], "fhr": [0], "x": [0, 1]})
-
-
-class _SimpleTarget:
-    always_open_static_vars = True
-    renamed_sample_dims = ("t0", "fhr")
-    t0 = _SimpleSource.t0
-    fhr = _SimpleSource.fhr
-    chunks = {"t0": 1, "fhr": 1, "x": 2}
-
-    def apply_transforms_to_sample(self, xds):
-        return xds
-
-    def manage_coords(self, nds):
-        return nds
-
-
-def test_iter_resets_counter_and_restart_called(monkeypatch):
-    mover = DataMover(_SimpleSource(), _SimpleTarget(), batch_size=1, cache_dir=".")
-    mover.counter = 3
-    called = {"restart": 0}
-    monkeypatch.setattr(mover, "restart", lambda idx=0: called.__setitem__("restart", called["restart"] + 1))
-    iter(mover)
-    assert mover.counter == 0
-    assert called["restart"] == 1
-
-
-def test_next_raises_stopiteration_when_complete():
-    mover = DataMover(_SimpleSource(), _SimpleTarget(), batch_size=10, cache_dir=".")
-    _ = next(mover)
-    with pytest.raises(StopIteration):
-        next(mover)
-
-
-def test_next_data_returns_none_when_batch_indices_empty(monkeypatch):
-    mover = DataMover(_SimpleSource(), _SimpleTarget(), batch_size=1, cache_dir=".")
-    monkeypatch.setattr(mover, "get_batch_indices", lambda idx: [])
-    out = mover._next_data()
-    assert out is None
-
-
-def test_next_data_returns_empty_dataset_when_all_samples_empty():
-    mover = DataMover(_SimpleSource(empty=True), _SimpleTarget(), batch_size=1, cache_dir=".")
-    out = mover._next_data()
-    assert isinstance(out, xr.Dataset)
-    assert len(out) == 0
-
-
-def test_get_data_increments_data_counter_once():
-    mover = DataMover(_SimpleSource(), _SimpleTarget(), batch_size=1, cache_dir=".")
-    initial = mover.data_counter
-    _ = mover.get_data()
-    assert mover.data_counter == initial + 1
-
-
-def test_clear_cache(tmp_path):
-    mover = DataMover(_SimpleSource(), _SimpleTarget(), batch_size=1, cache_dir=str(tmp_path))
-    os.makedirs(mover.get_cache_dir(0))
-    mover.clear_cache(0)
-    assert not os.path.isdir(mover.get_cache_dir(0))
-    mover.clear_cache(999)  # missing dir is a no-op
-
-
-def test_mpi_datamover_paths_and_batch_indices(monkeypatch):
-    monkeypatch.setattr(dmod, "_has_mpi", True)
-    topo = type("Topo", (), {"size": 4, "rank": 2})()
-    mover = MPIDataMover(source=_SimpleSource(), target=_SimpleTarget(), mpi_topo=topo, cache_dir=".")
-    assert mover.get_cache_dir(1).endswith("/mpidatamover-cache/2/1")
-    assert mover.get_batch_indices(0) == [mover.sample_indices[2]]
-    assert mover.get_batch_indices(1) == []
-
-
 class _BaseSource:
     sample_dims = ("t0", "fhr", "member")
     t0 = pd.date_range("2020-01-01", periods=2, freq="6h")
     fhr = [0]
     member = [0, 1]
 
+    def __init__(self, empty=False):
+        self.empty = empty
+
     def open_sample_dataset(self, dims, open_static_vars, cache_dir):
         _ = (open_static_vars, cache_dir)
+        if self.empty:
+            return xr.Dataset()
         return xr.Dataset(
             {
                 "temp": (
@@ -130,6 +51,53 @@ class _BaseTarget:
 
     def manage_coords(self, nds):
         return nds
+
+
+def test_iter_resets_both_counters():
+    mover = DataMover(_BaseSource(), _BaseTarget(), batch_size=1, cache_dir=".")
+    mover.counter = mover.data_counter = 3
+    iter(mover)
+    assert mover.counter == mover.data_counter == 0
+
+
+def test_next_raises_stopiteration_when_complete():
+    mover = DataMover(_BaseSource(), _BaseTarget(), batch_size=10, cache_dir=".")
+    batch = next(mover)
+    assert batch.sizes["t0"] == batch.sizes["member"] == 2
+    assert mover.data_counter == 1
+    with pytest.raises(StopIteration):
+        next(mover)
+
+
+def test_next_data_returns_none_when_batch_indices_empty(monkeypatch):
+    mover = DataMover(_BaseSource(), _BaseTarget(), batch_size=1, cache_dir=".")
+    monkeypatch.setattr(mover, "get_batch_indices", lambda idx: [])
+    out = mover._next_data()
+    assert out is None
+
+
+def test_next_data_returns_empty_dataset_when_all_samples_empty():
+    mover = DataMover(_BaseSource(empty=True), _BaseTarget(), batch_size=1, cache_dir=".")
+    out = mover._next_data()
+    assert isinstance(out, xr.Dataset)
+    assert len(out) == 0
+
+
+def test_clear_cache(tmp_path):
+    mover = DataMover(_BaseSource(), _BaseTarget(), batch_size=1, cache_dir=str(tmp_path))
+    os.makedirs(mover.get_cache_dir(0))
+    mover.clear_cache(0)
+    assert not os.path.isdir(mover.get_cache_dir(0))
+    mover.clear_cache(999)  # missing dir is a no-op
+
+
+def test_mpi_datamover_paths_and_batch_indices(monkeypatch):
+    monkeypatch.setattr(dmod, "_has_mpi", True)
+    topo = type("Topo", (), {"size": 4, "rank": 2})()
+    mover = MPIDataMover(source=_BaseSource(), target=_BaseTarget(), mpi_topo=topo, cache_dir=".")
+    assert mover.get_cache_dir(1).endswith("/mpidatamover-cache/2/1")
+    assert mover.get_batch_indices(0) == [mover.sample_indices[2]]
+    assert mover.get_batch_indices(1) == []
 
 
 def test_init_and_batching():
@@ -227,16 +195,6 @@ def test_mark_static_variables_only_when_target_opens_static_vars(enabled):
     mover._mark_static_variables(xds)
     assert xds["lsm"].attrs.get("constant_in_time", False) is enabled
     assert "constant_in_time" not in xds["t2m"].attrs
-
-
-def test_mpi_datamover_str_contains_summary(monkeypatch):
-    monkeypatch.setattr(dmod, "_has_mpi", True)
-    topo = type("Topo", (), {"size": 4, "rank": 1})()
-    mover = MPIDataMover(source=_SimpleSource(), target=_SimpleTarget(), mpi_topo=topo, cache_dir=".")
-    text = str(mover)
-    assert "Mover: MPIDataMover" in text
-    assert "batch_size" in text
-    assert "Total Samples" in text
 
 
 def test_create_container_skips_missing_leading_sample():

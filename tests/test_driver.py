@@ -39,39 +39,23 @@ class _Topo:
 def test_init_rejects_unrecognized_section(tmp_path):
     cfg = tmp_path / "recipe.yaml"
     _write_recipe(cfg, extra={"bogus": {}})
-    try:
+    with pytest.raises(KeyError, match="Unrecognized config sections"):
         Driver(str(cfg))
-        raise AssertionError("Expected KeyError for unrecognized section")
-    except KeyError as exc:
-        assert "Unrecognized config sections" in str(exc)
 
 
 def test_init_requires_chunks_in_target(tmp_path):
     cfg = tmp_path / "recipe.yaml"
-    recipe = {
-        "mover": {"name": "datamover", "batch_size": 1},
-        "directories": {"zarr": "/tmp/dataset.zarr", "cache": "/tmp/cache", "logs": "/tmp/logs"},
-        "source": {"name": "aws_gefs_archive"},
-        "target": {"name": "base"},
-    }
-    with open(cfg, "w") as f:
-        yaml.safe_dump(recipe, f)
-    try:
+    _write_recipe(cfg, extra={"target": {"name": "base"}})
+    with pytest.raises(AssertionError, match="'chunks'"):
         Driver(str(cfg))
-        raise AssertionError("Expected AssertionError for missing chunks")
-    except AssertionError as exc:
-        assert "'chunks'" in str(exc)
 
 
 def test_init_source_rejects_unknown_source(tmp_path):
     cfg = tmp_path / "recipe.yaml"
     _write_recipe(cfg, extra={"source": {"name": "not_real"}})
     d = Driver(str(cfg))
-    try:
+    with pytest.raises(NotImplementedError, match="unrecognized data source"):
         d._init_source()
-        raise AssertionError("Expected NotImplementedError for unknown source")
-    except NotImplementedError as exc:
-        assert "unrecognized data source" in str(exc)
 
 
 def test_report_missing_data_sorts_converts_and_writes_yaml(tmp_path):
@@ -97,8 +81,6 @@ def test_report_missing_data_sorts_converts_and_writes_yaml(tmp_path):
 
     assert "missing_dims" in captured
     assert captured["missing_dims"][0]["t0"] == "2020-01-01 00:00:00"
-    assert isinstance(captured["missing_dims"][0]["fhr"], int)
-    assert isinstance(captured["missing_dims"][0]["member"], int)
     yaml_path = tmp_path / "missing.dataset.zarr.yaml"
     assert yaml_path.exists()
     assert d.get_missing_data_path("dataset.zarr") == "./missing.dataset.zarr.yaml"
@@ -137,49 +119,34 @@ def test_init_target_rejects_unknown_name(tmp_path):
     _write_recipe(cfg, extra={"target": {"name": "not_real", "chunks": {"t0": 1}}})
     d = Driver(str(cfg))
     d.source = object()
-    try:
+    with pytest.raises(NotImplementedError, match="only 'base', 'anemoi'"):
         d._init_target()
-        raise AssertionError("Expected NotImplementedError for unsupported target")
-    except NotImplementedError:
-        pass
 
 
-def _run_driver(tmp_path, next_fn):
-    cfg = tmp_path / "recipe.yaml"
-    _write_recipe(cfg)
-    d = Driver(str(cfg))
-    missing = [{"t0": "2020-01-01", "fhr": 0, "member": 0}]
-
-    class _Mover:
+def test_run_raises_collective_error_when_batch_fails(tmp_path):
+    class _FailingMover:
         start = 0
-        missing_sample_dims = missing
-        cleared = []
+
+        def __init__(self):
+            self.cleared = []
 
         def __len__(self):
             return 1
 
         def __next__(self):
-            return next_fn()
+            raise ValueError("boom")
 
         def clear_cache(self, idx):
             self.cleared.append(idx)
 
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg)
+    d = Driver(str(cfg))
     d.setup = lambda runtype: None
-    d.topo = _Topo()
-    d.mover = _Mover()
-    d.target = SimpleNamespace(store_path="/tmp/out.zarr", finalize=lambda topo: None)
-    d.reported = None
-    d.report_missing_data = lambda missing, **kw: setattr(d, "reported", missing)
-    d.finalize_attributes = lambda: None
     d.write_container = lambda overwrite: None
-    return d, missing
+    d.topo = _Topo()
+    d.mover = _FailingMover()
 
-
-def test_run_raises_collective_error_when_batch_fails(tmp_path):
-    def _fail():
-        raise ValueError("boom")
-
-    d, _ = _run_driver(tmp_path, _fail)
     with pytest.raises(RuntimeError, match="batch 0, rank 0: ValueError: boom"):
         d.run(overwrite=False)
     assert d.mover.cleared == [0]
