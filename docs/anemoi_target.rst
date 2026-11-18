@@ -19,6 +19,7 @@ datasets:
 * Users can compute forcings, like solar insolation or cos/sin encodings of coordinate information
 * Users can control the time period over which statistics are computed
 * Users can optionally also compute statistics of the temporal residual. This feature is somewhat experimental, and does not currently scale well to large datasets, see some discussion on this in `this issue <https://github.com/NOAA-PSL/ufs2arco/issues/109>`__. Note that it is currently only possible to compute statistics based on the timestep of the data, not an artbitrary timestep.
+* Users can reuse a spatial mask fitted once from a completed training dataset in multisource recipes, see :doc:`static_masks`.
 
 
 

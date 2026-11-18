@@ -1,0 +1,101 @@
+# Features tested
+# Datamover:
+# - serial
+# Source:
+# - gcs_replay_ocean (MOM6 ocean component)
+# Transform:
+# - ocean_density
+# - mixed_layer_depth
+# - ocean_heat_content
+# - fv_vertical_regrid_ocean
+# Target:
+# - anemoi workflow for analysis
+# - variables_with_nans, since ocean fields are always NaN over land
+mover:
+  name: datamover
+  batch_size: 2
+
+directories:
+  zarr: dataset.zarr
+  cache: cache
+  logs: logs
+
+source:
+  name: gcs_replay_ocean
+  uri: gs://noaa-ufs-gefsv13replay/ufs-hr1/1.00-degree/06h-freq/zarr/mom6.zarr
+  time:
+    start: 1994-01-01T00
+    end: 1994-01-01T06
+    freq: 6h
+
+  variables:
+    - temp
+    - so
+
+  # NOTE: deliberately no 'levels' and no 'slices.sel.level' here.
+  # Both would subset the water column inside Source.__init__, before any
+  # transform runs, and the ocean diagnostics need the full 75 native levels.
+  # Mixed layer depth cannot be resolved more finely than the layer spacing, so
+  # mixed_layer_depth would reject a subset grid rather than quietly produce a
+  # degenerate field. This omission is load bearing, not an oversight.
+
+transforms:
+  # These three run before fv_vertical_regrid_ocean regardless of the order they
+  # appear here; Transformer.__call__ fixes the order in code.
+  ocean_density:
+    temperature: temp
+    salinity: so
+    name: rho
+
+  mixed_layer_depth:
+    temperature: temp
+    salinity: so
+    thresholds: [0.03]
+    names: [mld]
+
+  ocean_heat_content:
+    temperature: temp
+    depths: [700, 2000, null]
+
+  fv_vertical_regrid_ocean:
+    interfaces:
+      - 0
+      - 50
+      - 200
+      - 1000
+      - 6000
+    keep_weight_var: False
+
+target:
+  name: anemoi
+
+  # Every ocean field is NaN over land, permanently. Without this, each date's
+  # land NaNs would be reported as unexpected and the date flagged missing.
+  #
+  # Anemoi matches these names by substring, but only when the entry is not
+  # itself a channel name (anemoi.py reconcile_missing_and_nans). "ohc" IS a
+  # channel here, so it matches only itself and would leave ohc700 and ohc2000
+  # uncovered. List every heat content channel explicitly.
+  variables_with_nans:
+    - temp
+    - so
+    - rho
+    - mld
+    - ohc
+    - ohc700
+    - ohc2000
+
+  forcings:
+    - cos_latitude
+    - sin_latitude
+    - cos_longitude
+    - sin_longitude
+
+  chunks:
+    time: 1
+    variable: -1
+    ensemble: 1
+    cell: -1
+
+attrs:
+  description: "Replay MOM6 ocean with MLD, OHC and density diagnostics"

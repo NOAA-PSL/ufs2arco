@@ -43,6 +43,21 @@ multisource:
         sel:
           level: [200, 1000]
 
+    # fv_vertical_regrid is set per source (not as a common transform) so that
+    # only this source writes the delz_* channels. Common transforms override
+    # per-source ones, and duplicate channel names are rejected at merge time.
+    transforms:
+      fv_vertical_regrid:
+        weight_var: delz
+        interfaces:
+          - 200
+          - 350
+          - 700
+          - 900
+          - 1000
+        use_nearest_interfaces: True
+        keep_weight_var: True
+
   - source:
       name: gcs_replay_atmosphere
       uri: gs://noaa-ufs-gefsv13replay/ufs-hr1/0.25-degree-subsampled/03h-freq/zarr/fv3.zarr
@@ -66,19 +81,17 @@ multisource:
         log:
           - spfh
           - spfh2m
-
-# Common transforms performed on all sources
-transforms:
-  fv_vertical_regrid:
-    weight_var: delz
-    interfaces:
-      - 200
-      - 350
-      - 700
-      - 900
-      - 1000
-    use_nearest_interfaces: True
-    keep_weight_var: True
+      # delz is needed here only as the regrid weight; source 1 outputs it
+      fv_vertical_regrid:
+        weight_var: delz
+        interfaces:
+          - 200
+          - 350
+          - 700
+          - 900
+          - 1000
+        use_nearest_interfaces: True
+        keep_weight_var: False
 
 target:
   name: anemoi
