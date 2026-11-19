@@ -1,0 +1,225 @@
+from types import SimpleNamespace
+
+import pytest
+import yaml
+import numpy as np
+import pandas as pd
+import xarray as xr
+
+from ufs2arco.driver import Driver, _convert_types_to_yaml, _open_patch_yaml
+
+
+def _write_recipe(path, extra=None):
+    recipe = {
+        "mover": {"name": "datamover", "batch_size": 1},
+        "directories": {"zarr": "/tmp/dataset.zarr", "cache": "/tmp/cache", "logs": "/tmp/logs"},
+        "source": {"name": "aws_gefs_archive"},
+        "target": {"name": "base", "chunks": {"t0": 1}},
+    }
+    if extra:
+        recipe.update(extra)
+    with open(path, "w") as f:
+        yaml.safe_dump(recipe, f)
+
+
+class _Topo:
+    def __init__(self, is_root=True):
+        self.is_root = is_root
+
+    def barrier(self):
+        return None
+
+    def gather(self, value):
+        return [value]
+
+    def broadcast(self, value):
+        return value
+
+
+def test_init_rejects_unrecognized_section(tmp_path):
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg, extra={"bogus": {}})
+    with pytest.raises(KeyError, match="Unrecognized config sections"):
+        Driver(str(cfg))
+
+
+def test_init_requires_chunks_in_target(tmp_path):
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg, extra={"target": {"name": "base"}})
+    with pytest.raises(AssertionError, match="'chunks'"):
+        Driver(str(cfg))
+
+
+def test_init_source_rejects_unknown_source(tmp_path):
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg, extra={"source": {"name": "not_real"}})
+    d = Driver(str(cfg))
+    with pytest.raises(NotImplementedError, match="unrecognized data source"):
+        d._init_source()
+
+
+def test_report_missing_data_sorts_converts_and_writes_yaml(tmp_path):
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg, extra={"directories": {"zarr": str(tmp_path / "dataset.zarr"), "cache": "/tmp/cache", "logs": "/tmp/logs"}})
+    d = Driver(str(cfg))
+    d.topo = _Topo()
+    d.source = type("S", (), {"sample_dims": ("t0", "fhr", "member")})()
+    captured = {}
+
+    class _FakeTarget:
+        store_path = str(tmp_path / "dataset.zarr")
+
+        def handle_missing_data(self, missing_dims):
+            captured["missing_dims"] = missing_dims
+
+    d.target = _FakeTarget()
+    missing = [
+        {"t0": pd.Timestamp("2020-01-02"), "fhr": np.int64(6), "member": np.int32(1)},
+        {"t0": pd.Timestamp("2020-01-01"), "fhr": np.int64(0), "member": np.int32(0)},
+    ]
+    d.report_missing_data(missing)
+
+    assert "missing_dims" in captured
+    assert captured["missing_dims"][0]["t0"] == "2020-01-01 00:00:00"
+    yaml_path = tmp_path / "missing.dataset.zarr.yaml"
+    assert yaml_path.exists()
+    assert d.get_missing_data_path("dataset.zarr") == "./missing.dataset.zarr.yaml"
+
+
+def test_convert_types_to_yaml_converts_time_and_numpy_ints():
+    converted = _convert_types_to_yaml(
+        {"time": pd.Timestamp("2021-05-01"), "fhr": np.int64(12), "member": np.int32(2)}
+    )
+    assert converted["time"] == "2021-05-01 00:00:00"
+    assert isinstance(converted["fhr"], int)
+    assert isinstance(converted["member"], int)
+
+
+def test_patch_yaml_round_trip_converts_back_to_timestamp(tmp_path):
+    patch_path = tmp_path / "missing.yaml"
+    payload = [{"t0": "2023-01-01 00:00:00", "fhr": 6, "member": 0}]
+    with open(patch_path, "w") as f:
+        yaml.safe_dump(payload, f)
+    reopened = _open_patch_yaml(str(patch_path))
+    assert isinstance(reopened[0]["t0"], pd.Timestamp)
+    assert reopened[0]["fhr"] == 6
+
+
+def test_mover_kwargs_enforces_cache_and_default_start(tmp_path):
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg)
+    d = Driver(str(cfg))
+    kw = d.mover_kwargs
+    assert kw["start"] == 0
+    assert kw["cache_dir"] == "/tmp/cache"
+
+
+def test_init_target_rejects_unknown_name(tmp_path):
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg, extra={"target": {"name": "not_real", "chunks": {"t0": 1}}})
+    d = Driver(str(cfg))
+    d.source = object()
+    with pytest.raises(NotImplementedError, match="only 'base', 'anemoi'"):
+        d._init_target()
+
+
+def test_run_raises_collective_error_when_batch_fails(tmp_path):
+    class _FailingMover:
+        start = 0
+
+        def __init__(self):
+            self.cleared = []
+
+        def __len__(self):
+            return 1
+
+        def __next__(self):
+            raise ValueError("boom")
+
+        def clear_cache(self, idx):
+            self.cleared.append(idx)
+
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg)
+    d = Driver(str(cfg))
+    d.setup = lambda runtype: None
+    d.write_container = lambda overwrite: None
+    d.topo = _Topo()
+    d.mover = _FailingMover()
+
+    with pytest.raises(RuntimeError, match="batch 0, rank 0: ValueError: boom"):
+        d.run(overwrite=False)
+    assert d.mover.cleared == [0]
+
+
+def test_write_container_raises_when_root_fails(tmp_path):
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg)
+    d = Driver(str(cfg))
+    d.topo = _Topo()
+
+    def _fail():
+        raise ValueError("no data")
+
+    d.mover = SimpleNamespace(create_container=_fail)
+    d.target = SimpleNamespace(store_path=str(tmp_path / "x.zarr"))
+    with pytest.raises(RuntimeError, match="container creation failed: ValueError: no data"):
+        d.write_container(overwrite=False)
+
+
+def test_finalize_attributes_writes_recipe_and_attrs(tmp_path, monkeypatch):
+    cfg = tmp_path / "recipe.yaml"
+    _write_recipe(cfg, extra={"attrs": {"project": "ufs2arco"}})
+    d = Driver(str(cfg))
+    d.topo = _Topo(is_root=True)
+
+    class _AttrStore:
+        def __init__(self):
+            self.attrs = {}
+
+    store = _AttrStore()
+    monkeypatch.setattr("ufs2arco.driver.zarr.open", lambda *args, **kwargs: store)
+    monkeypatch.setattr("ufs2arco.driver.zarr.consolidate_metadata", lambda *args, **kwargs: None)
+    d.target = type("T", (), {"store_path": str(tmp_path / "dataset.zarr")})()
+    d.finalize_attributes()
+    assert "recipe" in store.attrs
+    assert store.attrs["project"] == "ufs2arco"
+    assert "latest_write_timestamp" in store.attrs
+
+
+def test_container_template_eagerly_persists_invariant_grid(tmp_path):
+    pytest.importorskip("dask.array")
+    store = tmp_path / "container.zarr"
+    latitudes = np.array([-30.0, -30.0, 30.0, 30.0])
+    longitudes = np.array([0.0, 90.0, 0.0, 90.0])
+    container = xr.Dataset(
+        {
+            "data": (
+                ("time", "variable", "ensemble", "cell"),
+                np.full((2, 1, 1, 4), 7.0, dtype=np.float32),
+            ),
+            "latitudes": ("cell", latitudes),
+            "longitudes": ("cell", longitudes),
+        },
+        coords={
+            "time": [0, 1],
+            "variable": [0],
+            "ensemble": [0],
+            "cell": np.arange(4),
+        },
+    ).chunk()
+    driver = Driver.__new__(Driver)
+    driver.target = SimpleNamespace(
+        store_path=str(store),
+        renamed_sample_dims=("time",),
+    )
+
+    driver._write_container_template(container, overwrite=False)
+
+    written = xr.open_zarr(store)
+    try:
+        np.testing.assert_array_equal(written["latitudes"], latitudes)
+        np.testing.assert_array_equal(written["longitudes"], longitudes)
+        np.testing.assert_array_equal(written["cell"], np.arange(4))
+    finally:
+        written.close()

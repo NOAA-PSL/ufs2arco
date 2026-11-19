@@ -1,6 +1,6 @@
 .. _static-masks:
 
-Static masks
+Static Masks
 ############
 
 A static mask gives training, validation, and testing the same spatial domain in

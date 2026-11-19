@@ -193,7 +193,7 @@ class DataMover():
     def _mark_static_variables(self, xds: xr.Dataset) -> None:
         if not getattr(self.target, "always_open_static_vars", False):
             return
-        for name in self.source.static_vars:
+        for name in getattr(self.source, "static_vars", ()):
             if name in xds:
                 xds[name].attrs["constant_in_time"] = True
 

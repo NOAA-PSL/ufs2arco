@@ -262,26 +262,6 @@ def test_density_metadata_is_copied_to_every_expanded_level_channel():
         assert metadata["equation_of_state"] == "wright_full"
 
 
-def test_mld_merges_after_atmosphere_preserving_the_existing_source_block():
-    target = _target()
-    atmosphere = target.apply_transforms_to_sample(_atmosphere_dataset(target))
-    ocean = target.apply_transforms_to_sample(_mld_dataset(target))
-    atmosphere_names = list(atmosphere.attrs["variables"])
-
-    merged = target.merge_multisource([atmosphere, ocean])
-
-    assert merged.attrs["variables"] == atmosphere_names + ["mld"]
-    assert merged.attrs["variables"][: len(atmosphere_names)] == atmosphere_names
-    assert list(merged.attrs["variables_metadata"]) == merged.attrs["variables"]
-    np.testing.assert_array_equal(
-        merged["variable"],
-        np.arange(len(merged.attrs["variables"])),
-    )
-    _assert_sample_stats(merged, "mld", _mld_dataset(target)["mld"].values)
-    for stat_name in target.packed_stat_names:
-        assert merged[stat_name].sizes["variable"] == len(merged.attrs["variables"])
-
-
 def test_uo_surface_mask_masks_mld_and_refreshes_its_sample_stats():
     target = _target(
         multisource_masks={

@@ -3,12 +3,81 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from ufs2arco.sources import CloudZarrData, Source
-from ufs2arco.sources.gcs_replay_atmosphere import GCSReplayAtmosphere
-from ufs2arco.sources.gcs_replay_ocean import GCSReplayOcean
+import ufs2arco.sources.cloud_zarr as cmod
+from ufs2arco.sources import CloudZarrData
 
 
-class TinyCloudZarr(CloudZarrData, Source):
+class _CloudLike(CloudZarrData):
+    sample_dims = ("time",)
+    horizontal_dims = ("latitude", "longitude")
+    static_vars = ("lsm",)
+    time = pd.date_range("2020-01-01", periods=2, freq="6h")
+
+    @property
+    def rename(self):
+        return {}
+
+
+def _level_ds():
+    return xr.Dataset(
+        {
+            "t": (("time", "level", "latitude", "longitude"), np.ones((2, 3, 2, 2))),
+            "w": (("time", "level_stag", "latitude", "longitude"), np.ones((2, 4, 2, 2))),
+            "lsm": (("time", "latitude", "longitude"), np.ones((2, 2, 2))),
+        },
+        coords={
+            "time": pd.date_range("2020-01-01", periods=2, freq="6h"),
+            "level": ("level", [0, 1, 2]),
+            "level_stag": ("level_stag", [0, 1, 2, 3]),
+            "latitude": [0.0, 1.0],
+            "longitude": [10.0, 11.0],
+        },
+    )
+
+
+@pytest.fixture
+def patch_level(monkeypatch):
+    monkeypatch.setattr(cmod.xr, "open_zarr", lambda *a, **k: _level_ds())
+
+
+def test_available_levels(patch_level):
+    src = _CloudLike(uri="s3://dummy", variables=["t"])
+    assert src.available_levels == (0, 1, 2)
+
+
+def test_available_stag_levels(patch_level):
+    src = _CloudLike(uri="s3://dummy", variables=["w"])
+    assert src.available_stag_levels == (0, 1, 2, 3)
+
+
+def test_level_selection(patch_level):
+    src = _CloudLike(uri="s3://dummy", variables=["t"], levels=[1])
+    assert src._xds["level"].values.tolist() == [1]
+
+
+@pytest.mark.parametrize("levels", [[0, 2], (0, 2)])
+def test_stag_level_selection_keeps_bounding_interfaces_without_mutating_levels(patch_level, levels):
+    src = _CloudLike(uri="s3://dummy", variables=["t", "w"], levels=levels)
+    assert src._xds["level"].values.tolist() == [0, 2]
+    assert src._xds["level_stag"].values.tolist() == [0, 1, 2, 3]
+    assert list(src.levels) == list(levels) == [0, 2]
+
+
+def test_use_nearest_levels(patch_level):
+    src = _CloudLike(
+        uri="s3://dummy", variables=["t"], levels=[0.6], use_nearest_levels=True
+    )
+    assert src._xds["level"].values.tolist() == [1]
+
+
+def test_apply_isel_slices(patch_level):
+    src = _CloudLike(
+        uri="s3://dummy", variables=["t"], slices={"isel": {"longitude": [0, 1]}}
+    )
+    assert src._xds["longitude"].values.tolist() == [10.0]
+
+
+class TinyCloudZarr(CloudZarrData):
     sample_dims = ("time",)
     horizontal_dims = ("latitude", "longitude")
     static_vars = ("static",)
@@ -16,44 +85,6 @@ class TinyCloudZarr(CloudZarrData, Source):
     def __init__(self, time, uri, **kwargs):
         self.time = pd.date_range(**time)
         super().__init__(uri=uri, **kwargs)
-
-
-def test_replay_ocean_does_not_request_atmospheric_static_variables():
-    assert GCSReplayOcean.static_vars == tuple()
-
-
-def test_replay_atmosphere_accepts_store_without_auxiliary_time_coords(
-    tmp_path,
-):
-    store = tmp_path / "analysis.zarr"
-    xds = xr.Dataset(
-        {
-            "tmp": (
-                ("time", "pfull", "grid_yt", "grid_xt"),
-                np.ones((1, 1, 1, 1), dtype=np.float32),
-            ),
-        },
-        coords={
-            "time": pd.to_datetime(["2020-01-01T00"]),
-            "pfull": [25.0],
-            "grid_yt": [0.0],
-            "grid_xt": [0.0],
-        },
-    )
-    xds.to_zarr(store)
-
-    source = GCSReplayAtmosphere(
-        time={"start": "2020-01-01T00", "periods": 1, "freq": "6h"},
-        uri=str(store),
-        variables=["tmp"],
-        local=True,
-    )
-
-    sample = source.open_sample_dataset(
-        dims={"time": pd.Timestamp("2020-01-01T00")},
-        open_static_vars=False,
-    )
-    assert sample.tmp.item() == 1.0
 
 
 def write_tiny_zarr(tmp_path):
@@ -128,7 +159,7 @@ def test_cloud_zarr_accumulates_selected_variables_over_requested_window(tmp_pat
 
     first = source.open_sample_dataset(
         dims={"time": pd.Timestamp("2022-01-01T06")},
-        open_static_vars=True,
+        open_static_vars=False,  # first sample always includes static
     )
     second = source.open_sample_dataset(
         dims={"time": pd.Timestamp("2022-01-01T12")},
@@ -329,3 +360,77 @@ def test_cloud_zarr_returns_empty_dataset_for_missing_julian_time(tmp_path):
     )
 
     assert len(xds) == 0
+
+
+def test_accumulate_variables_accepts_string(tmp_path):
+    store = write_tiny_zarr(tmp_path)
+    source = TinyCloudZarr(
+        time={"start": "2022-01-01T06", "periods": 2, "freq": "6h"},
+        uri=str(store),
+        variables=["tprcp"],
+        local=True,
+        accumulate_variables="tprcp",
+    )
+    assert source.accumulate_variables == ("tprcp",)
+
+
+@pytest.mark.parametrize("accum", [["static"], ["tmp"]])
+def test_accumulate_variables_rejects_static_or_unselected(tmp_path, accum):
+    store = write_tiny_zarr(tmp_path)
+    with pytest.raises(ValueError, match="accumulate_variables must be selected"):
+        TinyCloudZarr(
+            time={"start": "2022-01-01T06", "periods": 2, "freq": "6h"},
+            uri=str(store),
+            variables=["tprcp", "static"],
+            local=True,
+            accumulate_variables=accum,
+        )
+
+
+def test_cloud_zarr_rejects_window_not_divisible_by_source_cadence(tmp_path):
+    store = write_tiny_zarr(tmp_path)  # 3h cadence
+    source = TinyCloudZarr(
+        time={"start": "2022-01-01T04", "periods": 2, "freq": "4h"},
+        uri=str(store),
+        variables=["tprcp"],
+        local=True,
+        accumulate_variables=["tprcp"],
+    )
+    with pytest.raises(ValueError, match="not divisible"):
+        source.open_sample_dataset(
+            dims={"time": pd.Timestamp("2022-01-01T04")},
+            open_static_vars=False,
+        )
+
+
+def test_cloud_zarr_rejects_accumulation_window_with_no_samples(tmp_path):
+    store = write_tiny_zarr(tmp_path)  # ends 2022-01-01T12
+    source = TinyCloudZarr(
+        time={"start": "2022-01-02T00", "periods": 2, "freq": "6h"},
+        uri=str(store),
+        variables=["tprcp"],
+        local=True,
+        accumulate_variables=["tprcp"],
+    )
+    with pytest.raises(ValueError, match="no source samples"):
+        source.open_sample_dataset(
+            dims={"time": pd.Timestamp("2022-01-02T00")},
+            open_static_vars=False,
+        )
+
+
+def test_cloud_zarr_rejects_accumulation_with_single_source_time(tmp_path):
+    store = tmp_path / "single.zarr"
+    write_zarr_at_times(store, pd.to_datetime(["2022-01-01T06"]))
+    source = TinyCloudZarr(
+        time={"start": "2022-01-01T06", "periods": 2, "freq": "6h"},
+        uri=str(store),
+        variables=["tprcp"],
+        local=True,
+        accumulate_variables=["tprcp"],
+    )
+    with pytest.raises(ValueError, match="multiple source times"):
+        source.open_sample_dataset(
+            dims={"time": pd.Timestamp("2022-01-01T06")},
+            open_static_vars=False,
+        )

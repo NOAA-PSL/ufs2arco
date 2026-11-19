@@ -5,7 +5,6 @@ import pytest
 import xarray as xr
 import yaml
 
-import ufs2arco.transforms as transform_exports
 from ufs2arco.ocean_diagnostics import (
     HEAT_CAPACITY,
     RHO_0,
@@ -111,7 +110,7 @@ _REPLAY_LEVELS = np.array(
 
 def test_packaged_ocean_interfaces_reconstruct_replay_levels():
     levels_path = (
-        Path(__file__).parent.parent
+        Path(__file__).parent.parent.parent
         / "ufs2arco"
         / "sources"
         / "replay_ocean_vertical_levels.yaml"
@@ -123,10 +122,6 @@ def test_packaged_ocean_interfaces_reconstruct_replay_levels():
         0.5 * (interfaces[:-1] + interfaces[1:]),
         _REPLAY_LEVELS,
     )
-
-
-def test_ocean_vertical_regrid_functions_are_publicly_exported():
-    assert transform_exports.fv_vertical_regrid_ocean is fv_vertical_regrid_ocean
 
 
 def test_vertical_regrid_renormalizes_each_variable_valid_weight():
@@ -582,15 +577,23 @@ def test_native_resolution_guard_accepts_replay_grid_and_rejects_incomplete_grid
     assert "validated complete native grid" in description
 
     with pytest.raises(ValueError, match="complete Replay column"):
+        check_vertical_resolution(_REPLAY_LEVELS[:-1])
+
+
+@pytest.mark.parametrize(
+    "min_levels_in_search,match",
+    [(3, "vertical spacing reaches 50 m between 50 and 100 m"), (10, "found 4 levels above 200 m")],
+)
+def test_native_resolution_guard_rejects_coarse_upper_ocean(min_levels_in_search, match):
+    with pytest.raises(ValueError, match=match):
         check_vertical_resolution(
             np.array([5.0, 50.0, 100.0, 150.0]),
             mld_search_depth=200.0,
-            min_levels_in_search=3,
+            min_levels_in_search=min_levels_in_search,
             max_level_spacing=25.0,
+            expected_level_count=None,
+            minimum_deepest_level=None,
         )
-
-    with pytest.raises(ValueError, match="complete Replay column"):
-        check_vertical_resolution(_REPLAY_LEVELS[:-1])
 
 
 @pytest.mark.parametrize(

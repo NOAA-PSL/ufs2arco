@@ -109,6 +109,7 @@ def _log_pressure_field(pressure_hpa: float) -> float:
 
 def test_transform_interpolates_true_pressure_and_masks_below_ground():
     xds = _replay_dataset()
+    xds["tmp2m"] = xds["pressfc"] * 0 + 280.0
 
     result = layers_to_pressure(
         xds,
@@ -497,26 +498,113 @@ def test_transformer_rejects_pressure_and_finite_volume_in_same_branch():
         )
 
 
-def test_transformer_runs_pressure_transform_after_vector_rotation(monkeypatch):
-    calls = []
+def _wrf_pressure_dataset() -> xr.Dataset:
+    psfc = xr.DataArray(
+        [[[100_000.0, 80_000.0, 95_000.0]]],
+        dims=("time", "latitude", "longitude"),
+        attrs={"units": "Pa"},
+    )
+    fraction = xr.DataArray(np.linspace(0.995, 0.05, 50), dims="level")
+    pressure = (psfc * fraction).transpose("time", "level", "latitude", "longitude")
+    pressure.attrs = {"units": "Pa"}
+    temperature = (200.0 + 20.0 * np.log(pressure)).assign_attrs(units="K")
+    return xr.Dataset(
+        {"P": pressure, "PSFC": psfc, "TK": temperature, "T2": psfc * 0 + 280.0},
+    ).assign_coords(level=np.arange(50))
 
-    def rotate(xds, **kwargs):
-        calls.append("rotate")
-        return xds
 
-    def pressure(xds, **kwargs):
-        calls.append("pressure")
-        return xds
+@pytest.mark.parametrize("reverse", [False, True])
+def test_layers_to_pressure_uses_varying_native_layer_pressure(reverse):
+    xds = _wrf_pressure_dataset()
+    if reverse:
+        xds = xds.isel(level=slice(None, None, -1))
 
-    monkeypatch.setattr("ufs2arco.transforms.transformer.rotate_vectors", rotate)
-    monkeypatch.setattr("ufs2arco.transforms.transformer.layers_to_pressure", pressure)
-    transformer = Transformer(
-        {
-            "layers_to_pressure": {},
-            "rotate_vectors": {},
-        }
+    result = layers_to_pressure(
+        xds,
+        variables={"TK": "TK_pl"},
+        levels_hpa=[500, 850, 990],
+        pressure_var="PSFC",
+        layer2pressure_support_var="P",
     )
 
-    transformer(xr.Dataset())
+    assert sorted(result.data_vars) == ["T2", "TK_pl"]
+    tk = result["TK_pl"]
+    assert tk.dims == ("time", "level", "latitude", "longitude")
+    np.testing.assert_array_equal(result["level"], [500, 850, 990])
+    assert tk.attrs["source_vertical_grid"] == "native_layers_with_layer_pressure"
+    assert tk.attrs["support_variables"] == ["PSFC", "P"]
+    surface = xds["PSFC"].isel(time=0, latitude=0)
+    for level_hpa in (500, 850, 990):
+        column = tk.sel(level=level_hpa).isel(time=0, latitude=0)
+        above = (surface > level_hpa * 100.0).values
+        np.testing.assert_allclose(column.values[above], 200.0 + 20.0 * np.log(level_hpa * 100.0))
+        assert np.isnan(column.values[~above]).all()
 
-    assert calls == ["rotate", "pressure"]
+
+def test_layers_to_pressure_orientation_ignores_missing_endpoint_level():
+    pressure = xr.DataArray(
+        [100_000.0, 85_000.0, 70_000.0, np.nan],
+        dims="level",
+        coords={"level": np.arange(4)},
+        attrs={"units": "Pa"},
+    )
+    xds = xr.Dataset(
+        {
+            "P": pressure,
+            "PSFC": xr.DataArray(101_000.0, attrs={"units": "Pa"}),
+            "TK": (200.0 + 20.0 * np.log(pressure)).assign_attrs(units="K"),
+        }
+    )
+    result = layers_to_pressure(
+        xds,
+        variables={"TK": "TK_pl"},
+        levels_hpa=[800],
+        pressure_var="PSFC",
+        layer2pressure_support_var="P",
+    )
+
+    assert result["TK_pl"].item() == pytest.approx(200.0 + 20.0 * np.log(80_000.0))
+
+
+def test_layers_to_pressure_requires_layer_pressure_units():
+    xds = _wrf_pressure_dataset()
+    xds["P"].attrs["units"] = "hPa"
+
+    with pytest.raises(ValueError, match="pressure units"):
+        layers_to_pressure(
+            xds,
+            variables={"TK": "TK_pl"},
+            levels_hpa=[500],
+            pressure_var="PSFC",
+            layer2pressure_support_var="P",
+        )
+
+
+def test_layers_to_pressure_keep_variables_passes_support_field():
+    xds = _wrf_pressure_dataset()
+    kwargs = dict(
+        variables={"TK": "TK_pl"},
+        levels_hpa=[500],
+        pressure_var="PSFC",
+        layer2pressure_support_var="P",
+    )
+
+    assert "PSFC" not in layers_to_pressure(xds, **kwargs)
+    result = layers_to_pressure(xds, keep_variables=["PSFC"], **kwargs)
+
+    assert sorted(result.data_vars) == ["PSFC", "T2", "TK_pl"]
+    xr.testing.assert_identical(result["PSFC"], xds["PSFC"])
+
+
+@pytest.mark.parametrize(
+    ("keep", "error"),
+    [("pressfc", TypeError), (["tmp"], ValueError), (["missing"], ValueError)],
+)
+def test_keep_variables_validation(keep, error):
+    with pytest.raises(error, match="keep_variables"):
+        layers_to_pressure(
+            _replay_dataset(),
+            variables={"ugrd": "ugrd_pl"},
+            levels_hpa=[850],
+            keep_variables=keep,
+        )

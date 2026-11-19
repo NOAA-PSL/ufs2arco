@@ -14,6 +14,7 @@ try:
 
     _has_xesmf = True
 except ImportError:
+    xesmf = None
     _has_xesmf = False
 
 from ufs2arco.regrid.gaussian_grid import gaussian_latitudes
@@ -53,10 +54,12 @@ def horizontal_regrid(
         logger.info(f"ufs2arco.transforms.horizontal_regrid: couldn't find xesmf weights filename {filename}, they'll be computed now.")
 
     # check if bounds are there
-    if "lat_b" not in xds and "lon_b" not in xds:
+    if "lat_b" not in xds or "lon_b" not in xds:
         if not os.path.isfile(filename):
             logger.info(f"ufs2arco.transforms.horizontal_regrid: did not find 'lat_b' or 'lon_b' in source, computing bounds.")
-        xds = get_bounds(xds, is_gaussian=source_is_on_gaussian_grid)
+        missing_bounds = [key for key in ("lat_b", "lon_b") if key not in xds]
+        bounds = get_bounds(xds, is_gaussian=source_is_on_gaussian_grid)
+        xds = xds.assign_coords({key: bounds[key].variable for key in missing_bounds})  
         if not os.path.isfile(filename):
             logger.info(f"ufs2arco.transforms.horizontal_regrid: computed bounds are\nLongitude\n{xds.lon_b}\nLatitude\n{xds.lat_b}")
 
@@ -64,6 +67,11 @@ def horizontal_regrid(
     xds = maybe_make_dataset_c_contiguous(xds)
 
     # do the work
+    if xesmf is None:
+        raise ImportError(
+            "ufs2arco.transforms.horizontal_regrid requires the optional dependency "
+            "'xesmf' (and ESMF). Install it to use horizontal regridding."
+        )
     regridder = xesmf.Regridder(
         ds_in=xds,
         ds_out=ds_out,

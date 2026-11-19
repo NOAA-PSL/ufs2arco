@@ -1,4 +1,3 @@
-from copy import deepcopy
 from types import SimpleNamespace
 
 import numpy as np
@@ -345,24 +344,15 @@ def test_static_mask_artifact_refuses_an_existing_publisher_lock(tmp_path):
     assert not output.exists()
 
 
-def test_static_mask_artifact_rejects_tampered_training_identity(tmp_path):
-    import zarr
-
-    training = tmp_path / "training.zarr"
-    output = tmp_path / "static-mask.zarr"
-    _write_training_store(training)
-    fit_static_mask_artifact(training, VARIABLES, output)
-
-    group = zarr.open_group(output, mode="a")
-    identity = dict(group.attrs["training_identity"])
-    identity["training_store"] = "tampered"
-    group.attrs["training_identity"] = identity
-
-    with pytest.raises(ValueError, match="training identity is invalid"):
-        load_static_mask_artifact(output)
-
-
-def test_static_mask_artifact_rejects_tampered_fraction(tmp_path):
+@pytest.mark.parametrize(
+    "attr,tamper,match",
+    [
+        ("training_identity", lambda old: {**old, "training_store": "tampered"}, "training identity is invalid"),
+        ("minimum_valid_fraction", lambda old: 0.49, "mask checksum is invalid"),
+        ("minimum_valid_count", lambda old: 2, "minimum_valid_count is inconsistent"),
+    ],
+)
+def test_static_mask_artifact_rejects_tampered_attrs(tmp_path, attr, tamper, match):
     import zarr
 
     training = tmp_path / "training.zarr"
@@ -377,30 +367,9 @@ def test_static_mask_artifact_rejects_tampered_fraction(tmp_path):
     )
 
     group = zarr.open_group(output, mode="a")
-    group.attrs["minimum_valid_fraction"] = 0.49
+    group.attrs[attr] = tamper(group.attrs[attr])
 
-    with pytest.raises(ValueError, match="mask checksum is invalid"):
-        load_static_mask_artifact(output)
-
-
-def test_static_mask_artifact_rejects_tampered_minimum_count(tmp_path):
-    import zarr
-
-    training = tmp_path / "training.zarr"
-    output = tmp_path / "static-mask.zarr"
-    _write_training_store(training)
-    fit_static_mask_artifact(
-        training,
-        VARIABLES,
-        output,
-        method="minimum_valid_fraction",
-        minimum_valid_fraction=0.5,
-    )
-
-    group = zarr.open_group(output, mode="a")
-    group.attrs["minimum_valid_count"] = 2
-
-    with pytest.raises(ValueError, match="minimum_valid_count is inconsistent"):
+    with pytest.raises(ValueError, match=match):
         load_static_mask_artifact(output)
 
 
@@ -698,23 +667,26 @@ def test_static_mask_grid_validation_runs_once_per_target(tmp_path, monkeypatch)
     assert calls == 1
 
 
-def test_region_write_keeps_container_manifest_and_drops_invariant_arrays(
+def test_region_write_keeps_stored_manifest_and_drops_invariant_arrays(
     tmp_path,
 ):
     training = tmp_path / "training.zarr"
     artifact_path = tmp_path / "static-mask.zarr"
-    _write_training_store(training)
-    fit_static_mask_artifact(training, VARIABLES, artifact_path)
+    output_store = tmp_path / "output.zarr"
+    _write_static_mask_output(training, artifact_path, output_store)
 
-    target = _target(artifact_path)
+    target = _target(artifact_path, output_store)
     packed = target.apply_transforms_to_sample(_pressure_sample(target))
     merged = target.merge_multisource([packed])
-    container = target.prepare_static_masks(merged.copy())
-    target._region_write_attrs = deepcopy(dict(container.attrs))
+    with pytest.raises(RuntimeError, match="preflight must run"):
+        target.prepare_multisource_region_write(merged)
 
+    target.validate_static_mask_store()
     region_write = target.prepare_multisource_region_write(merged)
 
-    assert region_write.attrs == container.attrs
+    stored_attrs = xr.open_zarr(output_store).attrs
+    assert "static_mask_artifacts" in stored_attrs
+    assert region_write.attrs == stored_attrs
     assert "latitudes" not in region_write
     assert "longitudes" not in region_write
     assert "cell" not in region_write.coords
