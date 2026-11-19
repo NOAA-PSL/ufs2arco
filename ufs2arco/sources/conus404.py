@@ -4,9 +4,6 @@ from typing import Optional
 import pandas as pd
 import xarray as xr
 
-import planetary_computer
-import pystac_client
-
 from ufs2arco.sources import CloudZarrData, Source
 
 logger = logging.getLogger("ufs2arco")
@@ -24,14 +21,17 @@ class CONUS404(CloudZarrData, Source):
     sample_dims = ("time",)
     horizontal_dims = ("latitude", "longitude")
 
-    client = pystac_client.Client.open(
-        "https://planetarycomputer.microsoft.com/api/stac/v1",
-        modifier=planetary_computer.sign_inplace,
-    )
-    
-    collection = client.get_collection("conus404")
-    asset = collection.assets["zarr-abfs"]
-    storage_options = asset.extra_fields["xarray:storage_options"]
+    @staticmethod
+    def get_storage_options() -> dict:
+        import planetary_computer
+        import pystac_client
+
+        client = pystac_client.Client.open(
+            "https://planetarycomputer.microsoft.com/api/stac/v1",
+            modifier=planetary_computer.sign_inplace,
+        )
+        asset = client.get_collection("conus404").assets["zarr-abfs"]
+        return asset.extra_fields["xarray:storage_options"]
 
     @property
     def available_levels(self) -> tuple:
@@ -73,10 +73,11 @@ class CONUS404(CloudZarrData, Source):
         levels: Optional[list | tuple] = None,
         use_nearest_levels: Optional[bool] = False,
         slices: Optional[dict] = None,
-        storage_options: Optional[str] = storage_options,
+        storage_options: Optional[dict] = None,
     ) -> None:
 
         self.time = pd.date_range(**time)
+        self.storage_options = storage_options or self.get_storage_options()
 
         super().__init__(
             uri=uri,

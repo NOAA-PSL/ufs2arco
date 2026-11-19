@@ -12,7 +12,7 @@ mover:
   batch_size: 1
 
 directories:
-  zarr: conus404_base.zarr
+  zarr: dataset.zarr
   cache: cache
   logs: logs
 
@@ -21,28 +21,18 @@ source:
   uri: az://noaa/conus404.zarr
   time:
     start: 2017-01-01T00
-    end: 2017-01-01T06
+    end: 2017-01-01T03
     freq: 1h
 
   variables:
     - T2
-    - U10
-    - V10
     - Z
     - U
     - V
 
   levels:
-    - 1
-    - 2
-    - 3
-    - 4
     - 5
     - 6
-    - 7
-    - 8
-    - 9
-    - 10
 
 transforms:
   destagger: 
