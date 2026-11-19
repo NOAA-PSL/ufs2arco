@@ -69,6 +69,7 @@ Table of Contents
    :caption: Getting Started
 
    installation
+   recipes
    moving_data
 
 .. toctree::
@@ -108,4 +109,5 @@ Table of Contents
    :maxdepth: 1
    :caption: References
 
+   recipe_options
    api

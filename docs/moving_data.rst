@@ -32,12 +32,8 @@ Note also that the yaml recipe was inspired by
 `anemoi-datasets <https://anemoi.readthedocs.io/projects/datasets/en/latest/>`_
 in spirit, but the actual format and capabilities are a bit different.
 
-This page is still a work in progress, and will describe the nuts and bolts of moving data.
-In the meantime, feel free to raise an issue on the repo with questions, and
-check out example recipe files in the
-`ufs2arco integration tests directory
-<https://github.com/NOAA-PSL/ufs2arco/tree/main/tests/integration>`_
-for some examples to help you get started.
+See :doc:`recipes` for a complete recipe, the shared configuration options, and
+downloadable examples for each source and target layout.
 
 
 Missing Data
