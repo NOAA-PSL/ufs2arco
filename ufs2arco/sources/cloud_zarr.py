@@ -71,8 +71,11 @@ class CloudZarrData(Source):
             self._xds = self._xds.sel(level=list(self.levels), **self._level_sel_kwargs)
         if 'level_stag' in self._xds.dims:
             # keep the interfaces bounding each layer, and the "level" labels destagger pairs them with
-            levels = np.arange(self._xds.sizes["level_stag"] - 1) if self.levels is None else np.array(self.levels)
-            self._xds = self._xds.sel(level_stag=np.union1d(levels, levels + 1), **self._level_sel_kwargs)
+            levels = self._xds["level_stag"][:-1].rename(level_stag="level")
+            if self.levels is not None:
+                levels = levels.sel(level=list(self.levels), **self._level_sel_kwargs)
+            levels = levels.values
+            self._xds = self._xds.sel(level_stag=np.union1d(levels, levels + 1))
             self._xds = self._xds.assign_coords(level=levels)
         self._xds = self.apply_slices(self._xds)
 

@@ -393,8 +393,9 @@ def layers_to_pressure(
     layer pressure is diagnosed from the native surface pressure, temperature,
     humidity, and layer thickness. If ``layer_pressure_var`` names a 3D pressure
     field on the native layers (e.g. ``P`` from WRF/CONUS404), that field is used
-    directly, the Replay grid is not required, and only ``pressure_var`` and
-    ``layer_pressure_var`` are needed as support variables.
+    directly, the Replay grid is not required, only ``pressure_var`` and
+    ``layer_pressure_var`` are needed as support variables, and other variables
+    without a level dimension (e.g. ``T2``) are passed through unchanged.
 
     The nearest pressure on each side of every target is gathered per column and
     the requested field is interpolated linearly in log-pressure. If one native
@@ -526,11 +527,13 @@ def layers_to_pressure(
         )
         output_variables[output_name] = output
 
-    passthrough = {
-        name: xds[name]
-        for name in xds.data_vars
-        if level_name not in xds[name].dims and name not in support_variables
-    }
+    passthrough = {}
+    if layer_pressure_var is not None:
+        passthrough = {
+            name: xds[name]
+            for name in xds.data_vars
+            if level_name not in xds[name].dims and name not in support_variables
+        }
     result = xr.Dataset({**output_variables, **passthrough}, attrs=xds.attrs.copy())
     result[level_name].attrs.update(
         {

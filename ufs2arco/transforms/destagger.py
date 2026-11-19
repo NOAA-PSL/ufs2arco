@@ -29,7 +29,7 @@ def destagger(
     for variable, dimension in config.items():
         # if target staggered dimension in the dataset, proceed with destaggering it
         if f"{dimension}_stag" in xds[variable].dims:
-            if dimension == "level":
+            if dimension == "level" and "level" in xds.coords:
                 # pair interfaces k and k+1 by label, so a subset of levels destaggers correctly
                 xda = xds[variable]
                 lower = xda.sel(level_stag=xds["level"]).drop_vars("level_stag")
