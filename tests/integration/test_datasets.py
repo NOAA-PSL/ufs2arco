@@ -116,7 +116,7 @@ def run_test(source, target):
 def _test_static_vars(source, target, store):
     if source in _sources_without_static_vars:
         logger.info(f" ... skipping static var check, {source} has no lsm/orog")
-        return    
+        return
 
     ds = xr.open_zarr(store, decode_timedelta=True)
 

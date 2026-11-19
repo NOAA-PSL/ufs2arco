@@ -24,8 +24,6 @@ def destagger(
     
     xds = xds.copy(deep=False)
 
-    xds = xds.copy(deep=False)
-
     # Loop through all variables and their staggered dimensions - as specified in recipe yaml
     for variable, dimension in config.items():
         # if target staggered dimension in the dataset, proceed with destaggering it

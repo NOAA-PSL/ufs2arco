@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 import xarray as xr
 
@@ -89,3 +91,23 @@ def test_transformer_dispatches_fv_vertical_regrid():
     assert "temp" in out
     assert "delz" not in out
     assert "vertical_coordinate" in out["temp"].attrs
+
+
+def test_transformer_destaggers_before_other_transforms(monkeypatch):
+    calls = []
+
+    def record(name):
+        def transform(xds, *args, **kwargs):
+            calls.append(name)
+            return xds
+        return transform
+
+    for name in ("destagger", "rotate_vectors", "layers_to_pressure", "horizontal_regrid"):
+        monkeypatch.setattr(f"ufs2arco.transforms.transformer.{name}", record(name))
+    monkeypatch.setitem(sys.modules, "xesmf", object())
+
+    Transformer(
+        {"horizontal_regrid": {}, "layers_to_pressure": {}, "rotate_vectors": {}, "destagger": {}}
+    )(xr.Dataset())
+
+    assert calls == ["destagger", "rotate_vectors", "layers_to_pressure", "horizontal_regrid"]
