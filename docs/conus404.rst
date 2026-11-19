@@ -92,7 +92,7 @@ Pressure levels (vertical regridding)
 
 Use ``layers_to_pressure`` with ``layer2pressure_support_var: P`` to interpolate native-layer fields to 
 pressure levels (linear in log-pressure), using the 3D pressure ``P`` directly. ``PSFC`` masks levels 
-below ground. Include both in ``variables`` and keep the full column, i.e. do not set ``levels``:
+below ground. Include both in ``variables`` and keep the full column, (i.e., do not set ``levels``):
 
 .. code-block:: yaml
 
