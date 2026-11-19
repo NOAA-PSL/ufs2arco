@@ -32,6 +32,9 @@ documentation = [
 regrid = [
     "xesmf",
 ]
+conus404 = [
+    "adlfs", "planetary-computer", "pystac-client", "xwrf",
+]
 mpi = [
     "mpi4py",
 ]
