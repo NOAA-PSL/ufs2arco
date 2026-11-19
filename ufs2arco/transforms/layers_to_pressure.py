@@ -385,17 +385,22 @@ def layers_to_pressure(
     below_ground: str = "mask",
     level_name: str = "level",
     interface_name: str = "phalf",
-    layer_pressure_var: Optional[str] = None,
+    layer2pressure_support_var: Optional[str] = None,
+    keep_variables: Sequence[str] = (),
 ) -> xr.Dataset:
     """Recipe transform that interpolates atmospheric fields on native model layers to pressure levels, using ``Layers2Pressure`` and adding fallback methods and missing-value handling.
 
     By default, the complete 127-level UFS-Replay hybrid column is required, and
     layer pressure is diagnosed from the native surface pressure, temperature,
-    humidity, and layer thickness. If ``layer_pressure_var`` names a 3D pressure
+    humidity, and layer thickness. If ``layer2pressure_support_var`` names a 3D pressure
     field on the native layers (e.g. ``P`` from WRF/CONUS404), that field is used
     directly, the Replay grid is not required, only ``pressure_var`` and
-    ``layer_pressure_var`` are needed as support variables, and other variables
+    ``layer2pressure_support_var`` are needed as support variables, and other variables
     without a level dimension (e.g. ``T2``) are passed through unchanged.
+
+    ``keep_variables`` lists variables without a level dimension to copy to the
+    output unchanged, including support variables such as surface pressure
+    (e.g. ``[pressfc]`` or ``[PSFC]``). It applies to both paths and is empty by default.
 
     The nearest pressure on each side of every target is gathered per column and
     the requested field is interpolated linearly in log-pressure. If one native
@@ -412,10 +417,16 @@ def layers_to_pressure(
     levels = _validate_levels(levels_hpa)
     _validate_variables(xds, variables, level_name)
 
-    if layer_pressure_var is None:
+    if isinstance(keep_variables, str):
+        raise TypeError("layers_to_pressure: keep_variables must be a list")
+    bad_keep = [n for n in keep_variables if n not in xds or level_name in xds[n].dims]
+    if bad_keep:
+        raise ValueError(f"layers_to_pressure: keep_variables {bad_keep} must exist without dimension {level_name!r}")
+
+    if layer2pressure_support_var is None:
         layer_support = [temperature_var, humidity_var, thickness_var]
     else:
-        layer_support = [layer_pressure_var]
+        layer_support = [layer2pressure_support_var]
     support_variables = [pressure_var, *layer_support]
     missing_support = [name for name in support_variables if name not in xds]
     if missing_support:
@@ -444,7 +455,7 @@ def layers_to_pressure(
         interface_name=interface_name,
     )
 
-    if layer_pressure_var is None:
+    if layer2pressure_support_var is None:
         _require_units(xds[temperature_var], "temperature")
         _require_units(xds[humidity_var], "humidity")
         _require_units(xds[thickness_var], "thickness")
@@ -467,16 +478,16 @@ def layers_to_pressure(
             delz=xds[thickness_var],
         )
     else:
-        _require_units(xds[layer_pressure_var], "pressure")
+        _require_units(xds[layer2pressure_support_var], "pressure")
         source_vertical_grid = "native_layers_with_layer_pressure"
 
         # the fallbacks assume pressure increases with level index, but WRF levels go bottom-up
-        prsl = xds[layer_pressure_var]
+        prsl = xds[layer2pressure_support_var]
         profile = prsl.mean([dim for dim in prsl.dims if dim != level_name]).values
         profile = profile[np.isfinite(profile)]
         if profile.size > 1 and profile[0] > profile[-1]:
             xds = xds.isel({level_name: slice(None, None, -1)})
-        prsl = xds[layer_pressure_var]
+        prsl = xds[layer2pressure_support_var]
 
     interpolated_by_output = {output_name: [] for output_name in variables.values()}
     for level in levels:
@@ -530,12 +541,13 @@ def layers_to_pressure(
         output_variables[output_name] = output
 
     passthrough = {}
-    if layer_pressure_var is not None:
+    if layer2pressure_support_var is not None:
         passthrough = {
             name: xds[name]
             for name in xds.data_vars
             if level_name not in xds[name].dims and name not in support_variables
         }
+    passthrough.update({name: xds[name] for name in keep_variables})
     result = xr.Dataset({**output_variables, **passthrough}, attrs=xds.attrs.copy())
     result[level_name].attrs.update(
         {

@@ -24,6 +24,8 @@ or with pip::
 
     pip install "ufs2arco[conus404]"
 
+Note: Large CONUS404 jobs with many MPI workers could be rate limited by Planetary Computer. 
+If this occurs, try reducing the number of workers.
 
 Config Specifications
 -------------------------
@@ -88,7 +90,7 @@ the ``latitude`` dimension (i.e., ``south_north_stag``).
 Pressure levels (vertical regridding)
 -------------------------------------
 
-Use ``layers_to_pressure`` with ``layer_pressure_var: P`` to interpolate native-layer fields to 
+Use ``layers_to_pressure`` with ``layer2pressure_support_var: P`` to interpolate native-layer fields to 
 pressure levels (linear in log-pressure), using the 3D pressure ``P`` directly. ``PSFC`` masks levels 
 below ground. Include both in ``variables`` and keep the full column, i.e. do not set ``levels``:
 
@@ -109,13 +111,14 @@ below ground. Include both in ``variables`` and keep the full column, i.e. do no
             V: latitude
         layers_to_pressure:
             pressure_var: PSFC
-            layer_pressure_var: P
+            layer2pressure_support_var: P
             variables: {TK: TK_pl, Z: Z_pl, U: U_pl, V: V_pl}
             levels_hpa: [500, 850]
 
 This writes ``TK_pl``, ``Z_pl``, ``U_pl``, and ``V_pl`` on the 500 and 850 hPa levels. Variables 
 without a native level dimension (e.g., ``T2``) pass through unchanged; other native-layer variables 
-and the support fields ``P`` and ``PSFC`` are dropped. Levels below ground (e.g., 850 hPa over the 
+and the support fields ``P`` and ``PSFC`` are dropped unless listed in ``keep_variables`` (e.g., ``keep_variables: [PSFC]``; 
+only fields without a ``level`` dimension can be kept). Levels below ground (e.g., 850 hPa over the 
 Rockies) are NaN, so list those channels in ``variables_with_nans`` when using the Anemoi target. 
 Interpolation and missing-value handling are otherwise as described in :ref:`replay-pressure-levels`.
 

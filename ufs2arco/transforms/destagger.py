@@ -35,6 +35,13 @@ def destagger(
                 upper = xda.sel(level_stag=xds["level"] + 1).drop_vars("level_stag")
                 xds[variable] = (0.5 * (lower + upper)).assign_attrs(xda.attrs)
             else:
+                # xwrf pairs points by position, which is only valid if stag has exactly one more point
+                stag = f"{dimension}_stag"
+                if dimension in xds.dims and xds.sizes[stag] != xds.sizes[dimension] + 1:
+                    raise ValueError(
+                        f"destagger: {variable} has {stag}={xds.sizes[stag]} but {dimension}={xds.sizes[dimension]}; "
+                        f"expected {stag} = {dimension} + 1. Check that both dimensions were subset consistently."
+                    )
                 import xwrf  # registers the .xwrf accessor
                 xds[variable] = xds[variable].xwrf.destagger()
         else:

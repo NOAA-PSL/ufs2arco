@@ -41,7 +41,7 @@ transforms:
     Z: level
   layers_to_pressure:
     pressure_var: PSFC
-    layer_pressure_var: P
+    layer2pressure_support_var: P
     variables:
       TK: TK_pl
       Z: Z_pl

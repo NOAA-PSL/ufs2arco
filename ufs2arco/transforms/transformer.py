@@ -92,8 +92,8 @@ class Transformer:
             except ImportError:
                 raise ImportError(f"Transformer.__init__: Could not 'import xesmf', but this is needed for 'horizontal_grid' transformations. Install xesmf with\n'conda install -c conda-forge xesmf'")
 
-        # if we want to do destaggering, check if xwrf is installed
-        if "destagger" in names:
+        # xwrf is only needed to destagger horizontal dimensions; level is handled natively for right now
+        if "destagger" in names and any(dim != "level" for dim in options["destagger"].values()):
             try:
                 import xwrf
             except ImportError:
