@@ -9,6 +9,21 @@ produced by National Center for Atmospheric Research (NCAR) can be accessed via 
 Azure Blob Storage. An example Jupyter notebook is provided
 `here <https://planetarycomputer.microsoft.com/dataset/conus404#Example-Notebook>`_.
 
+This source needs optional packages that are not installed with ufs2arco by default::
+
+    conda install -c conda-forge adlfs planetary-computer pystac-client xwrf
+
+Reading CONUS404 from Microsoft Planetary Computer, and destaggering WRF
+variables, needs a few extra packages that are not installed by default. 
+
+With conda::
+
+    conda install -c conda-forge adlfs planetary-computer pystac-client xwrf
+
+or with pip::
+
+    pip install "ufs2arco[conus404]"
+
 
 Config Specifications
 -------------------------

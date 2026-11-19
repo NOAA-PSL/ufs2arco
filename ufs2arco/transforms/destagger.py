@@ -2,7 +2,6 @@ import logging
 
 import numpy as np
 import xarray as xr
-import xwrf
 
 logger = logging.getLogger("ufs2arco")
 
@@ -36,6 +35,7 @@ def destagger(
                 upper = xda.sel(level_stag=xds["level"] + 1).drop_vars("level_stag")
                 xds[variable] = (0.5 * (lower + upper)).assign_attrs(xda.attrs)
             else:
+                import xwrf  # registers the .xwrf accessor
                 xds[variable] = xds[variable].xwrf.destagger()
         else:
             logger.info(f"Destagger could not be applied to variable {variable}.\n    Expected {dimension}_stag dimension not present in dataset.")
