@@ -2,7 +2,6 @@ import logging
 
 import numpy as np
 import xarray as xr
-import xwrf
 
 logger = logging.getLogger("ufs2arco")
 
@@ -22,6 +21,8 @@ def destagger(
     Returns:
         xds (xr.Dataset): with destaggering applied to each specified variable & dimension pair
     """
+    
+    xds = xds.copy(deep=False)
 
     xds = xds.copy(deep=False)
 
@@ -29,7 +30,22 @@ def destagger(
     for variable, dimension in config.items():
         # if target staggered dimension in the dataset, proceed with destaggering it
         if f"{dimension}_stag" in xds[variable].dims:
-            xds[variable] = xds[variable].xwrf.destagger()           
+            if dimension == "level" and "level" in xds.coords:
+                # pair interfaces k and k+1 by label, so a subset of levels destaggers correctly
+                xda = xds[variable]
+                lower = xda.sel(level_stag=xds["level"]).drop_vars("level_stag")
+                upper = xda.sel(level_stag=xds["level"] + 1).drop_vars("level_stag")
+                xds[variable] = (0.5 * (lower + upper)).assign_attrs(xda.attrs)
+            else:
+                # xwrf pairs points by position, which is only valid if stag has exactly one more point
+                stag = f"{dimension}_stag"
+                if dimension in xds.dims and xds.sizes[stag] != xds.sizes[dimension] + 1:
+                    raise ValueError(
+                        f"destagger: {variable} has {stag}={xds.sizes[stag]} but {dimension}={xds.sizes[dimension]}; "
+                        f"expected {stag} = {dimension} + 1. Check that both dimensions were subset consistently."
+                    )
+                import xwrf  # registers the .xwrf accessor
+                xds[variable] = xds[variable].xwrf.destagger()
         else:
             logger.info(f"Destagger could not be applied to variable {variable}.\n    Expected {dimension}_stag dimension not present in dataset.")
     

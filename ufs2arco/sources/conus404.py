@@ -1,4 +1,5 @@
 import logging
+from functools import lru_cache
 from typing import Optional
 
 import pandas as pd
@@ -22,6 +23,7 @@ class CONUS404(CloudZarrData, Source):
     horizontal_dims = ("latitude", "longitude")
 
     @staticmethod
+    @lru_cache(maxsize=1)
     def get_storage_options() -> dict:
         import planetary_computer
         import pystac_client
