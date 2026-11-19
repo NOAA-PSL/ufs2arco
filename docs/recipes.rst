@@ -11,6 +11,8 @@ paths to suit your work. The same main sections are used by the
 
 This page explains their shared options and the differences that matter when
 editing them. Install ufs2arco using :doc:`installation` before running a recipe.
+For the complete nested transform and mask settings, forwarded library options,
+and the separate Python dataset YAML interfaces, see :doc:`recipe_options`.
 
 .. _recipe-examples:
 
@@ -601,7 +603,8 @@ Anemoi targets also accept:
    * - ``multisource_masks``
      - No rules
      - Mapping or list of rules to mask packed channels after sources are
-       merged. See :doc:`static_masks` for reusable training masks and examples.
+       merged. See :ref:`recipe-mask-options` for every rule key and
+       :doc:`static_masks` for reusable training masks and examples.
    * - ``resolution``
      - Unspecified
      - String or number stored as resolution metadata. Does not regrid data.

@@ -109,4 +109,5 @@ Table of Contents
    :maxdepth: 1
    :caption: References
 
+   recipe_options
    api
