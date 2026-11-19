@@ -472,7 +472,9 @@ def layers_to_pressure(
 
         # the fallbacks assume pressure increases with level index, but WRF levels go bottom-up
         prsl = xds[layer_pressure_var]
-        if prsl.isel({level_name: 0}).mean() > prsl.isel({level_name: -1}).mean():
+        profile = prsl.mean([dim for dim in prsl.dims if dim != level_name]).values
+        profile = profile[np.isfinite(profile)]
+        if profile.size > 1 and profile[0] > profile[-1]:
             xds = xds.isel({level_name: slice(None, None, -1)})
         prsl = xds[layer_pressure_var]
 

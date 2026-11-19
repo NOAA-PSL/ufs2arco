@@ -316,4 +316,7 @@ class CloudZarrData(Source):
         else:
             xds = xr.merge(datasets, join="outer", compat="no_conflicts")
         xds = xds[selection].copy().load()
+        if "level_stag" in xds.dims and "level" in self._xds.coords:
+            # selecting variables drops "level" when only staggered ones are kept, but destagger needs it
+            xds = xds.assign_coords(level=self._xds["level"].values)
         return xds
