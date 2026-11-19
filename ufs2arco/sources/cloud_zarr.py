@@ -46,6 +46,9 @@ class CloudZarrData(Source):
             open_kwargs["storage_options"] = self.storage_options or {"token": "anon"}
         xds = xr.open_zarr(uri, **open_kwargs)
         xds = xds.rename(self.rename)
+        if not accumulate_variables:
+            # stores may have one chunk per time step, and indexing the full record lazily is very slow
+            xds = xds.sel(time=slice(self.time[0].isoformat(), self.time[-1].isoformat()))
         for dim in ("level", "level_stag"):
             if dim in xds.dims and dim not in xds.coords:
                 xds = xds.assign_coords({dim: np.arange(xds.sizes[dim])})
