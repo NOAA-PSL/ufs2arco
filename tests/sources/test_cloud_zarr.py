@@ -27,8 +27,8 @@ def _level_ds():
         },
         coords={
             "time": pd.date_range("2020-01-01", periods=2, freq="6h"),
-            "level": ("level", [100, 500, 1000]),
-            "level_stag": ("level_stag", [100, 500, 1000, 1001]),
+            "level": ("level", [0, 1, 2]),
+            "level_stag": ("level_stag", [0, 1, 2, 3]),
             "latitude": [0.0, 1.0],
             "longitude": [10.0, 11.0],
         },
@@ -42,32 +42,32 @@ def patch_level(monkeypatch):
 
 def test_available_levels(patch_level):
     src = _CloudLike(uri="s3://dummy", variables=["t"])
-    assert src.available_levels == (100, 500, 1000)
+    assert src.available_levels == (0, 1, 2)
 
 
 def test_available_stag_levels(patch_level):
     src = _CloudLike(uri="s3://dummy", variables=["w"])
-    assert src.available_stag_levels == (100, 500, 1000, 1001)
+    assert src.available_stag_levels == (0, 1, 2, 3)
 
 
 def test_level_selection(patch_level):
-    src = _CloudLike(uri="s3://dummy", variables=["t"], levels=[500])
-    assert src._xds["level"].values.tolist() == [500]
+    src = _CloudLike(uri="s3://dummy", variables=["t"], levels=[1])
+    assert src._xds["level"].values.tolist() == [1]
 
 
-@pytest.mark.parametrize("levels", [[500, 1000], (500, 1000)])
-def test_stag_level_selection_appends_extra_level_without_mutating_levels(patch_level, levels):
+@pytest.mark.parametrize("levels", [[0, 2], (0, 2)])
+def test_stag_level_selection_keeps_bounding_interfaces_without_mutating_levels(patch_level, levels):
     src = _CloudLike(uri="s3://dummy", variables=["t", "w"], levels=levels)
-    assert src._xds["level"].values.tolist() == [500, 1000]
-    assert src._xds["level_stag"].values.tolist() == [500, 1000, 1001]
-    assert list(src.levels) == list(levels) == [500, 1000]
+    assert src._xds["level"].values.tolist() == [0, 2]
+    assert src._xds["level_stag"].values.tolist() == [0, 1, 2, 3]
+    assert list(src.levels) == list(levels) == [0, 2]
 
 
 def test_use_nearest_levels(patch_level):
     src = _CloudLike(
-        uri="s3://dummy", variables=["t"], levels=[400], use_nearest_levels=True
+        uri="s3://dummy", variables=["t"], levels=[0.6], use_nearest_levels=True
     )
-    assert src._xds["level"].values.tolist() == [500]
+    assert src._xds["level"].values.tolist() == [1]
 
 
 def test_apply_isel_slices(patch_level):
