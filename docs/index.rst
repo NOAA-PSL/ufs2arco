@@ -69,6 +69,7 @@ Table of Contents
    :caption: Getting Started
 
    installation
+   recipes
    moving_data
 
 .. toctree::
