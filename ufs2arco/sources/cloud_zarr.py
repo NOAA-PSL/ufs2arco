@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
 import xarray as xr
@@ -44,7 +45,11 @@ class CloudZarrData(Source):
         if not local:
             open_kwargs["storage_options"] = self.storage_options or {"token": "anon"}
         xds = xr.open_zarr(uri, **open_kwargs)
-        self._xds = xds.rename(self.rename)
+        xds = xds.rename(self.rename)
+        for dim in ("level", "level_stag"):
+            if dim in xds.dims and dim not in xds.coords:
+                xds = xds.assign_coords({dim: np.arange(xds.sizes[dim])})
+        self._xds = xds
 
         # parent class checks if variables and levels are legit
         super().__init__(
@@ -61,9 +66,11 @@ class CloudZarrData(Source):
         self._xds = self._xds[self.variables]
         if (self.levels is not None) & ('level' in self._xds.dims):
             self._xds = self._xds.sel(level=list(self.levels), **self._level_sel_kwargs)
-        if (self.levels is not None) & ('level_stag' in self._xds.dims):
-            stag_levels = list(self.levels) + [self.levels[-1] + 1]
-            self._xds = self._xds.sel(level_stag=stag_levels, **self._level_sel_kwargs)
+        if 'level_stag' in self._xds.dims:
+            # keep the interfaces bounding each layer, and the "level" labels destagger pairs them with
+            levels = np.arange(self._xds.sizes["level_stag"] - 1) if self.levels is None else np.array(self.levels)
+            self._xds = self._xds.sel(level_stag=np.union1d(levels, levels + 1), **self._level_sel_kwargs)
+            self._xds = self._xds.assign_coords(level=levels)
         self._xds = self.apply_slices(self._xds)
 
     def _validate_accumulate_variables(

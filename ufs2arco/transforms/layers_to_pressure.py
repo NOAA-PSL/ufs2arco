@@ -1,6 +1,7 @@
-"""Diagnose selected pressure-level fields from UFS-Replay hybrid layers."""
+"""Diagnose selected pressure-level fields from native model layers."""
 
 from collections.abc import Mapping, Sequence
+from typing import Optional
 
 import numpy as np
 import xarray as xr
@@ -384,12 +385,18 @@ def layers_to_pressure(
     below_ground: str = "mask",
     level_name: str = "level",
     interface_name: str = "phalf",
+    layer_pressure_var: Optional[str] = None,
 ) -> xr.Dataset:
-    """Recipe transform that interpolates atmospheric fields on complete 127-level UFS-Replay columns to pressure levels, using ``Layers2Pressure`` and adding fallback methods and missing-value handling.
+    """Recipe transform that interpolates atmospheric fields on native model layers to pressure levels, using ``Layers2Pressure`` and adding fallback methods and missing-value handling.
 
-    All 127 native hybrid layers are required. Pressure is diagnosed from the
-    native surface pressure, temperature, humidity, and layer thickness. The
-    nearest pressure on each side of every target is gathered per column and
+    By default, the complete 127-level UFS-Replay hybrid column is required, and
+    layer pressure is diagnosed from the native surface pressure, temperature,
+    humidity, and layer thickness. If ``layer_pressure_var`` names a 3D pressure
+    field on the native layers (e.g. ``P`` from WRF/CONUS404), that field is used
+    directly, the Replay grid is not required, and only ``pressure_var`` and
+    ``layer_pressure_var`` are needed as support variables.
+
+    The nearest pressure on each side of every target is gathered per column and
     the requested field is interpolated linearly in log-pressure. If one native
     level is unavailable, the transform can bridge that level, extrapolate from
     an adjacent pair, or use one nearest value within 10 hPa. Columns that are
@@ -404,17 +411,16 @@ def layers_to_pressure(
     levels = _validate_levels(levels_hpa)
     _validate_variables(xds, variables, level_name)
 
-    support_variables = [
-        pressure_var,
-        temperature_var,
-        humidity_var,
-        thickness_var,
-    ]
+    if layer_pressure_var is None:
+        layer_support = [temperature_var, humidity_var, thickness_var]
+    else:
+        layer_support = [layer_pressure_var]
+    support_variables = [pressure_var, *layer_support]
     missing_support = [name for name in support_variables if name not in xds]
     if missing_support:
         raise KeyError(f"layers_to_pressure: missing support variables {missing_support}")
 
-    for name in (temperature_var, humidity_var, thickness_var):
+    for name in layer_support:
         if level_name not in xds[name].dims:
             raise ValueError(
                 f"layers_to_pressure: support variable {name!r} must have "
@@ -432,30 +438,42 @@ def layers_to_pressure(
         )
 
     _require_units(xds[pressure_var], "pressure")
-    _require_units(xds[temperature_var], "temperature")
-    _require_units(xds[humidity_var], "humidity")
-    _require_units(xds[thickness_var], "thickness")
-    invalid_thickness = (
-        np.isfinite(xds[thickness_var]) & (xds[thickness_var] >= 0)
-    ).any()
-    if bool(invalid_thickness.values):
-        raise ValueError(
-            f"layers_to_pressure: finite {thickness_var!r} values must be "
-            "negative layer thicknesses in metres"
-        )
-
     converter = Layers2Pressure(
         level_name=level_name,
         interface_name=interface_name,
     )
-    _validate_replay_grid(xds, converter, level_name)
 
-    prsl = converter.calc_layer_mean_pressure(
-        pressfc=xds[pressure_var],
-        temp=xds[temperature_var],
-        spfh=xds[humidity_var],
-        delz=xds[thickness_var],
-    )
+    if layer_pressure_var is None:
+        _require_units(xds[temperature_var], "temperature")
+        _require_units(xds[humidity_var], "humidity")
+        _require_units(xds[thickness_var], "thickness")
+        invalid_thickness = (
+            np.isfinite(xds[thickness_var]) & (xds[thickness_var] >= 0)
+        ).any()
+        if bool(invalid_thickness.values):
+            raise ValueError(
+                f"layers_to_pressure: finite {thickness_var!r} values must be "
+                "negative layer thicknesses in metres"
+            )
+
+        _validate_replay_grid(xds, converter, level_name)
+        source_vertical_grid = "ufs_replay_127_layer_hybrid"
+
+        prsl = converter.calc_layer_mean_pressure(
+            pressfc=xds[pressure_var],
+            temp=xds[temperature_var],
+            spfh=xds[humidity_var],
+            delz=xds[thickness_var],
+        )
+    else:
+        _require_units(xds[layer_pressure_var], "pressure")
+        source_vertical_grid = "native_layers_with_layer_pressure"
+
+        # the fallbacks assume pressure increases with level index, but WRF levels go bottom-up
+        prsl = xds[layer_pressure_var]
+        if prsl.isel({level_name: 0}).mean() > prsl.isel({level_name: -1}).mean():
+            xds = xds.isel({level_name: slice(None, None, -1)})
+        prsl = xds[layer_pressure_var]
 
     interpolated_by_output = {output_name: [] for output_name in variables.values()}
     for level in levels:
@@ -488,7 +506,7 @@ def layers_to_pressure(
             {
                 "source_variable": source_name,
                 "vertical_interpolation": "linear_in_log_pressure",
-                "source_vertical_grid": "ufs_replay_127_layer_hybrid",
+                "source_vertical_grid": source_vertical_grid,
                 "support_variables": support_variables.copy(),
                 "required_support_fields": support_variables.copy(),
                 "derived_from": derived_from,
@@ -508,7 +526,12 @@ def layers_to_pressure(
         )
         output_variables[output_name] = output
 
-    result = xr.Dataset(output_variables, attrs=xds.attrs.copy())
+    passthrough = {
+        name: xds[name]
+        for name in xds.data_vars
+        if level_name not in xds[name].dims and name not in support_variables
+    }
+    result = xr.Dataset({**output_variables, **passthrough}, attrs=xds.attrs.copy())
     result[level_name].attrs.update(
         {
             "units": "hPa",

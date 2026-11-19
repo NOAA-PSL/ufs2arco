@@ -29,7 +29,14 @@ def destagger(
     for variable, dimension in config.items():
         # if target staggered dimension in the dataset, proceed with destaggering it
         if f"{dimension}_stag" in xds[variable].dims:
-            xds[variable] = xds[variable].xwrf.destagger()           
+            if dimension == "level":
+                # pair interfaces k and k+1 by label, so a subset of levels destaggers correctly
+                xda = xds[variable]
+                lower = xda.sel(level_stag=xds["level"]).drop_vars("level_stag")
+                upper = xda.sel(level_stag=xds["level"] + 1).drop_vars("level_stag")
+                xds[variable] = (0.5 * (lower + upper)).assign_attrs(xda.attrs)
+            else:
+                xds[variable] = xds[variable].xwrf.destagger()
         else:
             logger.info(f"Destagger could not be applied to variable {variable}.\n    Expected {dimension}_stag dimension not present in dataset.")
     

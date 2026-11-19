@@ -1,12 +1,12 @@
 # Features tested
-# Datamover:
-# - serial
 # Source:
-# - analysis template
-# - level selection
+# - 2D variable (T2)
+# - isel domain subset
+# Transform:
+# - destagger along level (Z)
+# - layers_to_pressure with native 3D pressure (TK, Z)
 # Target:
-# - base workflow for analysis
-# - rename
+# - anemoi workflow for analysis
 mover:
   name: datamover
   batch_size: 1
@@ -21,24 +21,31 @@ source:
   uri: az://noaa/conus404.zarr
   time:
     start: 2017-01-01T00
-    end: 2017-01-01T03
+    end: 2017-01-01T01
     freq: 1h
 
   variables:
     - T2
+    - P
+    - PSFC
+    - TK
     - Z
-    - U
-    - V
 
-  levels:
-    - 5
-    - 6
+  slices:
+    isel:
+      latitude: [400, 500]
+      longitude: [400, 500]
 
 transforms:
-  destagger: 
+  destagger:
     Z: level
-    U: longitude
-    V: latitude
+  layers_to_pressure:
+    pressure_var: PSFC
+    layer_pressure_var: P
+    variables:
+      TK: TK_pl
+      Z: Z_pl
+    levels_hpa: [500]
 
 target:
   name: anemoi
@@ -46,7 +53,6 @@ target:
 
   chunks:
     time: 1
-    level: -1
     variable: -1
     ensemble: 1
     cell: -1

@@ -123,6 +123,11 @@ class Transformer:
             xds (xr.Dataset): the processed version
         """
 
+        # Staggered fields must share the mass grid before any vector,
+        # vertical, or horizontal operation combines them with other fields.
+        if "destagger" in self.names:
+            xds = destagger(xds, self.options["destagger"])
+
         if "multiply" in self.names:
             xds = multiply(xds, self.options["multiply"])
 
@@ -154,9 +159,6 @@ class Transformer:
 
         if "horizontal_regrid" in self.names:
             xds = horizontal_regrid(xds, **self.options["horizontal_regrid"])
-
-        if "destagger" in self.names:
-            xds = destagger(xds, self.options["destagger"])
 
         if "mappings" in self.names:
             xds = apply_mappings(xds, self.options["mappings"])
