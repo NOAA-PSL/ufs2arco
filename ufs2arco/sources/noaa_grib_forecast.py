@@ -27,12 +27,14 @@ class NOAAGribForecastData:
 
     @property
     def _fsname(self) -> str:
-        """hrrr, gefs, or gfs"""
+        """hrrr, gefs, gfs or gdas"""
 
         if "gefs" in self.name.lower():
             return "gefs"
         elif "gfs" in self.name.lower():
             return "gfs"
+        elif "gdas" in self.name.lower():
+            return "gdas"
         elif "hrrr" in self.name.lower():
             return "hrrr"
         else:
@@ -186,8 +188,30 @@ class NOAAGribForecastData:
                     dsdict = {}
                     break
 
+        # dsdict contains the nested Datasets (eg: when processing gefs for mutiple vertical levels),
+        #   That’s why xr.Dataset(dsdict) breaks — xarray wants DataArrays, not nested Datasets.
+        #      eg.: t → an xarray.Dataset with variable "t"
+        #          d2m → already an xarray.DataArray
+        #   extract the varibales (t) from the nested datasets.
+        normalized = {}
+        for key, val in dsdict.items():
+            if isinstance(val, xr.Dataset):
+                # If the dataset has only one variable, extract it
+                if len(val.data_vars) == 1:
+                    vname = list(val.data_vars)[0]
+                    normalized[vname] = val[vname]
+                else:
+                    # if multiple, pull them all
+                    for vname in val.data_vars:
+                        normalized[vname] = val[vname]
+            elif isinstance(val, xr.DataArray):
+                normalized[key] = val
+            else:
+                raise TypeError(f"Unsupported type for {key}: {type(val)}")
+        del dsdict
+
         # the dataset is either full or completely empty if we had trouble
-        xds = xr.Dataset(dsdict)
+        xds = xr.Dataset(normalized)
         if len(xds) > 0:
             xds = self.apply_slices(xds)
         return xds

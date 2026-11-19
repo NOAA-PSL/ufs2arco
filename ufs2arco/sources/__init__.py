@@ -11,6 +11,7 @@ from .gcs_replay_atmosphere import GCSReplayAtmosphere
 from .gcs_replay_ocean import GCSReplayOcean
 from .gfs_archive import GFSArchive
 from .conus404 import CONUS404
+from .gdas_archive import GDASArchive
 
 
 # writing something general is actually more work than
@@ -25,4 +26,5 @@ _recognized = {
     "gfs_archive": "GFSArchive",
     "aws_aorc": "AWSAORC",
     "conus404": "CONUS404",
+    "gdas_archive": "GDASArchive",
 }
