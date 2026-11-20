@@ -92,8 +92,8 @@ class Transformer:
             except ImportError:
                 raise ImportError(f"Transformer.__init__: Could not 'import xesmf', but this is needed for 'horizontal_grid' transformations. Install xesmf with\n'conda install -c conda-forge xesmf'")
 
-        # if we want to do destaggering, check if xwrf is installed
-        if "destagger" in names:
+        # xwrf is only needed to destagger horizontal dimensions; level is handled natively for right now
+        if "destagger" in names and any(dim != "level" for dim in options["destagger"].values()):
             try:
                 import xwrf
             except ImportError:
@@ -122,6 +122,11 @@ class Transformer:
         Returns:
             xds (xr.Dataset): the processed version
         """
+
+        # Staggered fields must share the mass grid before any vector,
+        # vertical, or horizontal operation combines them with other fields.
+        if "destagger" in self.names:
+            xds = destagger(xds, self.options["destagger"])
 
         if "multiply" in self.names:
             xds = multiply(xds, self.options["multiply"])
@@ -154,9 +159,6 @@ class Transformer:
 
         if "horizontal_regrid" in self.names:
             xds = horizontal_regrid(xds, **self.options["horizontal_regrid"])
-
-        if "destagger" in self.names:
-            xds = destagger(xds, self.options["destagger"])
 
         if "mappings" in self.names:
             xds = apply_mappings(xds, self.options["mappings"])

@@ -13,12 +13,13 @@ from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
 _local_path = os.path.dirname(__file__)
-_sources = ["replay", "replay_ocean", "gfs", "gefs", "hrrr", "era5", "gdas"]
+_sources = ["replay", "replay_ocean", "gfs", "gefs", "hrrr", "era5", "gdas", "conus404"]
 _targets = ["base", "anemoi"]
 
-# Sources with no land/sea mask or orography to check. The ocean component
-# carries neither.
-_sources_without_static_vars = ["replay_ocean"]
+# Sources with no land/sea mask or orography to check.
+# The ocean component carries neither.
+# Additionally, sources like CONUS404 on Planetary Computer have no static variables.
+_sources_without_static_vars = ["replay_ocean", "conus404"]
 
 # keep these separate, as we do not need NRT with reanalysis datasets.
 _nrt_sources = ["hrrr", "gfs"]

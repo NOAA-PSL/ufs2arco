@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 from pandas.tseries.frequencies import to_offset
 import xarray as xr
@@ -14,7 +15,7 @@ class CloudZarrData(Source):
     """
     Generic access patterns for forecast datasets store somewhere in Zarr
     """
-    storage_options = tuple()
+    storage_options = None
 
     @property
     def available_variables(self) -> tuple:
@@ -37,7 +38,6 @@ class CloudZarrData(Source):
         slices: Optional[dict] = None,
         local: Optional[bool] = False,
         accumulate_variables: Optional[list | tuple | str] = None,
-        storage_options: Optional[str] = {"token": "anon"},
     ) -> None:
 
         # open and rename
@@ -45,7 +45,14 @@ class CloudZarrData(Source):
         if not local:
             open_kwargs["storage_options"] = self.storage_options or {"token": "anon"}
         xds = xr.open_zarr(uri, **open_kwargs)
-        self._xds = xds.rename(self.rename)
+        xds = xds.rename(self.rename)
+        if not accumulate_variables:
+            # stores may have one chunk per time step, and indexing the full record lazily is very slow
+            xds = xds.sel(time=slice(self.time[0].isoformat(), self.time[-1].isoformat()))
+        for dim in ("level", "level_stag"):
+            if dim in xds.dims and dim not in xds.coords:
+                xds = xds.assign_coords({dim: np.arange(xds.sizes[dim])})
+        self._xds = xds
 
         # parent class checks if variables and levels are legit
         super().__init__(
@@ -61,11 +68,15 @@ class CloudZarrData(Source):
         # now subsample the dataset
         self._xds = self._xds[self.variables]
         if (self.levels is not None) & ('level' in self._xds.dims):
-            self._xds = self._xds.sel(level=self.levels, **self._level_sel_kwargs)
-        if (self.levels is not None) & ('level_stag' in self._xds.dims):
-            stag_levels = self.levels
-            stag_levels.append(stag_levels[-1] + 1)
-            self._xds = self._xds.sel(level_stag=stag_levels, **self._level_sel_kwargs)
+            self._xds = self._xds.sel(level=list(self.levels), **self._level_sel_kwargs)
+        if 'level_stag' in self._xds.dims:
+            # keep the interfaces bounding each layer, and the "level" labels destagger pairs them with
+            levels = self._xds["level_stag"][:-1].rename(level_stag="level")
+            if self.levels is not None:
+                levels = levels.sel(level=list(self.levels), **self._level_sel_kwargs)
+            levels = levels.values
+            self._xds = self._xds.sel(level_stag=np.union1d(levels, levels + 1))
+            self._xds = self._xds.assign_coords(level=levels)
         self._xds = self.apply_slices(self._xds)
 
     def _validate_accumulate_variables(
@@ -305,4 +316,7 @@ class CloudZarrData(Source):
         else:
             xds = xr.merge(datasets, join="outer", compat="no_conflicts")
         xds = xds[selection].copy().load()
+        if "level_stag" in xds.dims and "level" in self._xds.coords:
+            # selecting variables drops "level" when only staggered ones are kept, but destagger needs it
+            xds = xds.assign_coords(level=self._xds["level"].values)
         return xds
