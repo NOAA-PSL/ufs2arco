@@ -36,7 +36,6 @@ source:
 transforms:
   multiply:   # geopotential height to geopotential
     gh: 9.80665
-    orog: 9.80665
   horizontal_regrid:
     target_grid_path: global_one_degree.nc
     regridder_kwargs:
