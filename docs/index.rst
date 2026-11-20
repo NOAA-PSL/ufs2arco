@@ -78,6 +78,7 @@ Table of Contents
    aorc
    gefs_archive
    gfs_archive
+   gdas_archive
    hrrr_archive
    replay
    era5

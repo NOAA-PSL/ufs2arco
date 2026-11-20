@@ -1,0 +1,57 @@
+mover:
+    name: datamover
+    batch_size: 1
+      
+directories:
+  zarr: dataset.zarr
+  cache: cache
+  logs: logs
+
+source:
+  name: gdas_archive
+  t0:
+    start: 2022-01-01T00
+    end: 2022-01-02T18
+    freq: 12h
+  fhr:
+    start: 0
+    end: 0
+    step: 1
+  resolution: 0p25       
+  variables:
+    - lsm
+    - orog
+    - sp
+    - t2m
+    - t
+    - gh
+    - q
+  levels:
+    - 500
+    - 850
+  slices:
+    sel:
+      latitude: [89.9, -89.9]
+
+transforms:
+  multiply:   # geopotential height to geopotential
+    gh: 9.80665
+  horizontal_regrid:
+    target_grid_path: global_one_degree.nc
+    regridder_kwargs:
+      method: conservative
+      reuse_weights: True
+
+target:
+  name: forecast
+  rename:
+    level: pressure
+  chunks:
+    t0: 1
+    fhr: 1
+    pressure: -1
+    latitude: -1
+    longitude: -1
+
+attrs:
+  description: "This is a test dataset"

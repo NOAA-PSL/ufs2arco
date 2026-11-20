@@ -27,12 +27,14 @@ class NOAAGribForecastData:
 
     @property
     def _fsname(self) -> str:
-        """hrrr, gefs, or gfs"""
+        """hrrr, gefs, gfs or gdas"""
 
         if "gefs" in self.name.lower():
             return "gefs"
         elif "gfs" in self.name.lower():
             return "gfs"
+        elif "gdas" in self.name.lower():
+            return "gdas"
         elif "hrrr" in self.name.lower():
             return "hrrr"
         else:

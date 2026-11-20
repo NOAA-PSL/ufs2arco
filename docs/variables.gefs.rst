@@ -32,3 +32,15 @@
      - 10 metre V wind component
    * - ``w``
      - Vertical velocity
+   * - ``r2``
+     - 2 metre relative humidity
+   * - ``t_surface``
+     - Temperature at surface
+   * - ``u100``
+     - 100 metre U wind component
+   * - ``v100``
+     - 100 metre V wind component
+   * - ``prmsl``
+     - Pressure reduced to MSL
+   * - ``pwat``
+     - Precipitable water
