@@ -29,6 +29,9 @@ source:
   levels:
     - 500
     - 850
+  slices:
+    sel:
+      latitude: [89.9, -89.9]
 
 transforms:
   multiply:   # geopotential height to geopotential
