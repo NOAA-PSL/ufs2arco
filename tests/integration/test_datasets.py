@@ -13,7 +13,7 @@ from ufs2arco.log import SimpleFormatter
 
 logger = logging.getLogger("integration-test")
 _local_path = os.path.dirname(__file__)
-_sources = ["replay", "replay_ocean", "gfs", "gefs", "hrrr", "era5"]
+_sources = ["replay", "replay_ocean", "gfs", "gefs", "hrrr", "era5", "gdas"]
 _targets = ["base", "anemoi"]
 
 # Sources with no land/sea mask or orography to check. The ocean component
@@ -122,6 +122,7 @@ def _test_static_vars(source, target, store):
     lsm = {
         "gefs": "lsm",
         "gfs": "lsm",
+        "gdas": "lsm",
         "hrrr": "lsm",
         "replay": "land_static",
         "era5": "round_land_sea_mask",
@@ -130,6 +131,7 @@ def _test_static_vars(source, target, store):
     orog = {
         "gefs": "orog",
         "gfs": "orog",
+        "gdas": "orog",
         "hrrr": "orog",
         "replay": "hgtsfc_static",
         "era5": "orography",
